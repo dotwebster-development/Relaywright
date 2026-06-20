@@ -1,0 +1,101 @@
+@page
+@model Relaywright.Web.Pages.Logs.IndexModel
+@{
+    ViewData["Title"] = "Logs";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Operations</p>
+            <h1>Logs</h1>
+            <p class="page-summary">Filter operational events by category and severity to understand relay behavior, security decisions, and delivery outcomes.</p>
+        </div>
+    </header>
+
+    <nav class="tabs logs-tabs" aria-label="Log sections">
+        @foreach (var tab in Model.Sections)
+        {
+            if (tab.CategoryValue is null)
+            {
+                <a asp-page="/Logs/Index"
+                   asp-route-severity="@Model.Severity"
+                   asp-route-search="@Model.Search"
+                   class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
+                   aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
+            }
+            else
+            {
+                <a asp-page="/Logs/Index"
+                   asp-route-category="@tab.CategoryValue"
+                   asp-route-severity="@Model.Severity"
+                   asp-route-search="@Model.Search"
+                   class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
+                   aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
+            }
+        }
+    </nav>
+
+    <form method="get" class="filter-row">
+        <input asp-for="Category" type="hidden" />
+        <label>
+            <span>Severity</span>
+            <select asp-for="Severity">
+                <option value="">All</option>
+                @foreach (var value in Enum.GetValues<EventSeverity>())
+                {
+                    <option value="@value">@value</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span>Search</span>
+            <input asp-for="Search" placeholder="Message, detail, remote IP" />
+        </label>
+        <button type="submit">Filter</button>
+        <a asp-page="/Logs/Index" asp-route-category="@Model.Category">Clear</a>
+    </form>
+
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Severity</th>
+                    <th>Category</th>
+                    <th>Remote IP</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in Model.Events)
+            {
+                <tr>
+                    <td>@item.OccurredUtc.ToLocalTime()</td>
+                    <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
+                    <td><span class="badge">@item.Category</span></td>
+                    <td>@item.RemoteIpAddress</td>
+                    <td title="@item.Detail">@item.Message</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.TotalCount > 0)
+    {
+        <nav class="pagination" aria-label="Log pages">
+            <span>Page @Model.PageNumber of @Model.TotalPages (@Model.TotalCount total)</span>
+            <div>
+                @if (Model.HasPreviousPage)
+                {
+                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a>
+                }
+                @if (Model.HasNextPage)
+                {
+                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a>
+                }
+            </div>
+        </nav>
+    }
+</section>

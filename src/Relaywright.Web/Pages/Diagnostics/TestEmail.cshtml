@@ -1,0 +1,81 @@
+@page
+@model Relaywright.Web.Pages.Diagnostics.TestEmailModel
+@{
+    ViewData["Title"] = "Diagnostic Test Email";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Diagnostics</p>
+            <h1>Test Email</h1>
+            <p class="page-summary">Send a one-off test message through the configured upstream relay and review the diagnostic event trail for that submission directly on this page.</p>
+        </div>
+    </header>
+
+    @if (Model.Result is not null)
+    {
+        <p class="status @(Model.Result.Succeeded ? "ok" : "error")">@Model.Result.Message</p>
+    }
+
+    <section class="panel">
+        <h2>Compose Test Email</h2>
+        <form method="post" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+            <label>
+                <span>From</span>
+                <input asp-for="Input.FromAddress" />
+            </label>
+            <label>
+                <span>To</span>
+                <input asp-for="Input.ToAddress" />
+            </label>
+            <label>
+                <span>Subject</span>
+                <input asp-for="Input.Subject" />
+            </label>
+            <label>
+                <span>Body</span>
+                <textarea asp-for="Input.Body" rows="8"></textarea>
+            </label>
+            <div class="actions">
+                <button type="submit">Send Test Email</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Latest Test Run Log</h2>
+
+        @if (Model.RunEvents.Count == 0)
+        {
+            <p class="muted">No diagnostic test-email run has been sent in this page session yet.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Severity</th>
+                            <th>Message</th>
+                            <th>Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.RunEvents)
+                    {
+                        <tr>
+                            <td>@item.OccurredUtc.ToLocalTime()</td>
+                            <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
+                            <td>@item.Message</td>
+                            <td>@item.Detail</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</section>

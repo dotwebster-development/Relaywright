@@ -1,0 +1,191 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Relaywright.Web.Configuration;
+using Relaywright.Web.Data;
+using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Relay;
+using Xunit;
+
+using DashboardIndexModel = Relaywright.Web.Pages.IndexModel;
+using LogsIndexModel = Relaywright.Web.Pages.Logs.IndexModel;
+using QueueIndexModel = Relaywright.Web.Pages.Queue.IndexModel;
+
+namespace Relaywright.Web.Tests;
+
+public sealed class RazorPageOrderingTests
+{
+    [Fact]
+    public async Task QueuePageOrdersMessagesByAcceptedUtcWithSqlite()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var older = await fixture.AddQueuedMessageAsync(DateTimeOffset.UtcNow.AddMinutes(-10));
+        var newer = await fixture.AddQueuedMessageAsync(DateTimeOffset.UtcNow);
+        var model = fixture.CreateQueueModel();
+
+        await model.OnGetAsync(null, CancellationToken.None);
+
+        Assert.Equal(2, model.TotalCount);
+        Assert.Equal([newer, older], model.Messages.Select(x => x.Id));
+    }
+
+    [Fact]
+    public async Task LogsPageOrdersEventsByOccurredUtcWithSqlite()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        await fixture.AddOperationalEventAsync("older", DateTimeOffset.UtcNow.AddMinutes(-10));
+        await fixture.AddOperationalEventAsync("newer", DateTimeOffset.UtcNow);
+        var model = fixture.CreateLogsModel();
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(2, model.TotalCount);
+        Assert.Equal(["newer", "older"], model.Events.Select(x => x.Message));
+    }
+
+    [Fact]
+    public async Task DashboardOrdersRecentEventsByOccurredUtcWithSqlite()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        await fixture.AddOperationalEventAsync("older", DateTimeOffset.UtcNow.AddMinutes(-10));
+        await fixture.AddOperationalEventAsync("newer", DateTimeOffset.UtcNow);
+        var model = fixture.CreateDashboardModel();
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(["newer", "older"], model.RecentEvents.Select(x => x.Message));
+    }
+
+    private sealed class PageFixture : IAsyncDisposable
+    {
+        private readonly SqliteConnection _connection;
+        private readonly TestDbContextFactory _dbContextFactory;
+
+        private PageFixture(SqliteConnection connection, TestDbContextFactory dbContextFactory)
+        {
+            _connection = connection;
+            _dbContextFactory = dbContextFactory;
+        }
+
+        public static async Task<PageFixture> CreateAsync()
+        {
+            var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseSqlite(connection)
+                .Options;
+
+            var factory = new TestDbContextFactory(options);
+            await using var dbContext = factory.CreateDbContext();
+            await dbContext.Database.EnsureCreatedAsync();
+
+            return new PageFixture(connection, factory);
+        }
+
+        public async Task<Guid> AddQueuedMessageAsync(DateTimeOffset acceptedUtc)
+        {
+            await using var dbContext = _dbContextFactory.CreateDbContext();
+            var message = new QueuedMessage
+            {
+                Id = Guid.NewGuid(),
+                SessionId = Guid.NewGuid(),
+                EnvelopeFrom = "sender@example.test",
+                SpoolFileRelativePath = $"{Guid.NewGuid():N}.eml",
+                Status = QueuedMessageStatus.Pending,
+                AcceptedUtc = acceptedUtc,
+                CreatedUtc = acceptedUtc,
+                NextAttemptAtUtc = acceptedUtc,
+                ExpiresUtc = acceptedUtc.AddHours(1)
+            };
+
+            message.Recipients.Add(new QueuedMessageRecipient
+            {
+                RecipientAddress = "recipient@example.test"
+            });
+
+            dbContext.QueuedMessages.Add(message);
+            await dbContext.SaveChangesAsync();
+            return message.Id;
+        }
+
+        public async Task AddOperationalEventAsync(string message, DateTimeOffset occurredUtc)
+        {
+            await using var dbContext = _dbContextFactory.CreateDbContext();
+            dbContext.OperationalEvents.Add(new OperationalEvent
+            {
+                OccurredUtc = occurredUtc,
+                Message = message
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        public QueueIndexModel CreateQueueModel()
+        {
+            return AttachPageContext(new QueueIndexModel(
+                _dbContextFactory,
+                NullLogger<QueueIndexModel>.Instance));
+        }
+
+        public LogsIndexModel CreateLogsModel()
+        {
+            return AttachPageContext(new LogsIndexModel(
+                _dbContextFactory,
+                NullLogger<LogsIndexModel>.Instance));
+        }
+
+        public DashboardIndexModel CreateDashboardModel()
+        {
+            return AttachPageContext(new DashboardIndexModel(
+                _dbContextFactory,
+                new TestRelayConfigurationService(),
+                NullLogger<DashboardIndexModel>.Instance));
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _connection.DisposeAsync();
+        }
+
+        private static TModel AttachPageContext<TModel>(TModel model)
+            where TModel : PageModel
+        {
+            model.PageContext = new PageContext
+            {
+                HttpContext = new DefaultHttpContext()
+            };
+
+            return model;
+        }
+    }
+
+    private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
+        : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext()
+        {
+            return new ApplicationDbContext(options);
+        }
+    }
+
+    private sealed class TestRelayConfigurationService : IRelayConfigurationService
+    {
+        public Task<RelayConfigurationSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new RelayConfigurationSnapshot());
+        }
+
+        public Task<RelayConfigurationEditModel> GetEditModelAsync(CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task SaveAsync(RelayConfigurationEditModel model, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+    }
+}

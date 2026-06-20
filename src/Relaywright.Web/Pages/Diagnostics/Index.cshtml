@@ -1,0 +1,30 @@
+@page
+@model Relaywright.Web.Pages.Diagnostics.IndexModel
+@{
+    ViewData["Title"] = "Diagnostics";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Diagnostics</p>
+            <h1>Diagnostics</h1>
+            <p class="page-summary">Confirm the current upstream relay target and run a direct connection test from this host without leaving the admin interface.</p>
+        </div>
+        <div class="page-actions">
+            <a asp-page="/Diagnostics/TestEmail">Open Test Email</a>
+        </div>
+    </header>
+
+    <section class="panel">
+        <h2>Connectivity Test</h2>
+        <form method="post">
+            <button type="submit">Test Upstream Connection</button>
+        </form>
+
+        @if (Model.Result is not null)
+        {
+            <p class="status @(Model.Result.Succeeded ? "ok" : "error")">@Model.Result.Message</p>
+        }
+    </section>
+</section>

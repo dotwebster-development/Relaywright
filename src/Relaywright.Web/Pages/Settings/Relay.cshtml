@@ -1,0 +1,242 @@
+@page
+@model Relaywright.Web.Pages.Settings.RelayModel
+@{
+    ViewData["Title"] = "Relay Settings";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Settings</p>
+            <h1>Relay Settings</h1>
+            <p class="page-summary">Configure how devices submit mail, how the listener exposes SMTP, and how accepted messages are relayed to the upstream smart host.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p class="status">@Model.StatusMessage</p>
+    }
+
+    <form method="post" class="relay-settings">
+        <div asp-validation-summary="ModelOnly" class="status error"></div>
+
+        <section class="settings-block">
+            <div class="settings-block-title">Listener</div>
+            <div class="compact-grid">
+                <div class="toggle-field">
+                    <label class="toggle-control">
+                        <input asp-for="BindToAllInterfaces" type="checkbox" data-bind-all />
+                        <span>All Interfaces</span>
+                    </label>
+                </div>
+                <label class="span-2 bind-address-field @(Model.BindToAllInterfaces ? "is-collapsed" : "")" data-bind-select>
+                    <span>Specific IP</span>
+                    <select asp-for="SelectedBindAddress" asp-items="Model.BindAddressOptions"></select>
+                </label>
+                <label>
+                    <span>Port (TCP)</span>
+                    <input asp-for="Input.ListenerPort" type="number" />
+                </label>
+                <label>
+                    <span>Host Name</span>
+                    <input asp-for="Input.ListenerHostName" />
+                </label>
+                <label>
+                    <span>Max Size (Bytes)</span>
+                    <input asp-for="Input.MaxMessageSizeBytes" type="number" />
+                </label>
+                <div class="toggle-field">
+                    <label class="toggle-control">
+                        <input asp-for="Input.EnableStartTls" type="checkbox" data-starttls-toggle />
+                        <span>STARTTLS</span>
+                    </label>
+                </div>
+                <div class="span-4 auth-panel" data-certificate-panel hidden="@(!Model.ShowCertificateFields)">
+                    <div class="compact-grid compact-grid-nested">
+                        <label class="span-2">
+                            <span>Certificate Path</span>
+                            <input asp-for="Input.CertificatePath" />
+                        </label>
+                        <label class="span-2">
+                            <span>Certificate Password</span>
+                            <input asp-for="Input.CertificatePassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" />
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-block">
+            <div class="settings-block-title">Upstream</div>
+            <div class="compact-grid">
+                <label class="span-2">
+                    <span>Host</span>
+                    <input asp-for="Input.UpstreamHost" />
+                </label>
+                <label>
+                    <span>Port (TCP)</span>
+                    <input asp-for="Input.UpstreamPort" type="number" />
+                </label>
+                <label>
+                    <span>TLS Mode</span>
+                    <select asp-for="Input.UpstreamSecureSocketOptions" asp-items="Model.SecureSocketOptions"></select>
+                </label>
+                <label>
+                    <span>Timeout (Seconds)</span>
+                    <input asp-for="Input.UpstreamTimeoutSeconds" type="number" />
+                </label>
+                <div class="toggle-field">
+                    <label class="toggle-control">
+                        <input asp-for="Input.UseUpstreamAuthentication" type="checkbox" data-auth-toggle />
+                        <span>Authentication</span>
+                    </label>
+                </div>
+                <div class="span-4 auth-panel" data-auth-panel hidden="@(!Model.ShowAuthenticationPanel)">
+                    <div class="compact-grid compact-grid-nested">
+                        <label class="span-2" data-auth-type hidden="@(!Model.ShowAuthenticationPanel)">
+                            <span>Auth Type</span>
+                            <select asp-for="Input.UpstreamAuthenticationMode" asp-items="Model.AuthenticationModes" data-auth-mode></select>
+                        </label>
+                        <label class="span-2" data-auth-identity hidden="@(!Model.ShowAuthenticationPanel)">
+                            <span data-auth-identity-label>@(Model.ShowMicrosoftAuthenticationFields ? "Mailbox" : "User Name")</span>
+                            <input asp-for="Input.UpstreamUserName" />
+                        </label>
+                        <label class="span-2" data-auth-basic hidden="@(!Model.ShowBasicAuthenticationFields)">
+                            <span>Password</span>
+                            <input asp-for="Input.UpstreamPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" />
+                        </label>
+                        <label data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                            <span>Tenant ID</span>
+                            <input asp-for="Input.MicrosoftTenantId" />
+                        </label>
+                        <label data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                            <span>Client ID</span>
+                            <input asp-for="Input.MicrosoftClientId" />
+                        </label>
+                        <label class="span-2" data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                            <span>Client Secret</span>
+                            <input asp-for="Input.MicrosoftClientSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" />
+                        </label>
+                    </div>
+                    <p class="field-hint" data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                        Requires Microsoft Entra app consent, Exchange SMTP OAuth setup, and mailbox permission for the selected mailbox.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-block">
+            <div class="settings-block-title">Delivery And Retention</div>
+            <div class="compact-grid">
+                <label>
+                    <span>Concurrency (Workers)</span>
+                    <input asp-for="Input.DeliveryConcurrency" type="number" />
+                </label>
+                <label>
+                    <span>Max Retries (Tries)</span>
+                    <input asp-for="Input.MaxRetryCount" type="number" />
+                </label>
+                <label>
+                    <span>Initial Retry (Seconds)</span>
+                    <input asp-for="Input.InitialRetryDelaySeconds" type="number" />
+                </label>
+                <label>
+                    <span>Max Retry (Seconds)</span>
+                    <input asp-for="Input.MaxRetryDelaySeconds" type="number" />
+                </label>
+                <label>
+                    <span>Expires After (Hours)</span>
+                    <input asp-for="Input.MessageExpirationHours" type="number" />
+                </label>
+                <label>
+                    <span>Delivered Keep (Hours)</span>
+                    <input asp-for="Input.DeliveredRetentionHours" type="number" />
+                </label>
+                <label>
+                    <span>Failed Keep (Hours)</span>
+                    <input asp-for="Input.FailedRetentionHours" type="number" />
+                </label>
+                <label>
+                    <span>Event Keep (Hours)</span>
+                    <input asp-for="Input.EventRetentionHours" type="number" />
+                </label>
+            </div>
+        </section>
+
+        <div class="actions compact-actions">
+            <button type="submit">Save Settings</button>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const authToggle = document.querySelector('[data-auth-toggle]');
+            const authPanel = document.querySelector('[data-auth-panel]');
+            const authMode = document.querySelector('[data-auth-mode]');
+            const authType = document.querySelector('[data-auth-type]');
+            const authIdentityLabel = document.querySelector('[data-auth-identity-label]');
+            const bindAllToggle = document.querySelector('[data-bind-all]');
+            const bindSelect = document.querySelector('[data-bind-select]');
+            const startTlsToggle = document.querySelector('[data-starttls-toggle]');
+            const certificatePanel = document.querySelector('[data-certificate-panel]');
+            const basicFields = document.querySelectorAll('[data-auth-basic]');
+            const microsoftFields = document.querySelectorAll('[data-auth-microsoft]');
+            const authIdentity = document.querySelector('[data-auth-identity]');
+
+            const syncAuth = () => {
+                const enabled = !!authToggle?.checked;
+                const isMicrosoft = authMode?.value === 'Microsoft365OAuth';
+
+                if (authPanel) {
+                    authPanel.hidden = !enabled;
+                }
+
+                if (authIdentityLabel) {
+                    authIdentityLabel.textContent = isMicrosoft ? 'Mailbox' : 'User Name';
+                }
+
+                if (authType) {
+                    authType.hidden = !enabled;
+                }
+
+                if (authIdentity) {
+                    authIdentity.hidden = !enabled || !authMode?.value;
+                }
+
+                basicFields.forEach((element) => {
+                    element.hidden = !enabled || isMicrosoft || !authMode?.value;
+                });
+
+                microsoftFields.forEach((element) => {
+                    element.hidden = !enabled || !isMicrosoft || !authMode?.value;
+                });
+            };
+
+            const syncBindSelection = () => {
+                if (bindSelect) {
+                    bindSelect.classList.toggle('is-collapsed', !!bindAllToggle?.checked);
+                }
+            };
+
+            const syncCertificate = () => {
+                const startTlsEnabled = !!startTlsToggle?.checked;
+
+                if (certificatePanel) {
+                    certificatePanel.hidden = !startTlsEnabled;
+                }
+            };
+
+            authToggle?.addEventListener('change', syncAuth);
+            authMode?.addEventListener('change', syncAuth);
+            bindAllToggle?.addEventListener('change', syncBindSelection);
+            startTlsToggle?.addEventListener('change', syncCertificate);
+
+            syncAuth();
+            syncBindSelection();
+            syncCertificate();
+        })();
+    </script>
+}

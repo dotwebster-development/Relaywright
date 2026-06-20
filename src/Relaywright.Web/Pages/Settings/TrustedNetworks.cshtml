@@ -1,0 +1,77 @@
+@page "{editId?}"
+@model Relaywright.Web.Pages.Settings.TrustedNetworksModel
+@{
+    ViewData["Title"] = "Trusted IPs";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Settings</p>
+            <h1>Trusted IPs</h1>
+            <p class="page-summary">Control which printers, devices, and local systems are allowed to submit mail to the relay listener.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p class="status">@Model.StatusMessage</p>
+    }
+
+    <section class="panel">
+        <h2>@(Model.Input.Id == 0 ? "Add Trusted Network" : "Edit Trusted Network")</h2>
+        <form method="post" asp-page-handler="Save" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+            <input asp-for="Input.Id" type="hidden" />
+            <label>
+                <span>CIDR / IP</span>
+                <input asp-for="Input.Cidr" />
+            </label>
+            <label>
+                <span>Description</span>
+                <input asp-for="Input.Description" />
+            </label>
+            <label class="checkbox">
+                <input asp-for="Input.IsEnabled" type="checkbox" />
+                <span>Enabled</span>
+            </label>
+            <div class="actions">
+                <button type="submit">Save</button>
+                <a asp-page="/Settings/TrustedNetworks">Clear</a>
+            </div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Configured Networks</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>CIDR</th>
+                        <th>Description</th>
+                        <th>Enabled</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.Networks)
+                {
+                    <tr>
+                        <td>@item.Cidr</td>
+                        <td>@item.Description</td>
+                        <td><span class="status-badge @(item.IsEnabled ? "status-enabled" : "status-disabled")">@(item.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                        <td class="row-actions">
+                            <a asp-page="/Settings/TrustedNetworks" asp-route-editId="@item.Id">Edit</a>
+                            <form method="post" asp-page-handler="Delete" class="inline-form" onsubmit="return confirm('Delete this trusted network?');">
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <button type="submit" class="secondary-button">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

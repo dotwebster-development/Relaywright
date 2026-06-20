@@ -1,0 +1,116 @@
+@page "{id:guid}"
+@model Relaywright.Web.Pages.Messages.DetailsModel
+@{
+    ViewData["Title"] = "Message Details";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Operations</p>
+            <h1>Message Details</h1>
+            <p class="page-summary">Review queue metadata, parsed headers, and recent delivery attempts for a single accepted message.</p>
+        </div>
+        <div class="page-actions">
+            <a asp-page="/Queue/Index">Back To Queue</a>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p class="status">@Model.StatusMessage</p>
+    }
+
+    @if (Model.Message is null)
+    {
+        <p>Message not found.</p>
+    }
+    else
+    {
+        <section class="panel">
+            <h2>Queue Metadata</h2>
+            <dl class="kv">
+                <dt>ID</dt>
+                <dd>@Model.Message.Id</dd>
+                <dt>Status</dt>
+                <dd><span class="status-badge status-@(Model.Message.Status.ToString().ToLowerInvariant())">@Model.Message.Status</span></dd>
+                <dt>Accepted</dt>
+                <dd>@Model.Message.AcceptedUtc.ToLocalTime()</dd>
+                <dt>Envelope From</dt>
+                <dd>@Model.Message.EnvelopeFrom</dd>
+                <dt>Remote IP</dt>
+                <dd>@Model.Message.RemoteIpAddress</dd>
+                <dt>Recipients</dt>
+                <dd>@string.Join(", ", Model.Message.Recipients.Select(x => x.RecipientAddress))</dd>
+                <dt>Spool File</dt>
+                <dd>@Model.Message.SpoolFileRelativePath</dd>
+                <dt>Last Error</dt>
+                <dd>@Model.Message.LastError</dd>
+            </dl>
+            <div class="actions">
+                <form method="post" asp-page-handler="Retry" class="inline-form">
+                    <button type="submit">Retry Now</button>
+                </form>
+                <form method="post" asp-page-handler="Purge" class="inline-form" onsubmit="return confirm('Purge this queued message and remove its spool file?');">
+                    <button type="submit" class="secondary-button">Purge</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Message Headers</h2>
+            @if (Model.Metadata is null)
+            {
+                <p>Header metadata unavailable.</p>
+            }
+            else
+            {
+                <dl class="kv">
+                    <dt>Subject</dt>
+                    <dd>@Model.Metadata.Subject</dd>
+                    <dt>Message ID</dt>
+                    <dd>@Model.Metadata.MessageId</dd>
+                    <dt>Date</dt>
+                    <dd>@Model.Metadata.Date?.ToLocalTime()</dd>
+                    <dt>Header From</dt>
+                    <dd>@Model.Metadata.HeaderFrom</dd>
+                    <dt>Header To</dt>
+                    <dd>@Model.Metadata.HeaderTo</dd>
+                    <dt>Content Type</dt>
+                    <dd>@Model.Metadata.ContentType</dd>
+                </dl>
+            }
+        </section>
+
+        <section class="panel">
+            <h2>Delivery Attempts</h2>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Started</th>
+                            <th>Completed</th>
+                            <th>Succeeded</th>
+                            <th>Category</th>
+                            <th>Response</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.Message.DeliveryAttempts.OrderByDescending(x => x.AttemptNumber))
+                    {
+                        <tr>
+                            <td>@item.AttemptNumber</td>
+                            <td>@item.StartedUtc.ToLocalTime()</td>
+                            <td>@item.CompletedUtc?.ToLocalTime()</td>
+                            <td><span class="status-badge @(item.Succeeded ? "status-delivered" : "status-failed")">@(item.Succeeded ? "Yes" : "No")</span></td>
+                            <td><span class="badge">@item.FailureCategory</span></td>
+                            <td>@(item.ResponseCode) @item.ResponseText</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</section>

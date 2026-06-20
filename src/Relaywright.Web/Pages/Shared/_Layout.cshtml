@@ -1,0 +1,149 @@
+@using Relaywright.Web.UI
+@{
+    var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+    var navState = isAuthenticated ? AppNavigation.Resolve(Context.Request.Path) : null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Relaywright</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <div class="app-shell @(isAuthenticated ? "is-authenticated" : "is-public")">
+        @if (isAuthenticated && navState is not null)
+        {
+            <div class="app-overlay" data-nav-dismiss></div>
+            <aside class="app-rail" id="app-rail">
+                <div class="rail-brand">
+                    <a class="rail-brand-mark" asp-page="/Index" aria-label="Relaywright home">RW</a>
+                    <div class="rail-brand-copy">
+                        <p class="rail-brand-kicker">Relaywright</p>
+                        <p class="rail-brand-note">Local forwarding console</p>
+                    </div>
+                </div>
+
+                <nav class="rail-nav" aria-label="Primary">
+                    @foreach (var navSection in navState.Sections)
+                    {
+                        <a asp-page="@navSection.Page"
+                           class="rail-link @(navState.IsSectionActive(navSection) ? "is-active" : null)"
+                           aria-current="@(navState.IsSectionActive(navSection) ? "page" : null)">
+                            <span class="rail-link-label">@navSection.Label</span>
+                            <span class="rail-link-note">@navSection.Description</span>
+                        </a>
+                    }
+                </nav>
+
+                <div class="rail-footer">
+                    <p class="rail-footer-title">Single-upstream relay</p>
+                    <p class="rail-footer-copy">Stable routing, IP filtering, queue visibility, and diagnostics in one workspace.</p>
+                </div>
+            </aside>
+        }
+
+        <div class="workspace">
+            @if (isAuthenticated && navState is not null)
+            {
+                <header class="utility-bar">
+                    <div class="utility-context">
+                        <button type="button" class="nav-toggle" data-nav-toggle aria-controls="app-rail" aria-expanded="false">
+                            Menu
+                        </button>
+                        <div>
+                            <p class="utility-kicker">@navState.ActiveSection.Label</p>
+                            <p class="utility-copy">@navState.ActiveSection.Description</p>
+                        </div>
+                    </div>
+                    <div class="utility-actions">
+                        <span class="utility-user">@User.Identity?.Name</span>
+                        <a class="utility-link" asp-page="/Account/ChangePassword">Password</a>
+                        <form method="post" asp-page="/Account/Logout" class="inline-form">
+                            <button type="submit" class="secondary-button">Logout</button>
+                        </form>
+                    </div>
+                </header>
+
+                <nav class="section-nav" aria-label="@($"{navState.ActiveSection.Label} pages")">
+                    <div class="section-nav-label">@navState.ActiveSection.Label</div>
+                    <div class="section-nav-items">
+                        @foreach (var item in navState.ActiveSection.Items)
+                        {
+                            <a asp-page="@item.Page"
+                               class="section-nav-link @(navState.IsItemActive(item) ? "is-active" : null)"
+                               aria-current="@(navState.IsItemActive(item) ? "page" : null)">@item.Label</a>
+                        }
+                    </div>
+                </nav>
+            }
+            else
+            {
+                <header class="public-header">
+                    <a class="public-brand" asp-page="/Index">Relaywright</a>
+                </header>
+            }
+
+            <main class="content">
+                <div class="content-inner">
+                    @RenderBody()
+                </div>
+            </main>
+        </div>
+    </div>
+    <script>
+        (() => {
+            const root = document.documentElement;
+            const toggle = document.querySelector('[data-nav-toggle]');
+            const dismiss = document.querySelector('[data-nav-dismiss]');
+            const rail = document.getElementById('app-rail');
+
+            if (!toggle || !dismiss || !rail) {
+                return;
+            }
+
+            const setOpen = (isOpen) => {
+                root.classList.toggle('nav-open', isOpen);
+                toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            };
+
+            const close = () => setOpen(false);
+
+            toggle.addEventListener('click', () => {
+                setOpen(!root.classList.contains('nav-open'));
+            });
+
+            dismiss.addEventListener('click', close);
+
+            rail.querySelectorAll('a').forEach((link) => {
+                link.addEventListener('click', () => {
+                    if (window.innerWidth <= 960) {
+                        close();
+                    }
+                });
+            });
+
+            window.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    close();
+                }
+            });
+
+            const desktopMedia = window.matchMedia('(min-width: 961px)');
+            const handleDesktopChange = (event) => {
+                if (event.matches) {
+                    close();
+                }
+            };
+
+            if (desktopMedia.addEventListener) {
+                desktopMedia.addEventListener('change', handleDesktopChange);
+            } else {
+                desktopMedia.addListener(handleDesktopChange);
+            }
+        })();
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

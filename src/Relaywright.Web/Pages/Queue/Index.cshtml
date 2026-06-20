@@ -1,0 +1,79 @@
+@page "{status?}"
+@model Relaywright.Web.Pages.Queue.IndexModel
+@{
+    ViewData["Title"] = "Queue";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Operations</p>
+            <h1>Queue</h1>
+            <p class="page-summary">Inspect accepted messages, track delivery state, and drill into failures or retries without leaving the operations section.</p>
+        </div>
+    </header>
+
+    <div class="tabs">
+        <a asp-page="/Queue/Index" asp-route-status="active" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("active") ? "is-active" : null)">Active</a>
+        <a asp-page="/Queue/Index" asp-route-status="failed" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("failed") ? "is-active" : null)">Failed</a>
+        <a asp-page="/Queue/Index" asp-route-status="delivered" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("delivered") ? "is-active" : null)">Delivered</a>
+        <a asp-page="/Queue/Index" asp-route-status="all" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("all") ? "is-active" : null)">All</a>
+    </div>
+
+    <form method="get" class="filter-row">
+        <input type="hidden" name="status" value="@Model.SelectedStatus" />
+        <label>
+            <span>Search</span>
+            <input asp-for="Search" placeholder="Sender, recipient, IP, correlation ID" />
+        </label>
+        <button type="submit">Filter</button>
+        <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus">Clear</a>
+    </form>
+
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Accepted</th>
+                    <th>Status</th>
+                    <th>From</th>
+                    <th>Recipients</th>
+                    <th>Attempts</th>
+                    <th>Last Error</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in Model.Messages)
+            {
+                <tr>
+                    <td>@item.AcceptedUtc.ToLocalTime()</td>
+                    <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@item.Status</span></td>
+                    <td>@item.EnvelopeFrom</td>
+                    <td>@string.Join(", ", item.Recipients.Select(x => x.RecipientAddress))</td>
+                    <td>@item.AttemptCount</td>
+                    <td>@item.LastError</td>
+                    <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.TotalCount > 0)
+    {
+        <nav class="pagination" aria-label="Queue pages">
+            <span>Page @Model.PageNumber of @Model.TotalPages (@Model.TotalCount total)</span>
+            <div>
+                @if (Model.HasPreviousPage)
+                {
+                    <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a>
+                }
+                @if (Model.HasNextPage)
+                {
+                    <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a>
+                }
+            </div>
+        </nav>
+    }
+</section>

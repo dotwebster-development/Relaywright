@@ -1,0 +1,80 @@
+using Microsoft.Extensions.Options;
+using Relaywright.Web.Options;
+
+namespace Relaywright.Web.Infrastructure;
+
+public sealed class AppPaths
+{
+    public AppPaths(string contentRootPath, IOptions<StorageOptions> options)
+        : this(contentRootPath, options.Value)
+    {
+    }
+
+    public AppPaths(string contentRootPath, StorageOptions options)
+    {
+        ContentRootPath = contentRootPath;
+        DataDirectory = Resolve(contentRootPath, options.DataDirectory);
+        DatabasePath = Path.Combine(DataDirectory, options.DatabaseFileName);
+        SpoolRootDirectory = Path.Combine(DataDirectory, options.SpoolDirectoryName);
+        KeyRingDirectory = Path.Combine(DataDirectory, options.KeyDirectoryName);
+    }
+
+    public string ContentRootPath { get; }
+
+    public string DataDirectory { get; }
+
+    public string DatabasePath { get; }
+
+    public string SpoolRootDirectory { get; }
+
+    public string KeyRingDirectory { get; }
+
+    public void EnsureCreated()
+    {
+        Directory.CreateDirectory(DataDirectory);
+        Directory.CreateDirectory(SpoolRootDirectory);
+        Directory.CreateDirectory(KeyRingDirectory);
+    }
+
+    public string CreateSpoolRelativePath(Guid messageId, DateTimeOffset timestampUtc)
+    {
+        var folder = Path.Combine(
+            timestampUtc.UtcDateTime.ToString("yyyy"),
+            timestampUtc.UtcDateTime.ToString("MM"),
+            timestampUtc.UtcDateTime.ToString("dd"));
+
+        return Path.Combine(folder, $"{messageId:N}.eml");
+    }
+
+    public string GetSpoolAbsolutePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new InvalidOperationException("Spool path is required.");
+        }
+
+        var root = Path.GetFullPath(SpoolRootDirectory);
+        var candidate = Path.GetFullPath(Path.Combine(root, relativePath));
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (!candidate.StartsWith(rootWithSeparator, comparison))
+        {
+            throw new InvalidOperationException("Spool path resolves outside the spool directory.");
+        }
+
+        return candidate;
+    }
+
+    private static string Resolve(string contentRootPath, string configuredPath)
+    {
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(contentRootPath, configuredPath));
+    }
+}
