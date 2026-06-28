@@ -362,13 +362,13 @@ textarea {
 }
 
 .setup-page {
-    max-width: 560px;
+    max-width: 760px;
 }
 
 .setup-panel {
     display: grid;
-    gap: 18px;
-    padding: 22px;
+    gap: 28px;
+    padding: 34px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-surface);
@@ -377,14 +377,14 @@ textarea {
 
 .setup-brand {
     display: grid;
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 18px;
     align-items: center;
 }
 
 .setup-brand img {
-    width: 48px;
-    height: 48px;
+    width: 64px;
+    height: 64px;
 }
 
 .setup-brand h1,
@@ -397,14 +397,14 @@ textarea {
 }
 
 .setup-brand h1 {
-    font-size: 1.5rem;
+    font-size: 1.85rem;
     line-height: 1.15;
 }
 
 .setup-progress {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 12px;
     padding: 0;
     margin: 0;
     list-style: none;
@@ -412,9 +412,9 @@ textarea {
 
 .setup-progress li {
     display: grid;
-    gap: 6px;
-    min-height: 74px;
-    padding: 10px;
+    gap: 10px;
+    min-height: 96px;
+    padding: 16px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-muted);
@@ -431,8 +431,8 @@ textarea {
 }
 
 .setup-progress span {
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     border: 1px solid var(--border-strong);
     background: var(--bg-surface);
     color: var(--text-muted);
@@ -463,15 +463,15 @@ textarea {
 .setup-step,
 .setup-copy {
     display: grid;
-    gap: 12px;
+    gap: 20px;
 }
 
 .setup-copy {
-    gap: 6px;
+    gap: 8px;
 }
 
 .setup-copy h2 {
-    font-size: 1.15rem;
+    font-size: 1.32rem;
     line-height: 1.25;
 }
 
@@ -479,12 +479,13 @@ textarea {
 .setup-callout p,
 .setup-overview p {
     color: var(--text-muted);
+    font-size: 0.98rem;
 }
 
 .setup-callout {
     display: grid;
-    gap: 4px;
-    padding: 12px;
+    gap: 8px;
+    padding: 18px;
     border: 1px solid var(--accent-border);
     border-radius: var(--radius);
     background: var(--accent-muted);
@@ -492,14 +493,14 @@ textarea {
 
 .setup-summary {
     display: grid;
-    gap: 8px;
+    gap: 10px;
 }
 
 .setup-summary div {
     display: grid;
-    grid-template-columns: 150px minmax(0, 1fr);
-    gap: 10px;
-    padding: 9px 0;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 18px;
+    padding: 14px 0;
     border-bottom: 1px solid var(--border);
 }
 
@@ -519,21 +520,21 @@ textarea {
 
 .setup-overview {
     display: grid;
-    gap: 10px;
+    gap: 16px;
     padding: 0;
     list-style: none;
 }
 
 .setup-overview li {
     display: grid;
-    grid-template-columns: 26px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 14px;
 }
 
 .setup-overview span {
-    width: 22px;
-    height: 22px;
-    margin-top: 1px;
+    width: 26px;
+    height: 26px;
+    margin-top: 2px;
     border: 1px solid var(--border-strong);
     background: var(--bg-muted);
 }
@@ -555,6 +556,30 @@ textarea {
 .setup-overview li.is-active span {
     border-color: var(--brand-amber);
     background: var(--brand-amber);
+}
+
+.setup-page .form-grid {
+    gap: 18px;
+}
+
+.setup-page .compact-grid input,
+.setup-page .compact-grid select,
+.setup-page .form-grid input,
+.setup-page .form-grid select,
+.setup-page .form-grid textarea {
+    min-height: 42px;
+    padding: 9px 11px;
+}
+
+.setup-page .actions {
+    gap: 12px;
+    padding-top: 4px;
+}
+
+.setup-page button,
+.setup-page .button-link {
+    min-height: 40px;
+    padding: 0 16px;
 }
 
 .field-validation-error {
@@ -1126,6 +1151,40 @@ button:hover,
 @media (max-width: 680px) {
     body {
         font-size: 13px;
+    }
+
+    .setup-panel {
+        gap: 20px;
+        padding: 20px;
+    }
+
+    .setup-brand {
+        grid-template-columns: 52px minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .setup-brand img {
+        width: 52px;
+        height: 52px;
+    }
+
+    .setup-brand h1 {
+        font-size: 1.45rem;
+    }
+
+    .setup-progress {
+        grid-template-columns: 1fr;
+    }
+
+    .setup-progress li {
+        min-height: 0;
+        grid-template-columns: 32px minmax(0, 1fr);
+        align-items: center;
+    }
+
+    .setup-summary div {
+        grid-template-columns: 1fr;
+        gap: 4px;
     }
 
     .page-header {
