@@ -27,10 +27,7 @@ On the Windows VM:
 3. Install the runner as a Windows service.
 4. Run the runner service with administrator rights, preferably the default service setup for a disposable test VM.
 5. Allow outbound HTTPS to GitHub.
-6. Open inbound firewall ports you want to test:
-   - `5443` for HTTPS admin UI
-   - `5080` for HTTP-to-HTTPS redirect checks
-   - the configured SMTP listener port, for example `2525` after initial configuration
+6. Make sure any VM host/network firewall allows the ports you want to test. The deployment script configures Windows Firewall rules on the guest OS.
 
 The deployment script defaults to:
 
@@ -40,6 +37,8 @@ The deployment script defaults to:
 - ASP.NET Core environment: `Production`
 - URLs: `https://*:5443;http://*:5080`
 - health URL: `https://127.0.0.1:5443/health`
+- Windows Firewall admin ports: derived from `RELAYWRIGHT_TEST_URLS`, normally `5443` and `5080`
+- Windows Firewall SMTP ports: `2525`
 
 For test VMs, the script can generate a self-signed HTTPS certificate automatically if no certificate variable is configured.
 
@@ -62,12 +61,33 @@ Optional Actions variables:
 - `RELAYWRIGHT_TEST_BOOTSTRAP_EMAIL`
 - `RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PATH`
 - `RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_DNS_NAME`
+- `RELAYWRIGHT_TEST_FIREWALL_RULE_PREFIX`
+- `RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS`
+- `RELAYWRIGHT_TEST_FIREWALL_PROFILES`
+- `RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS`
 
 Optional Actions secret:
 
 - `RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD`
 
 If you provide a real or pre-created PFX certificate, set both `RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PATH` and `RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD`. Otherwise the deploy script creates a self-signed test certificate under the install root.
+
+Firewall defaults:
+
+- Rule group/name prefix: `Relaywright Test`
+- Remote address: `Any`
+- Profiles: `Any`
+- SMTP ports: `2525`
+
+To restrict access to your LAN or test client, set `RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS` to a CIDR or address accepted by Windows Firewall, for example `192.168.1.0/24`.
+
+To test SMTP on port `25`, set:
+
+```text
+RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS=25,2525
+```
+
+The deploy script removes and recreates only rules in its own firewall rule group, so repeated deployments stay idempotent.
 
 ## First Deploy
 
@@ -95,6 +115,7 @@ Test-Path C:\Relaywright\Test\App_Data\relay.db
 Test-Path C:\Relaywright\Test\App_Data\spool
 Test-Path C:\Relaywright\Test\App_Data\keys
 Invoke-WebRequest https://127.0.0.1:5443/health -UseBasicParsing
+Get-NetFirewallRule -Group "Relaywright Test" | Get-NetFirewallPortFilter
 ```
 
 If Windows PowerShell rejects the self-signed certificate in `Invoke-WebRequest`, use the browser or temporarily bypass validation for the smoke test:

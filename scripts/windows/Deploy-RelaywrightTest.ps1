@@ -31,6 +31,16 @@ param(
 
     [string]$CertificateDnsName = "localhost",
 
+    [switch]$ConfigureFirewall,
+
+    [string]$FirewallRulePrefix = "Relaywright Test",
+
+    [string]$FirewallRemoteAddress = "Any",
+
+    [string]$FirewallProfiles = "Any",
+
+    [string]$FirewallSmtpPorts = "2525",
+
     [int]$HealthTimeoutSeconds = 90
 )
 
@@ -169,6 +179,108 @@ function Write-ServiceDiagnostics {
         }
         catch {
         }
+    }
+}
+
+function Get-TcpPortsFromUrls {
+    param([string]$UrlList)
+
+    $ports = New-Object System.Collections.Generic.List[int]
+    foreach ($url in ($UrlList -split "[;,]")) {
+        $trimmed = $url.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        if ($trimmed -match "^[a-zA-Z][a-zA-Z0-9+.-]*://.*:(\d+)(?:/|$)") {
+            $ports.Add([int]$Matches[1])
+            continue
+        }
+
+        if ($trimmed -match "^https://") {
+            $ports.Add(443)
+            continue
+        }
+
+        if ($trimmed -match "^http://") {
+            $ports.Add(80)
+        }
+    }
+
+    return $ports | Sort-Object -Unique
+}
+
+function Get-TcpPortsFromList {
+    param([string]$PortList)
+
+    $ports = New-Object System.Collections.Generic.List[int]
+    foreach ($part in ($PortList -split "[,;\s]+")) {
+        $trimmed = $part.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        $port = 0
+        if (-not [int]::TryParse($trimmed, [ref]$port) -or $port -lt 1 -or $port -gt 65535) {
+            throw "Firewall port '$trimmed' is not a valid TCP port."
+        }
+
+        $ports.Add($port)
+    }
+
+    return $ports | Sort-Object -Unique
+}
+
+function Set-RelaywrightFirewallRules {
+    param(
+        [string]$RulePrefix,
+        [string]$ProgramPath,
+        [string]$UrlList,
+        [string]$SmtpPorts,
+        [string]$RemoteAddress,
+        [string]$Profiles
+    )
+
+    if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) {
+        throw "Windows Firewall cmdlets are unavailable. Install or enable the NetSecurity PowerShell module."
+    }
+
+    $adminPorts = @(Get-TcpPortsFromUrls -UrlList $UrlList)
+    $relayPorts = @(Get-TcpPortsFromList -PortList $SmtpPorts)
+
+    Write-Step "Configuring Windows Firewall rules"
+    Get-NetFirewallRule -Group $RulePrefix -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+
+    foreach ($port in $adminPorts) {
+        New-NetFirewallRule `
+            -DisplayName "$RulePrefix Admin TCP $port" `
+            -Group $RulePrefix `
+            -Direction Inbound `
+            -Action Allow `
+            -Protocol TCP `
+            -LocalPort $port `
+            -Program $ProgramPath `
+            -Profile $Profiles `
+            -RemoteAddress $RemoteAddress `
+            -Description "Relaywright admin UI test deployment port $port." | Out-Null
+
+        Write-Host "Opened admin TCP port $port for $RemoteAddress."
+    }
+
+    foreach ($port in $relayPorts) {
+        New-NetFirewallRule `
+            -DisplayName "$RulePrefix SMTP TCP $port" `
+            -Group $RulePrefix `
+            -Direction Inbound `
+            -Action Allow `
+            -Protocol TCP `
+            -LocalPort $port `
+            -Program $ProgramPath `
+            -Profile $Profiles `
+            -RemoteAddress $RemoteAddress `
+            -Description "Relaywright SMTP relay test deployment port $port." | Out-Null
+
+        Write-Host "Opened SMTP TCP port $port for $RemoteAddress."
     }
 }
 
@@ -344,6 +456,16 @@ New-ItemProperty `
     -Value $serviceEnvironment `
     -PropertyType MultiString `
     -Force | Out-Null
+
+if ($ConfigureFirewall) {
+    Set-RelaywrightFirewallRules `
+        -RulePrefix $FirewallRulePrefix `
+        -ProgramPath $exePath `
+        -UrlList $Urls `
+        -SmtpPorts $FirewallSmtpPorts `
+        -RemoteAddress $FirewallRemoteAddress `
+        -Profiles $FirewallProfiles
+}
 
 Write-Step "Starting service $ServiceName"
 Start-Service -Name $ServiceName
