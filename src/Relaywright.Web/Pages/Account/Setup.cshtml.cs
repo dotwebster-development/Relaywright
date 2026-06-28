@@ -22,6 +22,16 @@ public sealed class SetupModel(
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
+    public SetupStep CurrentStep { get; private set; } = SetupStep.Welcome;
+
+    public string? CreatedUserName { get; private set; }
+
+    public bool IsWelcomeStep => CurrentStep == SetupStep.Welcome;
+
+    public bool IsAdminAccountStep => CurrentStep == SetupStep.AdminAccount;
+
+    public bool IsCompleteStep => CurrentStep == SetupStep.Complete;
+
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         if (await HasAnyUserAsync(cancellationToken))
@@ -32,8 +42,34 @@ public sealed class SetupModel(
         return Page();
     }
 
-    public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostStartAsync(CancellationToken cancellationToken)
     {
+        if (await HasAnyUserAsync(cancellationToken))
+        {
+            return RedirectToPage("/Account/Login");
+        }
+
+        ModelState.Clear();
+        CurrentStep = SetupStep.AdminAccount;
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostBackAsync(CancellationToken cancellationToken)
+    {
+        if (await HasAnyUserAsync(cancellationToken))
+        {
+            return RedirectToPage("/Account/Login");
+        }
+
+        ModelState.Clear();
+        CurrentStep = SetupStep.Welcome;
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostCreateAsync(CancellationToken cancellationToken)
+    {
+        CurrentStep = SetupStep.AdminAccount;
+
         if (!ModelState.IsValid)
         {
             return Page();
@@ -106,7 +142,9 @@ public sealed class SetupModel(
         }, cancellationToken);
 
         await signInManager.SignInAsync(admin, isPersistent: false);
-        return RedirectToPage("/Index");
+        CreatedUserName = admin.UserName;
+        CurrentStep = SetupStep.Complete;
+        return Page();
     }
 
     private async Task<bool> HasAnyUserAsync(CancellationToken cancellationToken)
@@ -114,15 +152,24 @@ public sealed class SetupModel(
         return await userManager.Users.AnyAsync(cancellationToken);
     }
 
+    public enum SetupStep
+    {
+        Welcome,
+        AdminAccount,
+        Complete
+    }
+
     public sealed class InputModel
     {
         [Required]
+        [Display(Name = "User Name")]
         public string UserName { get; set; } = string.Empty;
 
         [Required]
         public string Password { get; set; } = string.Empty;
 
         [Required]
+        [Display(Name = "Confirm Password")]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

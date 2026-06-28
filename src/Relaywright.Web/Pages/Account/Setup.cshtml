@@ -5,25 +5,132 @@
     ViewData["Title"] = "First Run Setup";
 }
 
-<section class="page narrow">
-    <h1>First Run Setup</h1>
-
-    <form method="post" class="form-grid">
-        <div asp-validation-summary="ModelOnly" class="status error"></div>
-        <label>
-            <span>User Name</span>
-            <input asp-for="Input.UserName" autocomplete="username" />
-        </label>
-        <label>
-            <span>Password</span>
-            <input asp-for="Input.Password" type="password" autocomplete="new-password" />
-        </label>
-        <label>
-            <span>Confirm Password</span>
-            <input asp-for="Input.ConfirmPassword" type="password" autocomplete="new-password" />
-        </label>
-        <div class="actions">
-            <button type="submit">Create Admin</button>
+<section class="page narrow setup-page">
+    <div class="setup-panel">
+        <div class="setup-brand">
+            <img src="~/brand/relaywright-mark.svg" alt="" />
+            <div>
+                <p class="page-eyebrow">First Run</p>
+                <h1>Set Up Relaywright</h1>
+            </div>
         </div>
-    </form>
+
+        <ol class="setup-progress" aria-label="Setup progress">
+            <li class="@(Model.IsWelcomeStep ? "is-active" : Model.IsAdminAccountStep || Model.IsCompleteStep ? "is-complete" : null)">
+                <span>1</span>
+                <strong>Welcome</strong>
+            </li>
+            <li class="@(Model.IsAdminAccountStep ? "is-active" : Model.IsCompleteStep ? "is-complete" : null)">
+                <span>2</span>
+                <strong>Admin</strong>
+            </li>
+            <li class="@(Model.IsCompleteStep ? "is-active" : null)">
+                <span>3</span>
+                <strong>Overview</strong>
+            </li>
+        </ol>
+
+        @if (Model.IsWelcomeStep)
+        {
+            <div class="setup-step">
+                <div class="setup-copy">
+                    <h2>Welcome to your relay console</h2>
+                    <p>Relaywright is ready for its initial setup. The first account you create becomes the local administrator for queue review, relay settings, diagnostics, and trusted network management.</p>
+                </div>
+
+                <div class="setup-callout">
+                    <strong>Before you continue</strong>
+                    <p>Use a unique admin password. Relaywright stores credentials with ASP.NET Core Identity and will not keep the plain text password.</p>
+                </div>
+
+                <form method="post" asp-page-handler="Start" class="actions">
+                    <button type="submit">Start Setup</button>
+                </form>
+            </div>
+        }
+        else if (Model.IsAdminAccountStep)
+        {
+            <form method="post" asp-page-handler="Create" class="setup-step form-grid">
+                <div class="setup-copy">
+                    <h2>Create the administrator</h2>
+                    <p>This account is required before the web interface, relay settings, and diagnostics can be used.</p>
+                </div>
+
+                <div asp-validation-summary="ModelOnly" class="status error"></div>
+                <label>
+                    <span>User Name</span>
+                    <input asp-for="Input.UserName" autocomplete="username" autofocus />
+                    <span asp-validation-for="Input.UserName"></span>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input asp-for="Input.Password" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="Input.Password"></span>
+                </label>
+                <label>
+                    <span>Confirm Password</span>
+                    <input asp-for="Input.ConfirmPassword" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="Input.ConfirmPassword"></span>
+                </label>
+                <div class="actions split-actions">
+                    <button type="submit">Create Admin</button>
+                    <button type="submit" class="secondary-button" form="setup-back-form">Back</button>
+                </div>
+            </form>
+
+            <form id="setup-back-form" method="post" asp-page-handler="Back"></form>
+        }
+        else if (Model.IsCompleteStep)
+        {
+            <div class="setup-step">
+                <div class="setup-copy">
+                    <h2>Setup complete</h2>
+                    <p>The initial administrator has been created and signed in. You can continue to the dashboard and start configuring the relay.</p>
+                </div>
+
+                <dl class="setup-summary">
+                    <div>
+                        <dt>Admin account</dt>
+                        <dd>@Model.CreatedUserName</dd>
+                    </div>
+                    <div>
+                        <dt>Completed steps</dt>
+                        <dd>Welcome, administrator account, setup overview</dd>
+                    </div>
+                    <div>
+                        <dt>Next recommended step</dt>
+                        <dd>Review relay settings and trusted networks.</dd>
+                    </div>
+                </dl>
+
+                <ol class="setup-overview">
+                    <li class="is-complete">
+                        <span></span>
+                        <div>
+                            <strong>Welcome</strong>
+                            <p>Confirmed this is a new Relaywright instance.</p>
+                        </div>
+                    </li>
+                    <li class="is-complete">
+                        <span></span>
+                        <div>
+                            <strong>Admin account</strong>
+                            <p>Created the first local administrator.</p>
+                        </div>
+                    </li>
+                    <li class="is-active">
+                        <span></span>
+                        <div>
+                            <strong>Overview</strong>
+                            <p>Verified the first-run wizard is ready for future setup steps.</p>
+                        </div>
+                    </li>
+                </ol>
+
+                <div class="actions">
+                    <a class="button-link" asp-page="/Index">Open Dashboard</a>
+                </div>
+            </div>
+        }
+    </div>
 </section>
