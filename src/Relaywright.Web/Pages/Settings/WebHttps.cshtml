@@ -2,15 +2,15 @@
 @model Relaywright.Web.Pages.Settings.WebHttpsModel
 @using Relaywright.Web.Services.Security
 @{
-    ViewData["Title"] = "Web HTTPS";
+    ViewData["Title"] = "Web Interface";
 }
 
 <section class="page">
     <header class="page-header">
         <div class="page-header-copy">
             <p class="page-eyebrow">Settings</p>
-            <h1>Web HTTPS</h1>
-            <p class="page-summary">Configure the certificate used by the Relaywright admin web interface. Certificate changes are picked up after the service restarts.</p>
+            <h1>Web Interface</h1>
+            <p class="page-summary">Configure the admin web listener ports and the certificate used by HTTPS. Changes are picked up after the service restarts.</p>
         </div>
     </header>
 
@@ -18,6 +18,54 @@
     {
         <p class="status">@Model.StatusMessage</p>
     }
+
+    <section class="panel">
+        <h2>Current Listener</h2>
+        @if (Model.CurrentListener is null)
+        {
+            <p class="muted">No Relaywright-managed listener settings have been saved. The app is using the current deployment or hosting URLs.</p>
+        }
+        else
+        {
+            <dl class="kv">
+                <dt>HTTPS</dt>
+                <dd>Port @Model.CurrentListener.HttpsPort</dd>
+                <dt>HTTP</dt>
+                <dd>@(Model.CurrentListener.EnableHttp ? $"Enabled on port {Model.CurrentListener.HttpPort}" : "Disabled")</dd>
+                <dt>Updated</dt>
+                <dd>@Model.CurrentListener.UpdatedUtc.ToLocalTime().ToString("g")</dd>
+            </dl>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Configure Listener</h2>
+        <form method="post" asp-page-handler="SaveListener" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+            <div class="compact-grid compact-grid-nested">
+                <label>
+                    <span>HTTPS Port</span>
+                    <input asp-for="ListenerInput.HttpsPort" type="number" min="1" max="65535" />
+                    <span asp-validation-for="ListenerInput.HttpsPort"></span>
+                </label>
+                <div class="toggle-field">
+                    <label class="toggle-control">
+                        <input asp-for="ListenerInput.EnableHttp" type="checkbox" data-http-toggle />
+                        <span>Enable HTTP</span>
+                    </label>
+                </div>
+                <label data-http-port>
+                    <span>HTTP Port</span>
+                    <input asp-for="ListenerInput.HttpPort" type="number" min="1" max="65535" />
+                    <span asp-validation-for="ListenerInput.HttpPort"></span>
+                </label>
+            </div>
+            <p class="field-hint">When HTTP is disabled, Relaywright will not listen on an HTTP port after restart. HTTPS remains enabled for the admin interface.</p>
+            <div class="actions">
+                <button type="submit">Save Listener</button>
+            </div>
+        </form>
+    </section>
 
     <section class="panel">
         <h2>Current Certificate</h2>
@@ -49,7 +97,7 @@
 
     <section class="panel">
         <h2>Configure Certificate</h2>
-        <form method="post" asp-page-handler="Save" enctype="multipart/form-data" class="form-grid">
+        <form method="post" asp-page-handler="SaveCertificate" enctype="multipart/form-data" class="form-grid">
             <div asp-validation-summary="ModelOnly" class="status error"></div>
 
             <div class="certificate-choice-grid" data-certificate-modes>
@@ -128,10 +176,8 @@
         (() => {
             const modeInputs = Array.from(document.querySelectorAll('[data-certificate-mode]'));
             const panels = Array.from(document.querySelectorAll('[data-certificate-panel]'));
-
-            if (!modeInputs.length || !panels.length) {
-                return;
-            }
+            const httpToggle = document.querySelector('[data-http-toggle]');
+            const httpPort = document.querySelector('[data-http-port]');
 
             const syncPanels = () => {
                 const selected = modeInputs.find((input) => input.checked)?.dataset.certificateMode ?? 'selfsigned';
@@ -141,8 +187,16 @@
                 });
             };
 
+            const syncHttp = () => {
+                if (httpPort) {
+                    httpPort.hidden = !httpToggle?.checked;
+                }
+            };
+
             modeInputs.forEach((input) => input.addEventListener('change', syncPanels));
+            httpToggle?.addEventListener('change', syncHttp);
             syncPanels();
+            syncHttp();
         })();
     </script>
 }

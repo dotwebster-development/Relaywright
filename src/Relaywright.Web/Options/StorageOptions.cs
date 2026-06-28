@@ -15,4 +15,6 @@ public sealed class StorageOptions
     public string CertificateDirectoryName { get; set; } = "certs";
 
     public string AdminHttpsCertificateFileName { get; set; } = "admin-https-certificate.json";
+
+    public string AdminWebListenerFileName { get; set; } = "admin-web-listener.json";
 }

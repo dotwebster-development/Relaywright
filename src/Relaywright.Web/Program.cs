@@ -29,6 +29,16 @@ appPaths.EnsureCreated();
 var startupDataProtectionProvider = DataProtectionProvider.Create(
     new DirectoryInfo(appPaths.KeyRingDirectory),
     options => options.SetApplicationName("Relaywright"));
+var configuredAdminWebListener = AdminWebListenerConfigurationService.LoadConfiguration(appPaths);
+if (configuredAdminWebListener is not null)
+{
+    builder.WebHost.UseUrls(configuredAdminWebListener.GetUrls());
+    builder.Services.AddHttpsRedirection(options =>
+    {
+        options.HttpsPort = configuredAdminWebListener.HttpsPort;
+    });
+}
+
 var configuredAdminHttpsCertificate = AdminHttpsCertificateService.LoadConfiguredCertificate(appPaths, startupDataProtectionProvider);
 if (configuredAdminHttpsCertificate is not null)
 {
@@ -87,6 +97,7 @@ builder.Services.AddRazorPages(options =>
 
 builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
 builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
+builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
 builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
 builder.Services.AddSingleton<IQueueSignal, QueueSignal>();

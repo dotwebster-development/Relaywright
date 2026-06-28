@@ -19,6 +19,7 @@ public sealed class AppPaths
         KeyRingDirectory = Path.Combine(DataDirectory, options.KeyDirectoryName);
         CertificateDirectory = Path.Combine(DataDirectory, options.CertificateDirectoryName);
         AdminHttpsCertificateConfigurationPath = Path.Combine(DataDirectory, options.AdminHttpsCertificateFileName);
+        AdminWebListenerConfigurationPath = Path.Combine(DataDirectory, options.AdminWebListenerFileName);
     }
 
     public string ContentRootPath { get; }
@@ -34,6 +35,8 @@ public sealed class AppPaths
     public string CertificateDirectory { get; }
 
     public string AdminHttpsCertificateConfigurationPath { get; }
+
+    public string AdminWebListenerConfigurationPath { get; }
 
     public void EnsureCreated()
     {

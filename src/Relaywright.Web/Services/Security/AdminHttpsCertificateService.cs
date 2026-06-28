@@ -237,7 +237,7 @@ public sealed class AdminHttpsCertificateService(
         return X509CertificateLoader.LoadPkcs12FromFile(
             certificatePath,
             password,
-            X509KeyStorageFlags.EphemeralKeySet,
+            X509KeyStorageFlags.MachineKeySet,
             Pkcs12LoaderLimits.Defaults);
     }
 

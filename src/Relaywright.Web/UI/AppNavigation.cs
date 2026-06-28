@@ -55,7 +55,7 @@ public static class AppNavigation
             "/Settings/Relay",
             [
                 new AppNavItem("Relay Settings", "/Settings/Relay"),
-                new AppNavItem("Web HTTPS", "/Settings/WebHttps"),
+                new AppNavItem("Web Interface", "/Settings/WebHttps"),
                 new AppNavItem("Trusted IPs", "/Settings/TrustedNetworks")
             ]),
         new AppNavSection(

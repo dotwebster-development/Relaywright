@@ -42,6 +42,8 @@ The deployment script defaults to:
 
 For test VMs, the script can generate a self-signed HTTPS certificate automatically if no certificate variable is configured.
 
+If you later change the admin web listener from `Settings -> Web Interface`, Relaywright stores the desired HTTPS/HTTP ports in `App_Data\admin-web-listener.json`. On the next deployment, the script uses that persisted listener configuration for the service URLs, Windows Firewall admin ports, and health check URL.
+
 ## GitHub Settings
 
 No bootstrap secret is required for the normal Windows test lane. If no admin exists yet, Relaywright shows the first-run setup page.

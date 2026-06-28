@@ -122,7 +122,7 @@ function Invoke-HealthCheck {
 
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($curl) {
-        $output = & $curl.Source --insecure --silent --show-error --fail --max-time 10 $Url 2>&1
+        $output = & $curl.Source --ssl-no-revoke --insecure --silent --show-error --fail --max-time 10 $Url 2>&1
         if ($LASTEXITCODE -eq 0) {
             return [pscustomobject]@{
                 StatusCode = 200
@@ -229,6 +229,47 @@ function Get-TcpPortsFromList {
     }
 
     return $ports | Sort-Object -Unique
+}
+
+function Get-AdminWebListenerSettings {
+    param([string]$Directory)
+
+    $listenerPath = Join-Path $Directory "admin-web-listener.json"
+    if (-not (Test-Path $listenerPath)) {
+        return $null
+    }
+
+    $settings = Get-Content -Path $listenerPath -Raw | ConvertFrom-Json
+    $httpsPort = [int]$settings.httpsPort
+    $httpPort = [int]$settings.httpPort
+    $enableHttp = [bool]$settings.enableHttp
+
+    if ($httpsPort -lt 1 -or $httpsPort -gt 65535) {
+        throw "Configured admin HTTPS port '$httpsPort' is not valid."
+    }
+
+    if ($enableHttp) {
+        if ($httpPort -lt 1 -or $httpPort -gt 65535) {
+            throw "Configured admin HTTP port '$httpPort' is not valid."
+        }
+
+        if ($httpPort -eq $httpsPort) {
+            throw "Configured admin HTTP and HTTPS ports must be different."
+        }
+    }
+
+    $configuredUrls = @("https://*:$httpsPort")
+    if ($enableHttp) {
+        $configuredUrls += "http://*:$httpPort"
+    }
+
+    return [pscustomobject]@{
+        HttpsPort = $httpsPort
+        EnableHttp = $enableHttp
+        HttpPort = $httpPort
+        Urls = ($configuredUrls -join ";")
+        HealthUrl = "https://127.0.0.1:$httpsPort/health"
+    }
 }
 
 function Set-RelaywrightFirewallRules {
@@ -357,6 +398,15 @@ if ([string]::IsNullOrWhiteSpace($BootstrapPassword) -and -not [string]::IsNullO
 
 if ([string]::IsNullOrWhiteSpace($DataDirectory)) {
     $DataDirectory = Join-Path $InstallRoot "App_Data"
+}
+
+$adminWebListenerSettings = Get-AdminWebListenerSettings -Directory $DataDirectory
+if ($adminWebListenerSettings) {
+    Write-Step "Using persisted admin web listener settings"
+    $Urls = $adminWebListenerSettings.Urls
+    $HealthUrl = $adminWebListenerSettings.HealthUrl
+    Write-Host "Admin URLs: $Urls"
+    Write-Host "Health URL: $HealthUrl"
 }
 
 $resolvedPackagePath = Resolve-Path -Path $PackagePath
