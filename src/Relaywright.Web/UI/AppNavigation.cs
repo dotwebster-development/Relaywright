@@ -55,6 +55,7 @@ public static class AppNavigation
             "/Settings/Relay",
             [
                 new AppNavItem("Relay Settings", "/Settings/Relay"),
+                new AppNavItem("Web HTTPS", "/Settings/WebHttps"),
                 new AppNavItem("Trusted IPs", "/Settings/TrustedNetworks")
             ]),
         new AppNavSection(
@@ -95,6 +96,11 @@ public static class AppNavigation
         if (currentPath.StartsWith("/Settings/TrustedNetworks", StringComparison.OrdinalIgnoreCase))
         {
             return (SettingsKey, "/Settings/TrustedNetworks");
+        }
+
+        if (currentPath.StartsWith("/Settings/WebHttps", StringComparison.OrdinalIgnoreCase))
+        {
+            return (SettingsKey, "/Settings/WebHttps");
         }
 
         if (currentPath.StartsWith("/Settings", StringComparison.OrdinalIgnoreCase))
