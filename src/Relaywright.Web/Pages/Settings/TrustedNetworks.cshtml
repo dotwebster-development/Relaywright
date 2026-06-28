@@ -23,18 +23,74 @@
         <form method="post" asp-page-handler="Save" class="form-grid">
             <div asp-validation-summary="ModelOnly" class="status error"></div>
             <input asp-for="Input.Id" type="hidden" />
-            <label>
-                <span>CIDR / IP</span>
-                <input asp-for="Input.Cidr" />
-            </label>
-            <label>
-                <span>Description</span>
-                <input asp-for="Input.Description" />
-            </label>
-            <label class="checkbox">
-                <input asp-for="Input.IsEnabled" type="checkbox" />
-                <span>Enabled</span>
-            </label>
+
+            <div class="settings-block-title">Identity</div>
+            <div class="compact-grid">
+                <label>
+                    <span>CIDR / IP</span>
+                    <input asp-for="Input.Cidr" />
+                </label>
+                <label>
+                    <span>Description</span>
+                    <input asp-for="Input.Description" />
+                </label>
+                <label>
+                    <span>Owner</span>
+                    <input asp-for="Input.Owner" />
+                </label>
+                <label>
+                    <span>Location</span>
+                    <input asp-for="Input.Location" />
+                </label>
+                <div class="toggle-field">
+                    <label class="toggle-control">
+                        <input asp-for="Input.IsEnabled" type="checkbox" />
+                        <span>Enabled</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-block-title">Limits</div>
+            <div class="compact-grid">
+                <label>
+                    <span>Max Size (Bytes)</span>
+                    <input asp-for="Input.MaxMessageSizeBytes" type="number" min="1" />
+                </label>
+                <label>
+                    <span>Max Recipients</span>
+                    <input asp-for="Input.MaxRecipientsPerMessage" type="number" min="1" />
+                </label>
+                <label>
+                    <span>Rate Limit (/Hour)</span>
+                    <input asp-for="Input.RateLimitMessagesPerHour" type="number" min="1" />
+                </label>
+            </div>
+
+            <div class="settings-block-title">Senders</div>
+            <div class="compact-grid compact-grid-nested">
+                <label>
+                    <span>Allowed Senders</span>
+                    <textarea asp-for="Input.AllowedSenderAddresses" rows="6" placeholder="scanner&#64;example.com&#10;&#64;example.com"></textarea>
+                </label>
+                <label>
+                    <span>Blocked Senders</span>
+                    <textarea asp-for="Input.BlockedSenderAddresses" rows="6" placeholder="blocked&#64;example.com&#10;&#64;old-domain.test"></textarea>
+                </label>
+            </div>
+
+            <div class="settings-block-title">Recipients</div>
+            <div class="compact-grid compact-grid-nested">
+                <label>
+                    <span>Allowed Domains</span>
+                    <textarea asp-for="Input.AllowedRecipientDomains" rows="6" placeholder="example.com&#10;*.partner.test"></textarea>
+                </label>
+                <label>
+                    <span>Blocked Domains</span>
+                    <textarea asp-for="Input.BlockedRecipientDomains" rows="6" placeholder="external.test&#10;*.blocked.test"></textarea>
+                </label>
+            </div>
+
+            <p class="field-hint">Device-specific rules are evaluated before mail is accepted. Leave fields blank to inherit the global submission policy.</p>
             <div class="actions">
                 <button type="submit">Save</button>
                 <a asp-page="/Settings/TrustedNetworks">Clear</a>
@@ -50,6 +106,9 @@
                     <tr>
                         <th>CIDR</th>
                         <th>Description</th>
+                        <th>Profile</th>
+                        <th>Limits</th>
+                        <th>Rules</th>
                         <th>Enabled</th>
                         <th></th>
                     </tr>
@@ -60,6 +119,9 @@
                     <tr>
                         <td>@item.Cidr</td>
                         <td>@item.Description</td>
+                        <td>@TrustedNetworksModel.FormatProfile(item)</td>
+                        <td>@TrustedNetworksModel.FormatLimits(item)</td>
+                        <td>@TrustedNetworksModel.FormatPolicySummary(item)</td>
                         <td><span class="status-badge @(item.IsEnabled ? "status-enabled" : "status-disabled")">@(item.IsEnabled ? "Enabled" : "Disabled")</span></td>
                         <td class="row-actions">
                             <a asp-page="/Settings/TrustedNetworks" asp-route-editId="@item.Id">Edit</a>

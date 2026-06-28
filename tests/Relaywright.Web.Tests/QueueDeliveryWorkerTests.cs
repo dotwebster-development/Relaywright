@@ -6,6 +6,7 @@ using Relaywright.Web.Services.Delivery;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Tests.Support;
 using Xunit;
 
 namespace Relaywright.Web.Tests;
@@ -59,6 +60,31 @@ public sealed class QueueDeliveryWorkerTests
             && x.Message.Contains("accepted upstream", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task PausedDeliveryWorkerDoesNotClaimNewQueueWork()
+    {
+        using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var queueService = new ClaimCountingQueueService();
+        var runtimeStatus = new StaticRuntimeStatusService { IsPaused = true };
+        var queueSignal = new CancelAfterWaitQueueSignal(cancellationSource);
+        var worker = new QueueDeliveryWorker(
+            new TestRelayConfigurationService(),
+            queueService,
+            new TestUpstreamDeliveryService(),
+            queueSignal,
+            new TestOperationalEventService(),
+            runtimeStatus,
+            NullLogger<QueueDeliveryWorker>.Instance);
+
+        await worker.StartAsync(cancellationSource.Token);
+        await Task.Delay(100, CancellationToken.None);
+        cancellationSource.Cancel();
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(0, queueService.TryClaimCallCount);
+        Assert.True(queueSignal.WaitCallCount > 0);
+    }
+
     private static QueueDeliveryWorker CreateWorker(
         IMessageQueueService queueService,
         IUpstreamDeliveryService upstreamDeliveryService,
@@ -70,6 +96,7 @@ public sealed class QueueDeliveryWorkerTests
             upstreamDeliveryService,
             new TestQueueSignal(),
             eventService,
+            new StaticRuntimeStatusService(),
             NullLogger<QueueDeliveryWorker>.Instance);
     }
 
@@ -149,7 +176,17 @@ public sealed class QueueDeliveryWorkerTests
             throw new NotSupportedException();
         }
 
+        public Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }
@@ -218,6 +255,49 @@ public sealed class QueueDeliveryWorkerTests
         public Task WaitAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
+        }
+    }
+
+    private sealed class ClaimCountingQueueService : IMessageQueueService
+    {
+        public int TryClaimCallCount { get; private set; }
+
+        public Task EnqueueAsync(NewQueuedMessageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<DeliveryWorkItem?> TryClaimNextAsync(CancellationToken cancellationToken)
+        {
+            TryClaimCallCount += 1;
+            return Task.FromResult<DeliveryWorkItem?>(null);
+        }
+
+        public Task MarkDeliveredAsync(DeliveryWorkItem workItem, DeliveryResult result, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task MarkFailedAsync(DeliveryWorkItem workItem, DeliveryResult result, RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueActionResult> RetryNowAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class CancelAfterWaitQueueSignal(CancellationTokenSource cancellationTokenSource) : IQueueSignal
+    {
+        public int WaitCallCount { get; private set; }
+
+        public void Pulse()
+        {
+        }
+
+        public Task WaitAsync(TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            WaitCallCount += 1;
+            cancellationTokenSource.Cancel();
+            return Task.CompletedTask;
         }
     }
 }

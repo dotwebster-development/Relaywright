@@ -17,6 +17,8 @@ public sealed class AppPaths
         DatabasePath = Path.Combine(DataDirectory, options.DatabaseFileName);
         SpoolRootDirectory = Path.Combine(DataDirectory, options.SpoolDirectoryName);
         KeyRingDirectory = Path.Combine(DataDirectory, options.KeyDirectoryName);
+        BackupDirectory = Path.Combine(DataDirectory, options.BackupDirectoryName);
+        RestorePendingDirectory = Path.Combine(DataDirectory, options.RestorePendingDirectoryName);
         CertificateDirectory = Path.Combine(DataDirectory, options.CertificateDirectoryName);
         AdminHttpsCertificateConfigurationPath = Path.Combine(DataDirectory, options.AdminHttpsCertificateFileName);
         AdminWebListenerConfigurationPath = Path.Combine(DataDirectory, options.AdminWebListenerFileName);
@@ -32,6 +34,10 @@ public sealed class AppPaths
 
     public string KeyRingDirectory { get; }
 
+    public string BackupDirectory { get; }
+
+    public string RestorePendingDirectory { get; }
+
     public string CertificateDirectory { get; }
 
     public string AdminHttpsCertificateConfigurationPath { get; }
@@ -43,6 +49,7 @@ public sealed class AppPaths
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(SpoolRootDirectory);
         Directory.CreateDirectory(KeyRingDirectory);
+        Directory.CreateDirectory(BackupDirectory);
         Directory.CreateDirectory(CertificateDirectory);
     }
 

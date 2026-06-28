@@ -71,4 +71,57 @@ public sealed class TrustedNetworksModel(
         logger.LogInformation("Trusted network delete requested from admin page. Id={TrustedNetworkId}; User={UserName}", id, User.Identity?.Name);
         return RedirectToPage();
     }
+
+    public static string FormatProfile(TrustedNetwork network)
+    {
+        var parts = new[] { network.Owner, network.Location }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+
+        return parts.Length == 0 ? "Unassigned" : string.Join(" / ", parts);
+    }
+
+    public static string FormatLimits(TrustedNetwork network)
+    {
+        var parts = new List<string>();
+        if (network.MaxMessageSizeBytes is > 0)
+        {
+            parts.Add($"size {network.MaxMessageSizeBytes.Value:N0} B");
+        }
+
+        if (network.MaxRecipientsPerMessage is > 0)
+        {
+            parts.Add($"{network.MaxRecipientsPerMessage.Value:N0} recipients");
+        }
+
+        if (network.RateLimitMessagesPerHour is > 0)
+        {
+            parts.Add($"{network.RateLimitMessagesPerHour.Value:N0}/hour");
+        }
+
+        return parts.Count == 0 ? "Global defaults" : string.Join("; ", parts);
+    }
+
+    public static string FormatPolicySummary(TrustedNetwork network)
+    {
+        var parts = new List<string>();
+        AddCount(parts, "allowed senders", network.AllowedSenderAddresses);
+        AddCount(parts, "blocked senders", network.BlockedSenderAddresses);
+        AddCount(parts, "allowed domains", network.AllowedRecipientDomains);
+        AddCount(parts, "blocked domains", network.BlockedRecipientDomains);
+
+        return parts.Count == 0 ? "No device-specific lists" : string.Join("; ", parts);
+    }
+
+    private static void AddCount(List<string> parts, string label, string? value)
+    {
+        var count = value?
+            .Split([',', ';', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Length ?? 0;
+
+        if (count > 0)
+        {
+            parts.Add($"{count:N0} {label}");
+        }
+    }
 }

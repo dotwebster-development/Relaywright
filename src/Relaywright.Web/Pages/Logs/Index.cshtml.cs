@@ -44,7 +44,8 @@ public sealed class IndexModel(
         new LogSection(nameof(OperationalEventCategory.SmtpSession), "SMTP Session"),
         new LogSection(nameof(OperationalEventCategory.Queue), "Queue"),
         new LogSection(nameof(OperationalEventCategory.Delivery), "Delivery"),
-        new LogSection(nameof(OperationalEventCategory.Diagnostics), "Diagnostics")
+        new LogSection(nameof(OperationalEventCategory.Diagnostics), "Diagnostics"),
+        new LogSection(nameof(OperationalEventCategory.Alert), "Alerts")
     ];
 
     public IReadOnlyList<OperationalEvent> Events { get; private set; } = Array.Empty<OperationalEvent>();

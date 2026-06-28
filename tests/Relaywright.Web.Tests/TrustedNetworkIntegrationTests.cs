@@ -35,14 +35,7 @@ public sealed class TrustedNetworkIntegrationTests
         }
 
         var events = new RecordingOperationalEventService();
-        var service = new TrustedNetworkService(
-            database.DbContextFactory,
-            events,
-            NullLogger<TrustedNetworkService>.Instance);
-        var filter = new TrustedNetworkMailboxFilter(
-            service,
-            events,
-            NullLogger<TrustedNetworkMailboxFilter>.Instance);
+        var filter = CreateFilter(database, events);
 
         Assert.True(await filter.CanAcceptFromAsync(
             new FakeSessionContext(IPAddress.Parse("10.10.2.3")),
@@ -61,5 +54,161 @@ public sealed class TrustedNetworkIntegrationTests
             CancellationToken.None));
 
         Assert.Equal(2, events.Events.Count(x => x.Category == OperationalEventCategory.Security));
+    }
+
+    [Fact]
+    public async Task MailboxFilterRejectsSenderOutsideTrustedDeviceAllowList()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.TrustedNetworks.Add(new TrustedNetwork
+            {
+                Cidr = "10.20.0.0/16",
+                Description = "profiled scanner",
+                AllowedSenderAddresses = "scanner@example.test",
+                IsEnabled = true
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var events = new RecordingOperationalEventService();
+        var filter = CreateFilter(database, events);
+        var session = new FakeSessionContext(IPAddress.Parse("10.20.1.2"));
+
+        Assert.False(await filter.CanAcceptFromAsync(
+            session,
+            new FakeMailbox("other@example.test"),
+            100,
+            CancellationToken.None));
+        Assert.True(await filter.CanAcceptFromAsync(
+            new FakeSessionContext(IPAddress.Parse("10.20.1.2")),
+            new FakeMailbox("scanner@example.test"),
+            100,
+            CancellationToken.None));
+
+        Assert.Contains(events.Events, x => x.Message == "Sender is not allowed by submission policy.");
+    }
+
+    [Fact]
+    public async Task MailboxFilterRejectsRecipientBlockedByGlobalPolicy()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.TrustedNetworks.Add(new TrustedNetwork
+            {
+                Cidr = "10.30.0.0/16",
+                Description = "trusted subnet",
+                IsEnabled = true
+            });
+            dbContext.SubmissionPolicies.Add(new SubmissionPolicy
+            {
+                BlockedRecipientDomains = "blocked.test",
+                IsEnabled = true
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var events = new RecordingOperationalEventService();
+        var filter = CreateFilter(database, events);
+        var session = new FakeSessionContext(IPAddress.Parse("10.30.1.2"));
+
+        Assert.True(await filter.CanAcceptFromAsync(
+            session,
+            new FakeMailbox("sender@example.test"),
+            100,
+            CancellationToken.None));
+        Assert.False(await filter.CanDeliverToAsync(
+            session,
+            new FakeMailbox("recipient@blocked.test"),
+            new FakeMailbox("sender@example.test"),
+            CancellationToken.None));
+
+        Assert.Contains(events.Events, x => x.Message == "Recipient domain is blocked by submission policy.");
+    }
+
+    [Fact]
+    public async Task MailboxFilterEnforcesTrustedDeviceRecipientLimitAcrossAcceptedRecipients()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.TrustedNetworks.Add(new TrustedNetwork
+            {
+                Cidr = "10.40.0.0/16",
+                Description = "limited profile",
+                MaxRecipientsPerMessage = 2,
+                IsEnabled = true
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var events = new RecordingOperationalEventService();
+        var filter = CreateFilter(database, events);
+        var session = new FakeSessionContext(IPAddress.Parse("10.40.1.2"));
+        var sender = new FakeMailbox("sender@example.test");
+
+        Assert.True(await filter.CanAcceptFromAsync(session, sender, 100, CancellationToken.None));
+        Assert.True(await filter.CanDeliverToAsync(session, new FakeMailbox("first@example.test"), sender, CancellationToken.None));
+        Assert.True(await filter.CanDeliverToAsync(session, new FakeMailbox("second@example.test"), sender, CancellationToken.None));
+        Assert.False(await filter.CanDeliverToAsync(session, new FakeMailbox("third@example.test"), sender, CancellationToken.None));
+
+        Assert.Contains(events.Events, x => x.Message == "Message exceeds the allowed recipient limit of 2.");
+    }
+
+    [Fact]
+    public async Task MailboxFilterEnforcesTrustedDeviceRateLimit()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.TrustedNetworks.Add(new TrustedNetwork
+            {
+                Cidr = "10.50.0.0/16",
+                Description = "rate limited profile",
+                RateLimitMessagesPerHour = 1,
+                IsEnabled = true
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var events = new RecordingOperationalEventService();
+        var filter = CreateFilter(database, events);
+        var remoteAddress = IPAddress.Parse("10.50.1.2");
+
+        Assert.True(await filter.CanAcceptFromAsync(
+            new FakeSessionContext(remoteAddress),
+            new FakeMailbox("sender@example.test"),
+            100,
+            CancellationToken.None));
+        Assert.False(await filter.CanAcceptFromAsync(
+            new FakeSessionContext(remoteAddress),
+            new FakeMailbox("sender@example.test"),
+            100,
+            CancellationToken.None));
+
+        Assert.Contains(events.Events, x => x.Message == "Device profile rate limit exceeded (1 message(s) per hour).");
+    }
+
+    private static TrustedNetworkMailboxFilter CreateFilter(
+        SqliteTestStore database,
+        RecordingOperationalEventService events)
+    {
+        var trustedNetworkService = new TrustedNetworkService(
+            database.DbContextFactory,
+            events,
+            NullLogger<TrustedNetworkService>.Instance);
+        var policyService = new TrustedDevicePolicyService(
+            database.DbContextFactory,
+            events,
+            NullLogger<TrustedDevicePolicyService>.Instance);
+
+        return new TrustedNetworkMailboxFilter(
+            trustedNetworkService,
+            policyService,
+            new TrustedDeviceRateLimiter(),
+            events,
+            NullLogger<TrustedNetworkMailboxFilter>.Instance);
     }
 }

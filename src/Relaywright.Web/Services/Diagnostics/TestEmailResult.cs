@@ -7,4 +7,6 @@ public sealed class TestEmailResult
     public string Message { get; init; } = string.Empty;
 
     public Guid SessionId { get; init; }
+
+    public Guid? DiagnosticRunId { get; init; }
 }

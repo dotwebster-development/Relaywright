@@ -56,16 +56,20 @@ public static class AppNavigation
             [
                 new AppNavItem("Relay Settings", "/Settings/Relay"),
                 new AppNavItem("Web Interface", "/Settings/WebHttps"),
+                new AppNavItem("Submission Policy", "/Settings/SubmissionPolicy"),
                 new AppNavItem("Trusted IPs", "/Settings/TrustedNetworks")
             ]),
         new AppNavSection(
             OperationsKey,
             "Operations",
             "Queue and event tracking",
-            "/Queue/Index",
+            "/Operations/Status",
             [
+                new AppNavItem("Status", "/Operations/Status"),
                 new AppNavItem("Queue", "/Queue/Index"),
-                new AppNavItem("Logs", "/Logs/Index")
+                new AppNavItem("Logs", "/Logs/Index"),
+                new AppNavItem("Alerts", "/Operations/Alerts"),
+                new AppNavItem("Backups", "/Operations/Backups")
             ]),
         new AppNavSection(
             DiagnosticsKey,
@@ -98,6 +102,11 @@ public static class AppNavigation
             return (SettingsKey, "/Settings/TrustedNetworks");
         }
 
+        if (currentPath.StartsWith("/Settings/SubmissionPolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            return (SettingsKey, "/Settings/SubmissionPolicy");
+        }
+
         if (currentPath.StartsWith("/Settings/WebHttps", StringComparison.OrdinalIgnoreCase))
         {
             return (SettingsKey, "/Settings/WebHttps");
@@ -106,6 +115,21 @@ public static class AppNavigation
         if (currentPath.StartsWith("/Settings", StringComparison.OrdinalIgnoreCase))
         {
             return (SettingsKey, "/Settings/Relay");
+        }
+
+        if (currentPath.StartsWith("/Operations/Alerts", StringComparison.OrdinalIgnoreCase))
+        {
+            return (OperationsKey, "/Operations/Alerts");
+        }
+
+        if (currentPath.StartsWith("/Operations/Backups", StringComparison.OrdinalIgnoreCase))
+        {
+            return (OperationsKey, "/Operations/Backups");
+        }
+
+        if (currentPath.StartsWith("/Operations/Status", StringComparison.OrdinalIgnoreCase))
+        {
+            return (OperationsKey, "/Operations/Status");
         }
 
         if (currentPath.StartsWith("/Logs", StringComparison.OrdinalIgnoreCase))

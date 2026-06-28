@@ -1,0 +1,96 @@
+@page
+@model Relaywright.Web.Pages.Operations.StatusModel
+@{
+    ViewData["Title"] = "Runtime Status";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Operations</p>
+            <h1>Runtime Status</h1>
+            <p class="page-summary">Review listener and worker state, and pause or resume outbound delivery without stopping SMTP intake.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p class="status">@Model.StatusMessage</p>
+    }
+
+    <section class="panel">
+        <h2>Delivery Control</h2>
+        <dl class="kv">
+            <dt>Outbound Delivery</dt>
+            <dd><span class="status-badge @(Model.Status.IsDeliveryPaused ? "status-disabled" : "status-enabled")">@(Model.Status.IsDeliveryPaused ? "Paused" : "Running")</span></dd>
+            <dt>Paused By</dt>
+            <dd>@Model.Status.DeliveryPausedBy</dd>
+            <dt>Paused At</dt>
+            <dd>@Model.Status.DeliveryPausedUtc?.ToLocalTime()</dd>
+            <dt>Reason</dt>
+            <dd>@Model.Status.DeliveryPauseReason</dd>
+        </dl>
+        <div class="actions">
+            @if (Model.Status.IsDeliveryPaused)
+            {
+                <form method="post" asp-page-handler="Resume" class="inline-form">
+                    <button type="submit">Resume Delivery</button>
+                </form>
+            }
+            else
+            {
+                <form method="post" asp-page-handler="Pause" class="filter-row">
+                    <label>
+                        <span>Reason</span>
+                        <input asp-for="PauseReason" placeholder="Maintenance, upstream outage, operator hold" />
+                    </label>
+                    <button type="submit">Pause Delivery</button>
+                </form>
+            }
+        </div>
+    </section>
+
+    <div class="surface-grid two-up">
+        <section class="panel">
+            <h2>SMTP Listener</h2>
+            <dl class="kv">
+                <dt>Status</dt>
+                <dd><span class="status-badge status-@Model.Status.SmtpListener.Status.ToLowerInvariant()">@Model.Status.SmtpListener.Status</span></dd>
+                <dt>Detail</dt>
+                <dd>@Model.Status.SmtpListener.Detail</dd>
+                <dt>Heartbeat</dt>
+                <dd>@Model.Status.SmtpListener.LastHeartbeatUtc?.ToLocalTime()</dd>
+                <dt>Last Error</dt>
+                <dd>@Model.Status.SmtpListener.LastError</dd>
+            </dl>
+        </section>
+
+        <section class="panel">
+            <h2>Delivery Worker</h2>
+            <dl class="kv">
+                <dt>Status</dt>
+                <dd><span class="status-badge @(Model.Status.DeliveryWorker.Status == "Faulted" ? "status-failed" : Model.Status.DeliveryWorker.Status == "Paused" ? "status-disabled" : "status-enabled")">@Model.Status.DeliveryWorker.Status</span></dd>
+                <dt>Active Deliveries</dt>
+                <dd>@Model.Status.ActiveDeliveries</dd>
+                <dt>Heartbeat</dt>
+                <dd>@Model.Status.DeliveryWorker.LastHeartbeatUtc?.ToLocalTime()</dd>
+                <dt>Last Error</dt>
+                <dd>@Model.Status.DeliveryWorker.LastError</dd>
+            </dl>
+        </section>
+    </div>
+
+    <section class="panel">
+        <h2>Maintenance Worker</h2>
+        <dl class="kv">
+            <dt>Status</dt>
+            <dd><span class="status-badge @(Model.Status.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@Model.Status.MaintenanceWorker.Status</span></dd>
+            <dt>Last Cleanup</dt>
+            <dd>@Model.Status.LastCleanupUtc?.ToLocalTime()</dd>
+            <dt>Records Removed</dt>
+            <dd>@Model.Status.LastCleanupRemovedRecords</dd>
+            <dt>Last Error</dt>
+            <dd>@Model.Status.MaintenanceWorker.LastError</dd>
+        </dl>
+    </section>
+</section>

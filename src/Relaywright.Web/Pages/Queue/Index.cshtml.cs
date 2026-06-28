@@ -4,11 +4,13 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Queueing;
 
 namespace Relaywright.Web.Pages.Queue;
 
 public sealed class IndexModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    IMessageQueueService messageQueueService,
     ILogger<IndexModel> logger) : PageModel
 {
     private const int PageSize = 50;
@@ -20,6 +22,21 @@ public sealed class IndexModel(
 
     [BindProperty(SupportsGet = true)]
     public int PageNumber { get; set; } = 1;
+
+    [BindProperty]
+    public List<Guid> SelectedMessageIds { get; set; } = [];
+
+    [BindProperty]
+    public string? ReturnStatus { get; set; }
+
+    [BindProperty]
+    public string? ReturnSearch { get; set; }
+
+    [BindProperty]
+    public int ReturnPageNumber { get; set; } = 1;
+
+    [TempData]
+    public string? StatusMessage { get; set; }
 
     public int TotalCount { get; private set; }
 
@@ -105,6 +122,45 @@ public sealed class IndexModel(
 
     public bool IsStatusActive(string status) =>
         string.Equals(SelectedStatus, status, StringComparison.OrdinalIgnoreCase);
+
+    public async Task<IActionResult> OnPostBulkRetryAsync(CancellationToken cancellationToken)
+    {
+        var result = await messageQueueService.RetryNowAsync(SelectedMessageIds, cancellationToken);
+        StatusMessage = result.Message;
+        logger.LogInformation(
+            "Bulk queue retry requested. Requested={Requested}; Succeeded={Succeeded}; Rejected={Rejected}; Missing={Missing}; User={UserName}",
+            result.Requested,
+            result.Succeeded,
+            result.Rejected,
+            result.Missing,
+            User.Identity?.Name);
+        return RedirectToQueue();
+    }
+
+    public async Task<IActionResult> OnPostBulkPurgeAsync(CancellationToken cancellationToken)
+    {
+        var result = await messageQueueService.PurgeAsync(SelectedMessageIds, cancellationToken);
+        StatusMessage = result.Message;
+        logger.LogInformation(
+            "Bulk queue purge requested. Requested={Requested}; Succeeded={Succeeded}; Rejected={Rejected}; Missing={Missing}; SpoolDeleteFailures={SpoolDeleteFailures}; User={UserName}",
+            result.Requested,
+            result.Succeeded,
+            result.Rejected,
+            result.Missing,
+            result.SpoolDeleteFailures,
+            User.Identity?.Name);
+        return RedirectToQueue();
+    }
+
+    private IActionResult RedirectToQueue()
+    {
+        return RedirectToPage(new
+        {
+            status = string.IsNullOrWhiteSpace(ReturnStatus) ? "active" : ReturnStatus,
+            search = ReturnSearch,
+            pageNumber = Math.Max(1, ReturnPageNumber)
+        });
+    }
 
     private static (string Sql, object[] Parameters) BuildPagedMessagesSql(
         string selectedStatus,

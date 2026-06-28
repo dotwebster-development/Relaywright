@@ -4,15 +4,19 @@ using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Services.Runtime;
 
 namespace Relaywright.Web.Pages;
 
 public sealed class IndexModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IRelayConfigurationService relayConfigurationService,
+    IRuntimeStatusService runtimeStatusService,
     ILogger<IndexModel> logger) : PageModel
 {
     public RelayConfigurationSnapshot Configuration { get; private set; } = new();
+
+    public RuntimeStatusSnapshot RuntimeStatus { get; private set; } = new();
 
     public int PendingCount { get; private set; }
 
@@ -27,6 +31,7 @@ public sealed class IndexModel(
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
+        RuntimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var todayUtc = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);

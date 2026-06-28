@@ -1,0 +1,107 @@
+@page
+@model Relaywright.Web.Pages.Operations.BackupsModel
+@{
+    ViewData["Title"] = "Backups";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Operations</p>
+            <h1>Backups</h1>
+            <p class="page-summary">Create and validate backup bundles for the database, spool, Data Protection keys, certificates, and listener configuration.</p>
+        </div>
+        <div class="page-actions">
+            <form method="post" asp-page-handler="Create" class="inline-form">
+                <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional encryption password" />
+                <button type="submit">Create Backup</button>
+            </form>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p class="status">@Model.StatusMessage</p>
+    }
+
+    <section class="settings-block">
+        <div class="settings-block-title">Schedule</div>
+        <form method="post" asp-page-handler="SaveSchedule" class="compact-grid">
+            <div class="toggle-field">
+                <label class="toggle-control">
+                    <input asp-for="Schedule.IsEnabled" type="checkbox" />
+                    <span>Scheduled Backups</span>
+                </label>
+            </div>
+            <label>
+                <span>Interval (Hours)</span>
+                <input asp-for="Schedule.IntervalHours" type="number" />
+            </label>
+            <label>
+                <span>Retention Count</span>
+                <input asp-for="Schedule.RetentionCount" type="number" />
+            </label>
+            <div class="actions compact-actions">
+                <button type="submit">Save Schedule</button>
+            </div>
+        </form>
+        <p class="field-hint">Manual backups can be encrypted with a one-time password. The password is not stored, so scheduled backups remain unencrypted.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Backup History</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Started</th>
+                        <th>Status</th>
+                        <th>File</th>
+                        <th>Protection</th>
+                        <th>Size</th>
+                        <th>Validation</th>
+                        <th>Message</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var run in Model.Runs)
+                {
+                    <tr>
+                        <td>@run.StartedUtc.ToLocalTime()</td>
+                        <td><span class="status-badge status-@(run.Status == BackupRunStatus.Succeeded ? "delivered" : run.Status == BackupRunStatus.Failed ? "failed" : run.Status == BackupRunStatus.Deleted ? "disabled" : "inprogress")">@run.Status</span></td>
+                        <td>@run.FileName</td>
+                        <td><span class="status-badge @(run.IsEncrypted ? "status-enabled" : "status-disabled")">@(run.IsEncrypted ? "Encrypted" : "Plain")</span></td>
+                        <td>@(run.FileSizeBytes is null ? null : $"{run.FileSizeBytes / 1024} KB")</td>
+                        <td>
+                            @if (run.LastValidationSucceeded is not null)
+                            {
+                                <span class="status-badge @(run.LastValidationSucceeded.Value ? "status-delivered" : "status-failed")">@(run.LastValidationSucceeded.Value ? "Valid" : "Invalid")</span>
+                            }
+                        </td>
+                        <td>@(run.LastValidationMessage ?? run.Message)</td>
+                        <td>
+                            <div class="row-actions">
+                                @if (run.Status == BackupRunStatus.Succeeded)
+                                {
+                                    <a asp-page-handler="Download" asp-route-id="@run.Id">Download</a>
+                                    <form method="post" asp-page-handler="Validate" asp-route-id="@run.Id" class="inline-form">
+                                        @if (run.IsEncrypted)
+                                        {
+                                            <input name="ValidationPassword" type="password" autocomplete="new-password" placeholder="Password" />
+                                        }
+                                        <button type="submit" class="secondary-button">Validate</button>
+                                    </form>
+                                    <form method="post" asp-page-handler="Delete" asp-route-id="@run.Id" class="inline-form" onsubmit="return confirm('Delete this backup file?');">
+                                        <button type="submit" class="secondary-button">Delete</button>
+                                    </form>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

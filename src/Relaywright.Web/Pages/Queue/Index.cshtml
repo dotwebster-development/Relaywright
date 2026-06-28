@@ -30,10 +30,25 @@
         <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus">Clear</a>
     </form>
 
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p class="status">@Model.StatusMessage</p>
+    }
+
+    <form method="post" class="stack">
+        <input type="hidden" name="ReturnStatus" value="@Model.SelectedStatus" />
+        <input type="hidden" name="ReturnSearch" value="@Model.Search" />
+        <input type="hidden" name="ReturnPageNumber" value="@Model.PageNumber" />
+        <div class="actions compact-actions">
+            <button type="submit" asp-page-handler="BulkRetry" class="secondary-button">Retry Selected</button>
+            <button type="submit" asp-page-handler="BulkPurge" class="secondary-button" onclick="return confirm('Purge selected queued messages and remove their spool files where allowed?');">Purge Selected</button>
+        </div>
+
     <div class="table-wrap">
         <table class="table">
             <thead>
                 <tr>
+                    <th>Select</th>
                     <th>Accepted</th>
                     <th>Status</th>
                     <th>From</th>
@@ -47,6 +62,7 @@
             @foreach (var item in Model.Messages)
             {
                 <tr>
+                    <td><input type="checkbox" name="SelectedMessageIds" value="@item.Id" /></td>
                     <td>@item.AcceptedUtc.ToLocalTime()</td>
                     <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@item.Status</span></td>
                     <td>@item.EnvelopeFrom</td>
@@ -59,6 +75,7 @@
             </tbody>
         </table>
     </div>
+    </form>
 
     @if (Model.TotalCount > 0)
     {

@@ -6,11 +6,14 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Identity;
 using Relaywright.Web.Infrastructure;
 using Relaywright.Web.Options;
+using Relaywright.Web.Services.Alerts;
+using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.Delivery;
 using Relaywright.Web.Services.Diagnostics;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
 using Relaywright.Web.Services.Smtp;
 
@@ -25,6 +28,7 @@ builder.Services.Configure<BootstrapAdminOptions>(builder.Configuration.GetSecti
 var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var appPaths = new AppPaths(builder.Environment.ContentRootPath, storageOptions);
 appPaths.EnsureCreated();
+BackupRestoreService.ApplyPendingRestore(appPaths);
 
 var startupDataProtectionProvider = DataProtectionProvider.Create(
     new DirectoryInfo(appPaths.KeyRingDirectory),
@@ -99,10 +103,18 @@ builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>()
 builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
 builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
+builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
 builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
 builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
+builder.Services.AddSingleton<IBackupCoordinator, BackupCoordinator>();
+builder.Services.AddSingleton<IBackupService, BackupService>();
+builder.Services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
+builder.Services.AddSingleton<IAlertEmailNotifier, AlertEmailNotifier>();
+builder.Services.AddSingleton<IAlertService, AlertService>();
 builder.Services.AddSingleton<IRelayConfigurationService, RelayConfigurationService>();
 builder.Services.AddSingleton<ITrustedNetworkService, TrustedNetworkService>();
+builder.Services.AddSingleton<ITrustedDevicePolicyService, TrustedDevicePolicyService>();
+builder.Services.AddSingleton<ITrustedDeviceRateLimiter, TrustedDeviceRateLimiter>();
 builder.Services.AddSingleton<IMessageSpoolService, MessageSpoolService>();
 builder.Services.AddSingleton<IMessageMetadataService, MessageMetadataService>();
 builder.Services.AddSingleton<RetryDelayCalculator>();
@@ -111,6 +123,7 @@ builder.Services.AddSingleton<DeliveryFailureClassifier>();
 builder.Services.AddSingleton<MicrosoftOAuthTokenProvider>();
 builder.Services.AddSingleton<IUpstreamAuthenticationService, UpstreamAuthenticationService>();
 builder.Services.AddSingleton<IUpstreamDeliveryService, UpstreamDeliveryService>();
+builder.Services.AddSingleton<IDiagnosticRunRecorder, DiagnosticRunRecorder>();
 builder.Services.AddSingleton<IUpstreamConnectivityTester, UpstreamConnectivityTester>();
 builder.Services.AddSingleton<IUpstreamTestEmailSender, UpstreamTestEmailSender>();
 builder.Services.AddSingleton<SmtpOptionsFactory>();
@@ -122,6 +135,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddHostedService<SmtpRelayHostedService>();
 builder.Services.AddHostedService<QueueDeliveryWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
+builder.Services.AddHostedService<AlertWorker>();
+builder.Services.AddHostedService<BackupWorker>();
 
 var app = builder.Build();
 

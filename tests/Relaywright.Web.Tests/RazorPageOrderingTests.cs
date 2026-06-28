@@ -6,7 +6,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Tests.Support;
 using Xunit;
 
 using DashboardIndexModel = Relaywright.Web.Pages.IndexModel;
@@ -168,6 +170,7 @@ public sealed class RazorPageOrderingTests
         {
             return AttachPageContext(new QueueIndexModel(
                 _dbContextFactory,
+                new TestQueueService(),
                 NullLogger<QueueIndexModel>.Instance));
         }
 
@@ -183,6 +186,7 @@ public sealed class RazorPageOrderingTests
             return AttachPageContext(new DashboardIndexModel(
                 _dbContextFactory,
                 new TestRelayConfigurationService(),
+                new StaticRuntimeStatusService(),
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
@@ -228,5 +232,26 @@ public sealed class RazorPageOrderingTests
         {
             throw new NotSupportedException();
         }
+    }
+
+    private sealed class TestQueueService : IMessageQueueService
+    {
+        public Task EnqueueAsync(NewQueuedMessageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<DeliveryWorkItem?> TryClaimNextAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task MarkDeliveredAsync(DeliveryWorkItem workItem, DeliveryResult result, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task MarkFailedAsync(DeliveryWorkItem workItem, DeliveryResult result, RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueActionResult> RetryNowAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

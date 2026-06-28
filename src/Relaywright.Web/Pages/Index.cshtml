@@ -36,6 +36,32 @@
         </article>
     </div>
 
+    <section class="panel">
+        <h2>Runtime</h2>
+        <div class="stats-grid">
+            <article class="stat">
+                <h2>SMTP Listener</h2>
+                <strong class="stat-state">@Model.RuntimeStatus.SmtpListener.Status</strong>
+                <p>@Model.RuntimeStatus.SmtpListener.Detail</p>
+            </article>
+            <article class="stat">
+                <h2>Delivery Worker</h2>
+                <strong class="stat-state">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : Model.RuntimeStatus.DeliveryWorker.Status)</strong>
+                <p>@Model.RuntimeStatus.ActiveDeliveries active delivery task(s).</p>
+            </article>
+            <article class="stat">
+                <h2>Maintenance</h2>
+                <strong class="stat-state">@Model.RuntimeStatus.MaintenanceWorker.Status</strong>
+                <p>Last cleanup: @Model.RuntimeStatus.LastCleanupUtc?.ToLocalTime()</p>
+            </article>
+            <article class="stat">
+                <h2>Delivery Control</h2>
+                <strong class="stat-state">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : "Enabled")</strong>
+                <p>@Model.RuntimeStatus.DeliveryPauseReason</p>
+            </article>
+        </div>
+    </section>
+
     <div class="surface-grid two-up">
         <section class="panel">
             <h2>Listener</h2>

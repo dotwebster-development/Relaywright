@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.Events;
 
 namespace Relaywright.Web.Services.Queueing;
@@ -11,6 +12,7 @@ public sealed class MessageQueueService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     RetryDelayCalculator retryDelayCalculator,
     IMessageSpoolService spoolService,
+    IBackupCoordinator backupCoordinator,
     IOperationalEventService eventService,
     IQueueSignal queueSignal,
     ILogger<MessageQueueService> logger) : IMessageQueueService
@@ -351,6 +353,41 @@ public sealed class MessageQueueService(
         return QueueActionResult.Success("Retry scheduled.");
     }
 
+    public async Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken)
+    {
+        var requested = messageIds
+            .Distinct()
+            .ToArray();
+        var succeeded = 0;
+        var rejected = 0;
+        var missing = 0;
+
+        foreach (var messageId in requested)
+        {
+            var result = await RetryNowAsync(messageId, cancellationToken);
+            if (result.Succeeded)
+            {
+                succeeded += 1;
+            }
+            else if (string.Equals(result.Message, "Message not found.", StringComparison.OrdinalIgnoreCase))
+            {
+                missing += 1;
+            }
+            else
+            {
+                rejected += 1;
+            }
+        }
+
+        return new QueueBulkActionResult
+        {
+            Requested = requested.Length,
+            Succeeded = succeeded,
+            Rejected = rejected,
+            Missing = missing
+        };
+    }
+
     public async Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -371,7 +408,32 @@ public sealed class MessageQueueService(
         var spoolPath = queuedMessage.SpoolFileRelativePath;
         dbContext.QueuedMessages.Remove(queuedMessage);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await spoolService.DeleteIfExistsAsync(spoolPath, cancellationToken);
+
+        try
+        {
+            await using var backupLock = await backupCoordinator.AcquireSpoolDeletionLockAsync(cancellationToken);
+            await spoolService.DeleteIfExistsAsync(spoolPath, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Queued message metadata was purged but spool deletion failed. MessageId={MessageId}; PreviousStatus={PreviousStatus}; SpoolPath={SpoolPath}",
+                messageId,
+                previousStatus,
+                spoolPath);
+
+            await eventService.WriteAsync(new OperationalEventRequest
+            {
+                Severity = EventSeverity.Error,
+                Category = OperationalEventCategory.Queue,
+                QueuedMessageId = messageId,
+                Message = "Queued message metadata was purged, but its spool file could not be deleted.",
+                Detail = exception.Message
+            }, cancellationToken);
+
+            return QueueActionResult.Failure("Queued message metadata was purged, but the spool file could not be deleted.");
+        }
 
         logger.LogInformation(
             "Purged queued message. MessageId={MessageId}; PreviousStatus={PreviousStatus}; SpoolPath={SpoolPath}",
@@ -387,6 +449,47 @@ public sealed class MessageQueueService(
         }, cancellationToken);
 
         return QueueActionResult.Success("Queued message purged.");
+    }
+
+    public async Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken)
+    {
+        var requested = messageIds
+            .Distinct()
+            .ToArray();
+        var succeeded = 0;
+        var rejected = 0;
+        var missing = 0;
+        var spoolFailures = 0;
+
+        foreach (var messageId in requested)
+        {
+            var result = await PurgeAsync(messageId, cancellationToken);
+            if (result.Succeeded)
+            {
+                succeeded += 1;
+            }
+            else if (string.Equals(result.Message, "Message not found.", StringComparison.OrdinalIgnoreCase))
+            {
+                missing += 1;
+            }
+            else if (result.Message.Contains("spool file", StringComparison.OrdinalIgnoreCase))
+            {
+                spoolFailures += 1;
+            }
+            else
+            {
+                rejected += 1;
+            }
+        }
+
+        return new QueueBulkActionResult
+        {
+            Requested = requested.Length,
+            Succeeded = succeeded,
+            Rejected = rejected,
+            Missing = missing,
+            SpoolDeleteFailures = spoolFailures
+        };
     }
 
     public async Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken)
@@ -466,6 +569,7 @@ public sealed class MessageQueueService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        await using var backupLock = await backupCoordinator.AcquireSpoolDeletionLockAsync(cancellationToken);
         foreach (var spoolPath in spoolPathsToDelete)
         {
             await spoolService.DeleteIfExistsAsync(spoolPath, cancellationToken);

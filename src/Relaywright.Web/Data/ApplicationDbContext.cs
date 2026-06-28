@@ -12,6 +12,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<TrustedNetwork> TrustedNetworks => Set<TrustedNetwork>();
 
+    public DbSet<SubmissionPolicy> SubmissionPolicies => Set<SubmissionPolicy>();
+
     public DbSet<QueuedMessage> QueuedMessages => Set<QueuedMessage>();
 
     public DbSet<QueuedMessageRecipient> QueuedMessageRecipients => Set<QueuedMessageRecipient>();
@@ -19,6 +21,20 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<DeliveryAttempt> DeliveryAttempts => Set<DeliveryAttempt>();
 
     public DbSet<OperationalEvent> OperationalEvents => Set<OperationalEvent>();
+
+    public DbSet<RuntimeControlState> RuntimeControlStates => Set<RuntimeControlState>();
+
+    public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+
+    public DbSet<AlertResult> AlertResults => Set<AlertResult>();
+
+    public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
+
+    public DbSet<BackupScheduleState> BackupScheduleStates => Set<BackupScheduleState>();
+
+    public DbSet<DiagnosticRun> DiagnosticRuns => Set<DiagnosticRun>();
+
+    public DbSet<DiagnosticStage> DiagnosticStages => Set<DiagnosticStage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -42,7 +58,23 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Cidr).HasMaxLength(128);
             entity.Property(x => x.Description).HasMaxLength(256);
+            entity.Property(x => x.Owner).HasMaxLength(256);
+            entity.Property(x => x.Location).HasMaxLength(256);
+            entity.Property(x => x.AllowedSenderAddresses).HasMaxLength(4096);
+            entity.Property(x => x.BlockedSenderAddresses).HasMaxLength(4096);
+            entity.Property(x => x.AllowedRecipientDomains).HasMaxLength(4096);
+            entity.Property(x => x.BlockedRecipientDomains).HasMaxLength(4096);
             entity.HasIndex(x => x.Cidr).IsUnique();
+        });
+
+        builder.Entity<SubmissionPolicy>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.AllowedSenderAddresses).HasMaxLength(4096);
+            entity.Property(x => x.BlockedSenderAddresses).HasMaxLength(4096);
+            entity.Property(x => x.AllowedRecipientDomains).HasMaxLength(4096);
+            entity.Property(x => x.BlockedRecipientDomains).HasMaxLength(4096);
         });
 
         builder.Entity<QueuedMessage>(entity =>
@@ -95,6 +127,74 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(x => x.OccurredUtc);
             entity.HasIndex(x => new { x.Severity, x.OccurredUtc });
             entity.HasIndex(x => new { x.Category, x.OccurredUtc });
+        });
+
+        builder.Entity<RuntimeControlState>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.DeliveryPauseReason).HasMaxLength(512);
+            entity.Property(x => x.DeliveryPausedBy).HasMaxLength(256);
+        });
+
+        builder.Entity<AlertRule>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(128);
+            entity.Property(x => x.DisplayName).HasMaxLength(256);
+            entity.Property(x => x.Description).HasMaxLength(1024);
+            entity.Property(x => x.EmailRecipients).HasMaxLength(1024);
+            entity.Property(x => x.LastNotificationMessage).HasMaxLength(2048);
+            entity.HasIndex(x => x.Key).IsUnique();
+            entity.HasMany(x => x.Results)
+                .WithOne(x => x.AlertRule)
+                .HasForeignKey(x => x.AlertRuleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AlertResult>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Message).HasMaxLength(2048);
+            entity.Property(x => x.NotificationMessage).HasMaxLength(2048);
+            entity.HasIndex(x => new { x.AlertRuleId, x.OccurredUtc });
+        });
+
+        builder.Entity<BackupRun>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FileName).HasMaxLength(512);
+            entity.Property(x => x.CreatedBy).HasMaxLength(256);
+            entity.Property(x => x.Message).HasMaxLength(4096);
+            entity.Property(x => x.LastValidationMessage).HasMaxLength(4096);
+            entity.HasIndex(x => x.StartedUtc);
+        });
+
+        builder.Entity<BackupScheduleState>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        builder.Entity<DiagnosticRun>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Message).HasMaxLength(2048);
+            entity.Property(x => x.RequestedBy).HasMaxLength(256);
+            entity.HasIndex(x => new { x.Kind, x.StartedUtc });
+            entity.HasMany(x => x.Stages)
+                .WithOne(x => x.DiagnosticRun)
+                .HasForeignKey(x => x.DiagnosticRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<DiagnosticStage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(128);
+            entity.Property(x => x.Message).HasMaxLength(2048);
+            entity.Property(x => x.Detail).HasMaxLength(4096);
+            entity.HasIndex(x => new { x.DiagnosticRunId, x.Sequence });
         });
     }
 }

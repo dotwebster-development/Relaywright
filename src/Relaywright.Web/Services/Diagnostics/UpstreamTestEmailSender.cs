@@ -10,6 +10,7 @@ namespace Relaywright.Web.Services.Diagnostics;
 
 public sealed class UpstreamTestEmailSender(
     IUpstreamAuthenticationService upstreamAuthenticationService,
+    IDiagnosticRunRecorder diagnosticRunRecorder,
     IOperationalEventService eventService,
     ILogger<UpstreamTestEmailSender> logger) : IUpstreamTestEmailSender
 {
@@ -19,6 +20,14 @@ public sealed class UpstreamTestEmailSender(
         Guid sessionId,
         CancellationToken cancellationToken)
     {
+        var run = await diagnosticRunRecorder.StartRunAsync(
+            DiagnosticRunKind.TestEmail,
+            sessionId,
+            requestedBy: null,
+            cancellationToken);
+        DiagnosticStage? currentStage = null;
+        var stageSequence = 0;
+
         await WriteAsync(
             EventSeverity.Information,
             "Diagnostic test email requested.",
@@ -37,6 +46,19 @@ public sealed class UpstreamTestEmailSender(
         if (string.IsNullOrWhiteSpace(configuration.UpstreamHost))
         {
             logger.LogWarning("Diagnostic test email aborted because upstream host is not configured. SessionId={SessionId}", sessionId);
+            currentStage = await diagnosticRunRecorder.StartStageAsync(
+                run.Id,
+                ++stageSequence,
+                "Configuration",
+                "Checking upstream configuration.",
+                cancellationToken);
+            await diagnosticRunRecorder.CompleteStageAsync(
+                currentStage.Id,
+                DiagnosticStageStatus.Failed,
+                "Upstream host is not configured.",
+                detail: null,
+                cancellationToken);
+            await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, "Upstream host is not configured.", cancellationToken);
 
             await WriteAsync(
                 EventSeverity.Warning,
@@ -49,7 +71,8 @@ public sealed class UpstreamTestEmailSender(
             {
                 Succeeded = false,
                 Message = "Upstream host is not configured.",
-                SessionId = sessionId
+                SessionId = sessionId,
+                DiagnosticRunId = run.Id
             };
         }
 
@@ -60,6 +83,19 @@ public sealed class UpstreamTestEmailSender(
         {
             client.Timeout = configuration.UpstreamTimeoutSeconds * 1000;
 
+            currentStage = await diagnosticRunRecorder.StartStageAsync(
+                run.Id,
+                ++stageSequence,
+                "Configuration",
+                "Checking test email request and upstream configuration.",
+                cancellationToken);
+            await diagnosticRunRecorder.CompleteStageAsync(
+                currentStage.Id,
+                DiagnosticStageStatus.Succeeded,
+                "Configuration is present.",
+                detail: null,
+                cancellationToken);
+
             await WriteAsync(
                 EventSeverity.Information,
                 "Connecting to upstream relay for diagnostic test email.",
@@ -67,10 +103,22 @@ public sealed class UpstreamTestEmailSender(
                 sessionId,
                 cancellationToken);
 
+            currentStage = await diagnosticRunRecorder.StartStageAsync(
+                run.Id,
+                ++stageSequence,
+                "Connect/TLS",
+                "Connecting to upstream relay.",
+                cancellationToken);
             await client.ConnectAsync(
                 configuration.UpstreamHost,
                 configuration.UpstreamPort,
                 configuration.UpstreamSecureSocketOptions,
+                cancellationToken);
+            await diagnosticRunRecorder.CompleteStageAsync(
+                currentStage.Id,
+                DiagnosticStageStatus.Succeeded,
+                client.IsSecure ? "Connected with TLS." : "Connected without TLS.",
+                detail: null,
                 cancellationToken);
 
             logger.LogInformation(
@@ -89,6 +137,13 @@ public sealed class UpstreamTestEmailSender(
 
             if (configuration.UseUpstreamAuthentication)
             {
+                currentStage = await diagnosticRunRecorder.StartStageAsync(
+                    run.Id,
+                    ++stageSequence,
+                    "Authentication",
+                    "Authenticating to upstream relay.",
+                    cancellationToken);
+
                 await WriteAsync(
                     EventSeverity.Information,
                     "Authenticating to upstream relay.",
@@ -97,6 +152,12 @@ public sealed class UpstreamTestEmailSender(
                     cancellationToken);
 
                 await upstreamAuthenticationService.AuthenticateAsync(client, configuration, cancellationToken);
+                await diagnosticRunRecorder.CompleteStageAsync(
+                    currentStage.Id,
+                    DiagnosticStageStatus.Succeeded,
+                    "Authentication succeeded.",
+                    detail: null,
+                    cancellationToken);
 
                 logger.LogInformation(
                     "Diagnostic test email authentication succeeded. SessionId={SessionId}; AuthMode={AuthMode}",
@@ -112,6 +173,19 @@ public sealed class UpstreamTestEmailSender(
             }
             else
             {
+                currentStage = await diagnosticRunRecorder.StartStageAsync(
+                    run.Id,
+                    ++stageSequence,
+                    "Authentication",
+                    "Authentication is disabled.",
+                    cancellationToken);
+                await diagnosticRunRecorder.CompleteStageAsync(
+                    currentStage.Id,
+                    DiagnosticStageStatus.Skipped,
+                    "Authentication skipped.",
+                    detail: null,
+                    cancellationToken);
+
                 await WriteAsync(
                     EventSeverity.Information,
                     "Upstream relay authentication skipped.",
@@ -120,6 +194,12 @@ public sealed class UpstreamTestEmailSender(
                     cancellationToken);
             }
 
+            currentStage = await diagnosticRunRecorder.StartStageAsync(
+                run.Id,
+                ++stageSequence,
+                "Compose",
+                "Composing diagnostic message.",
+                cancellationToken);
             var message = new MimeMessage();
             message.From.Add(MailboxAddress.Parse(request.FromAddress));
             message.To.Add(MailboxAddress.Parse(request.ToAddress));
@@ -128,6 +208,12 @@ public sealed class UpstreamTestEmailSender(
             {
                 Text = request.Body
             };
+            await diagnosticRunRecorder.CompleteStageAsync(
+                currentStage.Id,
+                DiagnosticStageStatus.Succeeded,
+                "Diagnostic message composed.",
+                detail: null,
+                cancellationToken);
 
             await WriteAsync(
                 EventSeverity.Information,
@@ -136,7 +222,19 @@ public sealed class UpstreamTestEmailSender(
                 sessionId,
                 cancellationToken);
 
+            currentStage = await diagnosticRunRecorder.StartStageAsync(
+                run.Id,
+                ++stageSequence,
+                "Send",
+                "Submitting diagnostic message.",
+                cancellationToken);
             var response = await client.SendAsync(message, cancellationToken);
+            await diagnosticRunRecorder.CompleteStageAsync(
+                currentStage.Id,
+                DiagnosticStageStatus.Succeeded,
+                "Upstream relay accepted the diagnostic message.",
+                response,
+                cancellationToken);
 
             logger.LogInformation(
                 "Diagnostic test email accepted by upstream. SessionId={SessionId}; ElapsedMs={ElapsedMs}; Response={Response}",
@@ -151,13 +249,28 @@ public sealed class UpstreamTestEmailSender(
                 sessionId,
                 cancellationToken);
 
+            currentStage = await diagnosticRunRecorder.StartStageAsync(
+                run.Id,
+                ++stageSequence,
+                "Disconnect",
+                "Disconnecting from upstream relay.",
+                cancellationToken);
             await client.DisconnectAsync(true, cancellationToken);
+            await diagnosticRunRecorder.CompleteStageAsync(
+                currentStage.Id,
+                DiagnosticStageStatus.Succeeded,
+                "Disconnected cleanly.",
+                detail: null,
+                cancellationToken);
+
+            await diagnosticRunRecorder.CompleteRunAsync(run.Id, true, "Test email accepted by the upstream relay.", cancellationToken);
 
             return new TestEmailResult
             {
                 Succeeded = true,
                 Message = "Test email accepted by the upstream relay.",
-                SessionId = sessionId
+                SessionId = sessionId,
+                DiagnosticRunId = run.Id
             };
         }
         catch (Exception exception)
@@ -186,6 +299,18 @@ public sealed class UpstreamTestEmailSender(
                 }
             }
 
+            if (currentStage is not null)
+            {
+                await diagnosticRunRecorder.CompleteStageAsync(
+                    currentStage.Id,
+                    DiagnosticStageStatus.Failed,
+                    exception.Message,
+                    detail: null,
+                    cancellationToken);
+            }
+
+            await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, exception.Message, cancellationToken);
+
             await WriteAsync(
                 EventSeverity.Error,
                 "Diagnostic test email failed.",
@@ -197,7 +322,8 @@ public sealed class UpstreamTestEmailSender(
             {
                 Succeeded = false,
                 Message = exception.Message,
-                SessionId = sessionId
+                SessionId = sessionId,
+                DiagnosticRunId = run.Id
             };
         }
     }

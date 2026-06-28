@@ -24,6 +24,7 @@ public sealed class QueueLifecycleIntegrationTests
             database.DbContextFactory,
             new RetryDelayCalculator(),
             spool,
+            new ImmediateBackupCoordinator(),
             events,
             signal,
             NullLogger<MessageQueueService>.Instance);
@@ -76,6 +77,7 @@ public sealed class QueueLifecycleIntegrationTests
             database.DbContextFactory,
             new RetryDelayCalculator(),
             new MessageSpoolService(appData.Paths, NullLogger<MessageSpoolService>.Instance),
+            new ImmediateBackupCoordinator(),
             new RecordingOperationalEventService(),
             new RecordingQueueSignal(),
             NullLogger<MessageQueueService>.Instance);

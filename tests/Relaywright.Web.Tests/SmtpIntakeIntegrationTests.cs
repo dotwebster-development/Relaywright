@@ -29,6 +29,7 @@ public sealed class SmtpIntakeIntegrationTests
             database.DbContextFactory,
             new RetryDelayCalculator(),
             spool,
+            new ImmediateBackupCoordinator(),
             events,
             signal,
             NullLogger<MessageQueueService>.Instance);
@@ -109,7 +110,11 @@ public sealed class SmtpIntakeIntegrationTests
 
         public Task<QueueActionResult> RetryNowAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+        public Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

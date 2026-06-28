@@ -6,6 +6,7 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
+using Relaywright.Web.Tests.Support;
 using Xunit;
 
 namespace Relaywright.Web.Tests;
@@ -104,6 +105,39 @@ public sealed class MessageQueueServiceTests
     }
 
     [Fact]
+    public async Task BulkRetrySummarizesSucceededRejectedAndMissingMessages()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var failed = await fixture.AddMessageAsync(QueuedMessageStatus.Failed);
+        var delivered = await fixture.AddMessageAsync(QueuedMessageStatus.Delivered);
+        var missing = Guid.NewGuid();
+
+        var result = await fixture.Service.RetryNowAsync([failed.Id, delivered.Id, missing], CancellationToken.None);
+
+        Assert.Equal(3, result.Requested);
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(1, result.Rejected);
+        Assert.Equal(1, result.Missing);
+        Assert.Equal(QueuedMessageStatus.RetryScheduled, await fixture.GetStatusAsync(failed.Id));
+        Assert.Equal(QueuedMessageStatus.Delivered, await fixture.GetStatusAsync(delivered.Id));
+    }
+
+    [Fact]
+    public async Task BulkPurgeCountsSpoolDeleteFailures()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var failed = await fixture.AddMessageAsync(QueuedMessageStatus.Failed);
+        fixture.SpoolService.ThrowOnDelete = true;
+
+        var result = await fixture.Service.PurgeAsync([failed.Id], CancellationToken.None);
+
+        Assert.Equal(1, result.Requested);
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.SpoolDeleteFailures);
+        Assert.Null(await fixture.FindAsync(failed.Id));
+    }
+
+    [Fact]
     public async Task CleanupOnlyRemovesRetentionEligibleRecordsAndSpoolFiles()
     {
         await using var fixture = await QueueFixture.CreateAsync();
@@ -161,6 +195,7 @@ public sealed class MessageQueueServiceTests
                 dbContextFactory,
                 new RetryDelayCalculator(),
                 SpoolService,
+                new ImmediateBackupCoordinator(),
                 new TestOperationalEventService(),
                 new TestQueueSignal(),
                 NullLogger<MessageQueueService>.Instance);
@@ -281,6 +316,8 @@ public sealed class MessageQueueServiceTests
     {
         public List<string> DeletedPaths { get; } = new();
 
+        public bool ThrowOnDelete { get; set; }
+
         public Task<string> WriteAsync(Guid messageId, DateTimeOffset acceptedUtc, System.Buffers.ReadOnlySequence<byte> buffer, CancellationToken cancellationToken)
         {
             return Task.FromResult($"{messageId:N}.eml");
@@ -303,6 +340,11 @@ public sealed class MessageQueueServiceTests
 
         public Task DeleteIfExistsAsync(string relativePath, CancellationToken cancellationToken)
         {
+            if (ThrowOnDelete)
+            {
+                throw new IOException("Simulated delete failure.");
+            }
+
             DeletedPaths.Add(relativePath);
             return Task.CompletedTask;
         }

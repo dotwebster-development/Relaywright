@@ -402,7 +402,7 @@ textarea {
 
 .setup-progress {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12px;
     padding: 0;
     margin: 0;
@@ -761,6 +761,10 @@ textarea {
     line-height: 1;
 }
 
+.stat strong.stat-state {
+    font-size: 1.15rem;
+}
+
 .stat p {
     margin: 0;
     color: var(--text-muted);
@@ -808,6 +812,7 @@ textarea {
 
 .compact-grid input,
 .compact-grid select,
+.compact-grid textarea,
 .form-grid input,
 .form-grid select,
 .form-grid textarea,
@@ -823,6 +828,7 @@ textarea {
 
 .compact-grid input:focus,
 .compact-grid select:focus,
+.compact-grid textarea:focus,
 .form-grid input:focus,
 .form-grid select:focus,
 .form-grid textarea:focus,
@@ -833,6 +839,11 @@ textarea {
 
 .form-grid textarea {
     min-height: 140px;
+    resize: vertical;
+}
+
+.compact-grid textarea {
+    min-height: 118px;
     resize: vertical;
 }
 
@@ -1056,6 +1067,33 @@ button:hover,
     justify-content: flex-end;
 }
 
+.inline-edit-form {
+    display: grid;
+    gap: 8px;
+}
+
+.inline-edit-form input[type="number"],
+.inline-edit-form input[type="text"],
+.inline-edit-form input:not([type]) {
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+
+.stage-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.stage-line:last-child {
+    margin-bottom: 0;
+}
+
 .pagination {
     display: flex;
     justify-content: space-between;
@@ -1122,6 +1160,7 @@ button:hover,
 
 .status-delivered,
 .status-enabled,
+.status-running,
 .severity-ok {
     border-color: #b7e3c4;
     background: var(--success-bg);
@@ -1131,10 +1170,20 @@ button:hover,
 .status-failed,
 .status-expired,
 .status-disabled,
+.status-faulted,
 .severity-error {
     border-color: #fac5c0;
     background: var(--danger-bg);
     color: var(--danger);
+}
+
+.status-starting,
+.status-restarting,
+.status-paused,
+.status-unknown {
+    border-color: #f2d28c;
+    background: var(--warning-bg);
+    color: var(--warning);
 }
 
 @media (max-width: 1100px) {

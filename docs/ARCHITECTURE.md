@@ -13,9 +13,9 @@ Relaywright is an ASP.NET Core Razor Pages application that accepts SMTP submiss
 - ASP.NET Core Identity
 - Razor Pages authorization
 - singleton domain services
-- hosted services for SMTP intake, delivery, and maintenance
+- hosted services for SMTP intake, delivery, maintenance, alerts, and scheduled backups
 
-`DataSeeder` runs at startup. It creates the SQLite database if needed, performs the current manual schema upgrades, ensures one relay configuration row exists, seeds localhost trusted networks, and creates the bootstrap admin only when an explicit bootstrap password is configured. Otherwise the first admin is created through the first-run setup page.
+`DataSeeder` runs at startup. It creates the SQLite database if needed, performs the current manual schema upgrades, ensures one relay configuration row exists, seeds localhost trusted networks, seeds runtime control and submission policy rows, seeds built-in alert rules, and creates the bootstrap admin only when an explicit bootstrap password is configured. Otherwise the first admin is created through the first-run setup page.
 
 ## Storage
 
@@ -24,6 +24,7 @@ Default runtime storage lives under `App_Data`:
 - SQLite database: `App_Data/relay.db`
 - Message spool: `App_Data/spool`
 - Data Protection keys: `App_Data/keys`
+- Backup bundles: `App_Data/backups`
 
 These are runtime artifacts and should remain ignored by source control.
 
@@ -32,12 +33,25 @@ These are runtime artifacts and should remain ignored by source control.
 1. `SmtpRelayHostedService` reads a `RelayConfigurationSnapshot`.
 2. `SmtpOptionsFactory` creates SmtpServer listener options.
 3. `TrustedNetworkMailboxFilter` allows submissions only from enabled trusted IPs/CIDRs.
-4. `RelayMessageStore.SaveAsync` receives SMTP DATA.
-5. `MessageSpoolService.WriteAsync` writes the raw message to disk.
-6. `MessageQueueService.EnqueueAsync` stores queue metadata and recipients in SQLite.
-7. `OperationalEventService` records session and queue events.
+4. `TrustedDevicePolicyService` evaluates the matching device profile and global submission policy for sender, declared size, recipient domain, and recipient count.
+5. `TrustedDeviceRateLimiter` enforces any per-device hourly message limit.
+6. `RelayMessageStore.SaveAsync` receives SMTP DATA.
+7. `MessageSpoolService.WriteAsync` writes the raw message to disk.
+8. `MessageQueueService.EnqueueAsync` stores queue metadata and recipients in SQLite.
+9. `OperationalEventService` records session and queue events.
 
-The critical guarantee is that accepted message content is written to the spool and queue metadata is saved before the SMTP server returns success.
+The critical guarantee is that accepted message content is written to the spool and queue metadata is saved before the SMTP server returns success. Submission-policy rejections happen before DATA is accepted, so rejected content is not spooled.
+
+## Submission Policy
+
+Trusted-device policy has two layers:
+
+- Global submission policy in `SubmissionPolicies`, edited at Settings > Submission Policy.
+- Per-device profile fields on `TrustedNetworks`, edited at Settings > Trusted IPs.
+
+Both layers support sender allow/block lists, recipient-domain allow/block lists, maximum message size, and maximum recipients. Per-device profiles also support owner, location, and hourly rate limits. Block lists take precedence over allow lists. If both the global policy and device profile define a numeric limit, the stricter value applies.
+
+Policy enforcement belongs in `TrustedNetworkMailboxFilter`, not in pages or queue services, because the relay must reject disallowed submissions before SMTP DATA is accepted.
 
 ## Configuration Flow
 
@@ -66,6 +80,8 @@ Listener changes are applied by restarting the SMTP listener in `SmtpRelayHosted
 
 Failures are classified by `DeliveryFailureClassifier`. Transient failures are retried with exponential backoff from `RetryDelayCalculator`; permanent/configuration failures become terminal unless retry limits or expiration decide first.
 
+Outbound delivery can be paused from Operations > Status. The pause only stops claiming new outbound work; SMTP intake continues to accept and durably spool messages from trusted devices. Resuming delivery pulses `IQueueSignal` so eligible work wakes promptly.
+
 ## Maintenance Flow
 
 `MaintenanceWorker` runs periodic cleanup through `MessageQueueService.CleanupAsync`:
@@ -76,21 +92,35 @@ Failures are classified by `DeliveryFailureClassifier`. Transient failures are r
 - removes old operational events
 - deletes spool files for removed messages
 
+Cleanup and purge paths coordinate with backups through `IBackupCoordinator` so spool files are not removed while a backup bundle is collecting files referenced by its database snapshot.
+
+## Operations
+
+Runtime status, alerts, backups, diagnostics, and queue actions are intentionally operational rather than decorative:
+
+- `RuntimeStatusService` tracks hosted-service state, delivery pause state, active deliveries, and cleanup heartbeat data.
+- `AlertService` evaluates built-in operational risk rules and sends direct upstream email notifications when configured.
+- `BackupService` creates, validates, downloads, deletes, and prunes backup bundles. Encrypted manual backups use a one-time password; scheduled backups remain unencrypted because the password is not stored.
+- `DiagnosticRunRecorder` persists staged connectivity and test-email diagnostics without SMTP transcripts, secrets, or message bodies.
+- `MessageQueueService` supports single and bulk retry/purge operations while preserving queue-state guards and spool deletion ordering.
+
 ## Security Boundaries
 
 - SMTP clients are trusted by IP/CIDR, not by SMTP AUTH.
+- Trusted IP/CIDR checks are only the first gate; submission policies can further restrict sender addresses, recipient domains, message size, recipient count, and per-device send rate.
 - Admin UI requires ASP.NET Core Identity authentication except the login page and `/health`.
 - Stored secrets are protected with ASP.NET Core Data Protection.
 - Microsoft 365 OAuth uses client credentials and caches access tokens in memory only.
 - Operational events must never include raw secrets or access tokens.
+- Diagnostics and alert details must not include message bodies, passwords, certificate passwords, OAuth tokens, client secrets, or protected secret blobs.
 
 ## UI Sections
 
 Navigation is centralized in `UI/AppNavigation.cs`.
 
 - Overview: dashboard
-- Settings: relay settings and trusted IPs
-- Operations: queue and logs
-- Diagnostics: upstream checks and test email
+- Settings: relay settings, admin web listener/certificate settings, submission policy, and trusted IP profiles
+- Operations: runtime status, queue, logs, alerts, and backups
+- Diagnostics: upstream connectivity checks and test email
 
 The UI is server-rendered Razor Pages with small page-local scripts for form behavior.

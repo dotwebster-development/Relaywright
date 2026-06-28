@@ -27,4 +27,41 @@
             <p class="status @(Model.Result.Succeeded ? "ok" : "error")">@Model.Result.Message</p>
         }
     </section>
+
+    <section class="panel">
+        <h2>Recent Connectivity Runs</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Started</th>
+                        <th>Result</th>
+                        <th>Message</th>
+                        <th>Stages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var run in Model.RecentRuns)
+                {
+                    <tr>
+                        <td>@run.StartedUtc.ToLocalTime()</td>
+                        <td><span class="status-badge @(run.Succeeded == true ? "status-delivered" : run.Succeeded == false ? "status-failed" : "status-inprogress")">@(run.Succeeded is null ? "Running" : run.Succeeded.Value ? "Succeeded" : "Failed")</span></td>
+                        <td>@run.Message</td>
+                        <td>
+                            @foreach (var stage in run.Stages.OrderBy(x => x.Sequence))
+                            {
+                                <div class="stage-line">
+                                    <span class="status-badge status-@(stage.Status == DiagnosticStageStatus.Succeeded ? "delivered" : stage.Status == DiagnosticStageStatus.Failed ? "failed" : stage.Status == DiagnosticStageStatus.Skipped ? "disabled" : "inprogress")">@stage.Status</span>
+                                    <strong>@stage.Name</strong>
+                                    <span>@stage.ElapsedMilliseconds ms</span>
+                                    <span>@stage.Message</span>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
 </section>

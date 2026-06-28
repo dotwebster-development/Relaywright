@@ -3,6 +3,7 @@ using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Runtime;
 
 namespace Relaywright.Web.Services.Delivery;
 
@@ -12,6 +13,7 @@ public sealed class QueueDeliveryWorker(
     IUpstreamDeliveryService upstreamDeliveryService,
     IQueueSignal queueSignal,
     IOperationalEventService eventService,
+    IRuntimeStatusService runtimeStatusService,
     ILogger<QueueDeliveryWorker> logger) : BackgroundService
 {
     private const int StateWriteRetryCount = 3;
@@ -29,11 +31,30 @@ public sealed class QueueDeliveryWorker(
             {
                 var configuration = await relayConfigurationService.GetSnapshotAsync(stoppingToken);
                 activeDeliveries.RemoveAll(task => task.IsCompleted);
+                var paused = await runtimeStatusService.IsDeliveryPausedAsync(stoppingToken);
+                runtimeStatusService.ReportDeliveryWorkerState(
+                    paused ? "Paused" : "Running",
+                    activeDeliveries.Count,
+                    paused ? "Outbound delivery is paused." : "Outbound delivery is enabled.");
 
                 logger.LogDebug(
                     "Queue delivery worker loop tick. ActiveDeliveries={ActiveDeliveries}; DeliveryConcurrency={DeliveryConcurrency}",
                     activeDeliveries.Count,
                     configuration.DeliveryConcurrency);
+
+                if (paused)
+                {
+                    if (activeDeliveries.Count == 0)
+                    {
+                        await queueSignal.WaitAsync(TimeSpan.FromSeconds(15), stoppingToken);
+                    }
+                    else
+                    {
+                        await Task.WhenAny(activeDeliveries).WaitAsync(stoppingToken);
+                    }
+
+                    continue;
+                }
 
                 while (activeDeliveries.Count < configuration.DeliveryConcurrency && !stoppingToken.IsCancellationRequested)
                 {
@@ -72,6 +93,7 @@ public sealed class QueueDeliveryWorker(
             }
             catch (Exception exception)
             {
+                runtimeStatusService.ReportDeliveryWorkerState("Faulted", activeDeliveries.Count, "Queue delivery worker loop failed.", exception);
                 logger.LogError(exception, "Queue delivery worker loop failed unexpectedly.");
 
                 await eventService.WriteAsync(new OperationalEventRequest
@@ -100,6 +122,7 @@ public sealed class QueueDeliveryWorker(
             Message = "Queue delivery worker stopped."
         });
 
+        runtimeStatusService.ReportDeliveryWorkerState("Stopped", 0, "Queue delivery worker stopped.");
         logger.LogInformation("Queue delivery worker stopped.");
     }
 

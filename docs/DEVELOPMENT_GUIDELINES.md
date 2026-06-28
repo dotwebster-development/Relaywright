@@ -26,8 +26,9 @@ Use these guidelines when changing Relaywright. They are intentionally conservat
 - Use `AsNoTracking()` for read-only queries.
 - Include related entities deliberately; avoid accidental lazy-loading assumptions.
 - Preserve existing indexes and relationship delete behavior unless changing queue semantics intentionally.
-- If changing database shape, update `ApplicationDbContext`, `DataSeeder.UpgradeSchemaAsync`, and documentation together.
+- If changing database shape, update `ApplicationDbContext`, `DataSeeder.UpgradeSchemaAsync`, tests, and documentation together.
 - Be careful with `EnsureCreated`; this app does not currently use a migrations pipeline.
+- SQLite cannot translate all `DateTimeOffset` ordering expressions. For small admin/history result sets, materialize first and order in .NET, and add a SQLite-backed regression test.
 
 ## Queue And Spool
 
@@ -70,6 +71,22 @@ Use these guidelines when changing Relaywright. They are intentionally conservat
 - Do not duplicate IP/CIDR parsing elsewhere.
 - Keep localhost seed networks unless the product decision changes.
 - Security denials should create warning operational events without revealing sensitive message content.
+- Treat trusted networks as device profiles, not only CIDR rows. Owner, location, sender lists, recipient-domain lists, size limits, recipient limits, and hourly rate limits belong on `TrustedNetwork`.
+- Keep global submission policy in `SubmissionPolicy` and `ITrustedDevicePolicyService`.
+- Enforce submission policy in `TrustedNetworkMailboxFilter` before SMTP DATA is accepted.
+- Block lists must take precedence over allow lists.
+- When both global and per-device numeric limits exist, the stricter limit should apply.
+- Do not log message bodies or raw SMTP DATA when recording policy denials.
+
+## Runtime Operations
+
+- Delivery pause/resume must affect outbound delivery only. SMTP intake must continue to accept and spool mail from trusted devices.
+- Pulse `IQueueSignal` when resuming delivery or after queue changes that should wake the delivery worker.
+- Keep alert evaluation deterministic and avoid live network dependencies in tests.
+- Alert notifications must send directly through the configured upstream relay path rather than through the queued message pipeline.
+- Backup creation must hold the backup coordinator lock while collecting spool files referenced by the database snapshot.
+- Backup validation should prove restore readiness without performing destructive restore work from the admin UI.
+- Diagnostics should store staged results and sanitized details, not full SMTP transcripts.
 
 ## Razor Pages UI
 
@@ -93,11 +110,16 @@ Add tests for:
 
 - retry/backoff math
 - CIDR parsing and matching
+- trusted-device submission policy and SMTP rejection behavior
 - delivery failure classification
 - queue claiming and state transitions
+- bulk queue retry/purge guards and summary counts
 - schema upgrade behavior
 - secret protection boundaries
 - new authentication modes
+- backup bundle creation/validation and retention pruning
+- alert thresholds, cooldowns, notification recording, and SQLite-backed history ordering
+- diagnostic run/stage persistence without secret or message-body leakage
 
 Do not add automated tests that require real printers, live SMTP relays, Microsoft Entra tenants, or machine-specific local IP addresses.
 
