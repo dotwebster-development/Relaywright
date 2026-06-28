@@ -17,6 +17,8 @@ public sealed class AppPaths
         DatabasePath = Path.Combine(DataDirectory, options.DatabaseFileName);
         SpoolRootDirectory = Path.Combine(DataDirectory, options.SpoolDirectoryName);
         KeyRingDirectory = Path.Combine(DataDirectory, options.KeyDirectoryName);
+        CertificateDirectory = Path.Combine(DataDirectory, options.CertificateDirectoryName);
+        AdminHttpsCertificateConfigurationPath = Path.Combine(DataDirectory, options.AdminHttpsCertificateFileName);
     }
 
     public string ContentRootPath { get; }
@@ -29,11 +31,16 @@ public sealed class AppPaths
 
     public string KeyRingDirectory { get; }
 
+    public string CertificateDirectory { get; }
+
+    public string AdminHttpsCertificateConfigurationPath { get; }
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(SpoolRootDirectory);
         Directory.CreateDirectory(KeyRingDirectory);
+        Directory.CreateDirectory(CertificateDirectory);
     }
 
     public string CreateSpoolRelativePath(Guid messageId, DateTimeOffset timestampUtc)

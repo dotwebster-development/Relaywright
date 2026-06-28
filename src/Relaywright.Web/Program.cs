@@ -26,6 +26,21 @@ var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName
 var appPaths = new AppPaths(builder.Environment.ContentRootPath, storageOptions);
 appPaths.EnsureCreated();
 
+var startupDataProtectionProvider = DataProtectionProvider.Create(
+    new DirectoryInfo(appPaths.KeyRingDirectory),
+    options => options.SetApplicationName("Relaywright"));
+var configuredAdminHttpsCertificate = AdminHttpsCertificateService.LoadConfiguredCertificate(appPaths, startupDataProtectionProvider);
+if (configuredAdminHttpsCertificate is not null)
+{
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.ConfigureHttpsDefaults(httpsOptions =>
+        {
+            httpsOptions.ServerCertificate = configuredAdminHttpsCertificate;
+        });
+    });
+}
+
 builder.Services.AddSingleton(appPaths);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(appPaths.KeyRingDirectory))
@@ -71,6 +86,7 @@ builder.Services.AddRazorPages(options =>
 });
 
 builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
+builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
 builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
 builder.Services.AddSingleton<IQueueSignal, QueueSignal>();

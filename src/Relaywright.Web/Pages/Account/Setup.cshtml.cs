@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
 using Relaywright.Web.Services.Events;
+using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages.Account;
 
@@ -15,6 +16,7 @@ public sealed class SetupModel(
     UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
     IOperationalEventService eventService,
+    IAdminHttpsCertificateService adminHttpsCertificateService,
     ILogger<SetupModel> logger) : PageModel
 {
     private static readonly SemaphoreSlim InitialAdminGate = new(1, 1);
@@ -22,13 +24,22 @@ public sealed class SetupModel(
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
+    [BindProperty]
+    public CertificateInputModel CertificateInput { get; set; } = new();
+
     public SetupStep CurrentStep { get; private set; } = SetupStep.Welcome;
 
     public string? CreatedUserName { get; private set; }
 
+    public string? DisplayAdminUserName => CreatedUserName ?? User.Identity?.Name;
+
+    public AdminHttpsCertificateConfiguration? ConfiguredCertificate { get; private set; }
+
     public bool IsWelcomeStep => CurrentStep == SetupStep.Welcome;
 
     public bool IsAdminAccountStep => CurrentStep == SetupStep.AdminAccount;
+
+    public bool IsCertificateStep => CurrentStep == SetupStep.HttpsCertificate;
 
     public bool IsCompleteStep => CurrentStep == SetupStep.Complete;
 
@@ -101,6 +112,65 @@ public sealed class SetupModel(
         }
     }
 
+    public async Task<IActionResult> OnPostConfigureCertificateAsync(CancellationToken cancellationToken)
+    {
+        var guardResult = await EnsureAuthenticatedSetupUserAsync(cancellationToken);
+        if (guardResult is not null)
+        {
+            return guardResult;
+        }
+
+        CurrentStep = SetupStep.HttpsCertificate;
+        RemoveModelStateEntries(nameof(Input));
+
+        try
+        {
+            ConfiguredCertificate = CertificateInput.Mode switch
+            {
+                AdminHttpsCertificateMode.Pfx => await adminHttpsCertificateService.SavePfxAsync(
+                    RequireFile(CertificateInput.PfxFile, "Select a PFX certificate file."),
+                    CertificateInput.PfxPassword,
+                    cancellationToken),
+                AdminHttpsCertificateMode.Pem => await adminHttpsCertificateService.SavePemAsync(
+                    RequireFile(CertificateInput.CertificateFile, "Select a certificate file."),
+                    RequireFile(CertificateInput.KeyFile, "Select a private key file."),
+                    CertificateInput.KeyPassword,
+                    cancellationToken),
+                AdminHttpsCertificateMode.SelfSigned => await adminHttpsCertificateService.GenerateSelfSignedAsync(
+                    CertificateInput.SelfSignedDnsNames,
+                    CertificateInput.SelfSignedValidYears,
+                    cancellationToken),
+                _ => throw new InvalidOperationException("Choose a certificate option.")
+            };
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "First-run HTTPS certificate setup failed. Mode={Mode}; RemoteIp={RemoteIp}",
+                CertificateInput.Mode,
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+            ModelState.AddModelError(string.Empty, exception.Message);
+            return Page();
+        }
+
+        CurrentStep = SetupStep.Complete;
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostSkipCertificateAsync(CancellationToken cancellationToken)
+    {
+        var guardResult = await EnsureAuthenticatedSetupUserAsync(cancellationToken);
+        if (guardResult is not null)
+        {
+            return guardResult;
+        }
+
+        ConfiguredCertificate = await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
+        CurrentStep = SetupStep.Complete;
+        return Page();
+    }
+
     private async Task<IActionResult> CreateInitialAdminAsync(CancellationToken cancellationToken)
     {
         var userName = Input.UserName.Trim();
@@ -143,7 +213,8 @@ public sealed class SetupModel(
 
         await signInManager.SignInAsync(admin, isPersistent: false);
         CreatedUserName = admin.UserName;
-        CurrentStep = SetupStep.Complete;
+        CertificateInput.SelfSignedDnsNames = GetDefaultCertificateNames();
+        CurrentStep = SetupStep.HttpsCertificate;
         return Page();
     }
 
@@ -152,10 +223,46 @@ public sealed class SetupModel(
         return await userManager.Users.AnyAsync(cancellationToken);
     }
 
+    private async Task<IActionResult?> EnsureAuthenticatedSetupUserAsync(CancellationToken cancellationToken)
+    {
+        if (!await HasAnyUserAsync(cancellationToken))
+        {
+            CurrentStep = SetupStep.Welcome;
+            return Page();
+        }
+
+        return User.Identity?.IsAuthenticated == true
+            ? null
+            : RedirectToPage("/Account/Login");
+    }
+
+    private static IFormFile RequireFile(IFormFile? file, string message)
+    {
+        return file is { Length: > 0 }
+            ? file
+            : throw new InvalidOperationException(message);
+    }
+
+    private void RemoveModelStateEntries(string prefix)
+    {
+        foreach (var key in ModelState.Keys.Where(x => x.StartsWith(prefix + ".", StringComparison.Ordinal)).ToArray())
+        {
+            ModelState.Remove(key);
+        }
+    }
+
+    public static string GetDefaultCertificateNames()
+    {
+        return string.Join(", ", new[] { "localhost", Environment.MachineName }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
     public enum SetupStep
     {
         Welcome,
         AdminAccount,
+        HttpsCertificate,
         Complete
     }
 
@@ -171,5 +278,25 @@ public sealed class SetupModel(
         [Required]
         [Display(Name = "Confirm Password")]
         public string ConfirmPassword { get; set; } = string.Empty;
+    }
+
+    public sealed class CertificateInputModel
+    {
+        public AdminHttpsCertificateMode Mode { get; set; } = AdminHttpsCertificateMode.SelfSigned;
+
+        public IFormFile? PfxFile { get; set; }
+
+        public string? PfxPassword { get; set; }
+
+        public IFormFile? CertificateFile { get; set; }
+
+        public IFormFile? KeyFile { get; set; }
+
+        public string? KeyPassword { get; set; }
+
+        public string SelfSignedDnsNames { get; set; } = GetDefaultCertificateNames();
+
+        [Range(1, 10)]
+        public int SelfSignedValidYears { get; set; } = 2;
     }
 }

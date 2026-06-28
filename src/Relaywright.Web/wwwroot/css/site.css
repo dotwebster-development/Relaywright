@@ -403,7 +403,7 @@ textarea {
 
 .setup-progress {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     padding: 0;
     margin: 0;
@@ -580,6 +580,64 @@ textarea {
 .setup-page .button-link {
     min-height: 40px;
     padding: 0 16px;
+}
+
+.certificate-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.certificate-choice {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 118px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-muted);
+}
+
+.certificate-choice:has(input:checked) {
+    border-color: var(--accent-border);
+    background: var(--accent-muted);
+}
+
+.certificate-choice input {
+    width: 16px;
+    height: 16px;
+    margin: 3px 0 0;
+}
+
+.certificate-choice span {
+    display: grid;
+    gap: 6px;
+}
+
+.certificate-choice small {
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.35;
+}
+
+.certificate-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-muted);
+}
+
+.certificate-panel label {
+    display: grid;
+    gap: 6px;
+}
+
+.certificate-panel label:first-child {
+    grid-column: 1 / -1;
 }
 
 .field-validation-error {
@@ -1185,6 +1243,15 @@ button:hover,
     .setup-summary div {
         grid-template-columns: 1fr;
         gap: 4px;
+    }
+
+    .certificate-choice-grid,
+    .certificate-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .certificate-choice {
+        min-height: 0;
     }
 
     .page-header {
