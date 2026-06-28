@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Configuration;
@@ -17,6 +18,12 @@ public sealed class IndexModel(
     public RelayConfigurationSnapshot Configuration { get; private set; } = new();
 
     public RuntimeStatusSnapshot RuntimeStatus { get; private set; } = new();
+
+    [BindProperty]
+    public string? PauseReason { get; set; }
+
+    [TempData]
+    public string? StatusMessage { get; set; }
 
     public int PendingCount { get; private set; }
 
@@ -78,5 +85,21 @@ public sealed class IndexModel(
             Configuration.ListenerBindAddress,
             Configuration.ListenerPort,
             User.Identity?.Name);
+    }
+
+    public async Task<IActionResult> OnPostPauseAsync(CancellationToken cancellationToken)
+    {
+        await runtimeStatusService.PauseDeliveryAsync(PauseReason, User.Identity?.Name, cancellationToken);
+        StatusMessage = "Outbound delivery paused.";
+        logger.LogWarning("Outbound delivery pause requested from dashboard. User={UserName}", User.Identity?.Name);
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostResumeAsync(CancellationToken cancellationToken)
+    {
+        await runtimeStatusService.ResumeDeliveryAsync(User.Identity?.Name, cancellationToken);
+        StatusMessage = "Outbound delivery resumed.";
+        logger.LogInformation("Outbound delivery resume requested from dashboard. User={UserName}", User.Identity?.Name);
+        return RedirectToPage();
     }
 }

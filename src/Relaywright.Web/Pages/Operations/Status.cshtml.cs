@@ -16,9 +16,9 @@ public sealed class StatusModel(
     [TempData]
     public string? StatusMessage { get; set; }
 
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    public IActionResult OnGet()
     {
-        Status = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
+        return RedirectToPage("/Index");
     }
 
     public async Task<IActionResult> OnPostPauseAsync(CancellationToken cancellationToken)

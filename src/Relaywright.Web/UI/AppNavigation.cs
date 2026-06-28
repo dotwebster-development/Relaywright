@@ -38,6 +38,7 @@ public static class AppNavigation
     public const string OverviewKey = "overview";
     public const string SettingsKey = "settings";
     public const string OperationsKey = "operations";
+    public const string SystemKey = "system";
     public const string DiagnosticsKey = "diagnostics";
 
     private static readonly AppNavSection[] NavigationSections =
@@ -55,7 +56,6 @@ public static class AppNavigation
             "/Settings/Relay",
             [
                 new AppNavItem("Relay Settings", "/Settings/Relay"),
-                new AppNavItem("Web Interface", "/Settings/WebHttps"),
                 new AppNavItem("Submission Policy", "/Settings/SubmissionPolicy"),
                 new AppNavItem("Trusted IPs", "/Settings/TrustedNetworks")
             ]),
@@ -63,13 +63,21 @@ public static class AppNavigation
             OperationsKey,
             "Operations",
             "Queue and event tracking",
-            "/Operations/Status",
+            "/Queue/Index",
             [
-                new AppNavItem("Status", "/Operations/Status"),
                 new AppNavItem("Queue", "/Queue/Index"),
-                new AppNavItem("Logs", "/Logs/Index"),
+                new AppNavItem("Logs", "/Logs/Index")
+            ]),
+        new AppNavSection(
+            SystemKey,
+            "System",
+            "Admin and maintenance",
+            "/Operations/Alerts",
+            [
                 new AppNavItem("Alerts", "/Operations/Alerts"),
-                new AppNavItem("Backups", "/Operations/Backups")
+                new AppNavItem("Backups", "/Operations/Backups"),
+                new AppNavItem("Web Interface", "/Settings/WebHttps"),
+                new AppNavItem("Password", "/Account/ChangePassword")
             ]),
         new AppNavSection(
             DiagnosticsKey,
@@ -109,7 +117,7 @@ public static class AppNavigation
 
         if (currentPath.StartsWith("/Settings/WebHttps", StringComparison.OrdinalIgnoreCase))
         {
-            return (SettingsKey, "/Settings/WebHttps");
+            return (SystemKey, "/Settings/WebHttps");
         }
 
         if (currentPath.StartsWith("/Settings", StringComparison.OrdinalIgnoreCase))
@@ -119,17 +127,22 @@ public static class AppNavigation
 
         if (currentPath.StartsWith("/Operations/Alerts", StringComparison.OrdinalIgnoreCase))
         {
-            return (OperationsKey, "/Operations/Alerts");
+            return (SystemKey, "/Operations/Alerts");
         }
 
         if (currentPath.StartsWith("/Operations/Backups", StringComparison.OrdinalIgnoreCase))
         {
-            return (OperationsKey, "/Operations/Backups");
+            return (SystemKey, "/Operations/Backups");
+        }
+
+        if (currentPath.StartsWith("/Account/ChangePassword", StringComparison.OrdinalIgnoreCase))
+        {
+            return (SystemKey, "/Account/ChangePassword");
         }
 
         if (currentPath.StartsWith("/Operations/Status", StringComparison.OrdinalIgnoreCase))
         {
-            return (OperationsKey, "/Operations/Status");
+            return (OverviewKey, "/Index");
         }
 
         if (currentPath.StartsWith("/Logs", StringComparison.OrdinalIgnoreCase))

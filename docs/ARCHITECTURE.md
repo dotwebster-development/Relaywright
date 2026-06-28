@@ -118,9 +118,10 @@ Runtime status, alerts, backups, diagnostics, and queue actions are intentionall
 
 Navigation is centralized in `UI/AppNavigation.cs`.
 
-- Overview: dashboard
-- Settings: relay settings, admin web listener/certificate settings, submission policy, and trusted IP profiles
-- Operations: runtime status, queue, logs, alerts, and backups
+- Overview: dashboard, runtime status, and outbound delivery pause/resume
+- Settings: relay settings, submission policy, and trusted IP profiles
+- Operations: queue and logs
+- System: alerts, backups, admin web listener/certificate settings, and password changes
 - Diagnostics: upstream connectivity checks and test email
 
 The UI is server-rendered Razor Pages with small page-local scripts for form behavior.
