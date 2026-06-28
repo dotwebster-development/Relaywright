@@ -110,10 +110,24 @@ function Invoke-HealthCheck {
         return $null
     }
 
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        $output = & $curl.Source --insecure --silent --show-error --fail --max-time 10 $Url 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return [pscustomobject]@{
+                StatusCode = 200
+                Content = ($output -join [Environment]::NewLine)
+            }
+        }
+
+        throw "curl.exe failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+    }
+
     if ($PSVersionTable.PSVersion.Major -ge 6) {
         return Invoke-WebRequest -Uri $Url -UseBasicParsing -SkipCertificateCheck -TimeoutSec 10
     }
 
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $previousCallback = [Net.ServicePointManager]::ServerCertificateValidationCallback
     [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
     try {
@@ -121,6 +135,40 @@ function Invoke-HealthCheck {
     }
     finally {
         [Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCallback
+    }
+}
+
+function Write-ServiceDiagnostics {
+    param([string]$Name)
+
+    Write-Host "==> Service diagnostics"
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($service) {
+        Write-Host "Service status: $($service.Status)"
+    }
+    else {
+        Write-Host "Service '$Name' was not found."
+    }
+
+    $serviceRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$Name"
+    if (Test-Path $serviceRegistryPath) {
+        $imagePath = (Get-ItemProperty -Path $serviceRegistryPath -Name ImagePath -ErrorAction SilentlyContinue).ImagePath
+        Write-Host "ImagePath: $imagePath"
+    }
+
+    $candidateSources = @($Name, "Relaywright.Web", ".NET Runtime", "Application Error")
+    foreach ($source in $candidateSources) {
+        try {
+            $events = Get-EventLog -LogName Application -Source $source -Newest 10 -ErrorAction Stop
+            if ($events) {
+                Write-Host "Recent Application events from '$source':"
+                foreach ($event in $events) {
+                    Write-Host "[$($event.TimeGenerated)] $($event.EntryType) $($event.Message)"
+                }
+            }
+        }
+        catch {
+        }
     }
 }
 
@@ -324,6 +372,7 @@ if (-not [string]::IsNullOrWhiteSpace($HealthUrl)) {
     } while ((Get-Date) -lt $deadline)
 
     if ($lastError) {
+        Write-ServiceDiagnostics -Name $ServiceName
         throw "Health check did not pass within $HealthTimeoutSeconds seconds. Last error: $lastError"
     }
 }
