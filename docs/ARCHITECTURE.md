@@ -15,7 +15,7 @@ Relaywright is an ASP.NET Core Razor Pages application that accepts SMTP submiss
 - singleton domain services
 - hosted services for SMTP intake, delivery, and maintenance
 
-`DataSeeder` runs at startup. It creates the SQLite database if needed, performs the current manual schema upgrades, ensures one relay configuration row exists, seeds localhost trusted networks, and creates the bootstrap admin if missing.
+`DataSeeder` runs at startup. It creates the SQLite database if needed, performs the current manual schema upgrades, ensures one relay configuration row exists, seeds localhost trusted networks, and creates the bootstrap admin only when an explicit bootstrap password is configured. Otherwise the first admin is created through the first-run setup page.
 
 ## Storage
 

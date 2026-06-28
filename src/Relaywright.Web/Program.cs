@@ -67,6 +67,7 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Account/Login");
+    options.Conventions.AllowAnonymousToPage("/Account/Setup");
 });
 
 builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();

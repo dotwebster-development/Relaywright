@@ -49,6 +49,7 @@ Use these guidelines when changing Relaywright. They are intentionally conservat
 
 - Persist secrets only as protected values.
 - Never write secrets, OAuth tokens, or passwords to logs, operational events, status messages, test output, or docs.
+- Keep first-run admin setup one-time only; once any user exists, anonymous setup must not create another account.
 - Keep Microsoft token acquisition in `MicrosoftOAuthTokenProvider`.
 - Keep authentication choices in `UpstreamAuthenticationService`.
 - When adding a new auth mode, update the enum, edit model, snapshot, validation, settings UI, authentication service, diagnostics, and tests.
@@ -108,4 +109,4 @@ For manual local checks:
 dotnet run --project src/Relaywright.Web/Relaywright.Web.csproj --urls http://127.0.0.1:5010
 ```
 
-Then sign in with the bootstrap admin account only on local/dev data, change the password, configure a trusted network, and verify the relevant page or flow.
+Then create or sign in with the initial admin account, configure a trusted network, and verify the relevant page or flow.

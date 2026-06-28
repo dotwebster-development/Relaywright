@@ -44,9 +44,11 @@ For test VMs, the script can generate a self-signed HTTPS certificate automatica
 
 ## GitHub Settings
 
-In the repository, configure this required Actions secret:
+No bootstrap secret is required for the normal Windows test lane. If no admin exists yet, Relaywright shows the first-run setup page.
 
-- `RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD`: a strong temporary bootstrap admin password. It must not be `ChangeMe!12345`.
+Optional Actions secret:
+
+- `RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD`: seeds the initial admin automatically instead of using first-run setup. It must not be `ChangeMe!12345`.
 
 Optional Actions variables:
 
@@ -134,8 +136,8 @@ https://<vm-name-or-ip>:5443/
 Expected first-login behavior:
 
 - The browser warns about the self-signed certificate unless you configured a trusted certificate.
-- The bootstrap admin login works with the configured GitHub secret.
-- Change the admin password immediately on the test VM.
+- If no admin has been created yet, `/Account/Setup` asks for the initial user name and password.
+- If you configured `RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD`, the seeded admin login works with that secret.
 - `/health` is anonymous and generic.
 - `/health/details` requires authentication.
 

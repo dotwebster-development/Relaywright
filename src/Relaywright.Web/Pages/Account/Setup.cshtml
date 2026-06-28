@@ -1,0 +1,29 @@
+@page
+@model Relaywright.Web.Pages.Account.SetupModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "First Run Setup";
+}
+
+<section class="page narrow">
+    <h1>First Run Setup</h1>
+
+    <form method="post" class="form-grid">
+        <div asp-validation-summary="ModelOnly" class="status error"></div>
+        <label>
+            <span>User Name</span>
+            <input asp-for="Input.UserName" autocomplete="username" />
+        </label>
+        <label>
+            <span>Password</span>
+            <input asp-for="Input.Password" type="password" autocomplete="new-password" />
+        </label>
+        <label>
+            <span>Confirm Password</span>
+            <input asp-for="Input.ConfirmPassword" type="password" autocomplete="new-password" />
+        </label>
+        <div class="actions">
+            <button type="submit">Create Admin</button>
+        </div>
+    </form>
+</section>

@@ -54,6 +54,26 @@ public sealed class DataSeederTests
     }
 
     [Fact]
+    public async Task ProductionAllowsEmptyBootstrapPasswordForFirstRunSetup()
+    {
+        await using var fixture = await SeederFixture.CreateAsync();
+        var seeder = fixture.CreateSeeder(
+            Environments.Production,
+            new BootstrapAdminOptions
+            {
+                UserName = "admin",
+                Email = "admin@localhost",
+                Password = string.Empty
+            });
+
+        await seeder.InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(0, await fixture.GetUserCountAsync());
+        Assert.Equal(1, await fixture.GetRelayConfigurationCountAsync());
+        Assert.Equal(2, await fixture.GetTrustedNetworkCountAsync());
+    }
+
+    [Fact]
     public async Task ProductionRejectsExistingUserWithDefaultDevelopmentPassword()
     {
         await using var fixture = await SeederFixture.CreateAsync();

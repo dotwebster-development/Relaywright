@@ -50,8 +50,24 @@ public sealed class DataSeeder(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        ValidateBootstrapUserName();
         await RejectDefaultPasswordsOutsideDevelopmentAsync(userManager, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(bootstrapAdminOptions.Value.Password))
+        {
+            if (!await userManager.Users.AnyAsync(cancellationToken))
+            {
+                logger.LogWarning("No bootstrap admin password is configured. First-run admin setup is required through the web UI.");
+            }
+            else
+            {
+                logger.LogInformation("Bootstrap admin password is not configured. Automatic admin seeding skipped.");
+            }
+
+            logger.LogInformation("Data store initialization completed.");
+            return;
+        }
+
+        ValidateBootstrapUserName();
 
         var existingAdmin = await userManager.FindByNameAsync(bootstrapAdminOptions.Value.UserName);
         if (existingAdmin is null)
@@ -96,11 +112,6 @@ public sealed class DataSeeder(
         if (string.IsNullOrWhiteSpace(bootstrapAdminOptions.Value.Email))
         {
             throw new InvalidOperationException("Bootstrap admin email is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(bootstrapAdminOptions.Value.Password))
-        {
-            throw new InvalidOperationException("Bootstrap admin password is required.");
         }
 
         if (!environment.IsDevelopment()

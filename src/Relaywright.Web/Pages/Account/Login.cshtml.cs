@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Identity;
 
 namespace Relaywright.Web.Pages.Account;
 
 [AllowAnonymous]
 public sealed class LoginModel(
+    UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
     ILogger<LoginModel> logger) : PageModel
 {
@@ -17,13 +19,24 @@ public sealed class LoginModel(
 
     public string? ErrorMessage { get; private set; }
 
-    public void OnGet(string? returnUrl = null)
+    public async Task<IActionResult> OnGetAsync(string? returnUrl = null, CancellationToken cancellationToken = default)
     {
+        if (!await userManager.Users.AnyAsync(cancellationToken))
+        {
+            return RedirectToPage("/Account/Setup");
+        }
+
         Input.ReturnUrl = returnUrl;
+        return Page();
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
+        if (!await userManager.Users.AnyAsync(cancellationToken))
+        {
+            return RedirectToPage("/Account/Setup");
+        }
+
         if (!ModelState.IsValid)
         {
             return Page();

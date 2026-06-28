@@ -359,10 +359,6 @@ if ([string]::IsNullOrWhiteSpace($DataDirectory)) {
     $DataDirectory = Join-Path $InstallRoot "App_Data"
 }
 
-if ($EnvironmentName -ne "Development" -and [string]::IsNullOrWhiteSpace($BootstrapPassword)) {
-    throw "BootstrapPassword is required outside Development so startup cannot seed the known development password."
-}
-
 $resolvedPackagePath = Resolve-Path -Path $PackagePath
 $releasesRoot = Join-Path $InstallRoot "releases"
 $releaseName = Get-Date -Format "yyyyMMdd-HHmmss"
