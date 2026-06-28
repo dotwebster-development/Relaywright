@@ -20,6 +20,7 @@ configure_firewall=false
 firewall_remote_address="Any"
 firewall_smtp_ports="2525"
 health_timeout_seconds=90
+sudo_password="${RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD:-${RELAYWRIGHT_SUDO_PASSWORD:-}}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,14 +62,6 @@ require_value() {
     [[ -n "$value" ]] || die "$name is required."
 }
 
-if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-    SUDO=()
-else
-    command -v sudo >/dev/null 2>&1 || die "sudo is required when the deployment script is not run as root."
-    sudo -n true >/dev/null 2>&1 || die "passwordless sudo is required for non-interactive deployment."
-    SUDO=(sudo)
-fi
-
 require_value "$package_path" "Package path"
 
 if [[ -z "$data_directory" ]]; then
@@ -90,6 +83,23 @@ write_env_line() {
     local value="$2"
     printf '%s=%s\n' "$key" "$(escape_env_value "$value")"
 }
+
+run_sudo_with_password() {
+    printf '%s\n' "$sudo_password" | sudo -S -p '' "$@"
+}
+
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    SUDO=()
+else
+    command -v sudo >/dev/null 2>&1 || die "sudo is required when the deployment script is not run as root."
+    if sudo -n true >/dev/null 2>&1; then
+        SUDO=(sudo)
+    else
+        [[ -n "$sudo_password" ]] || die "passwordless sudo is required for non-interactive deployment unless RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD is configured."
+        run_sudo_with_password true >/dev/null 2>&1 || die "configured sudo password was rejected."
+        SUDO=(run_sudo_with_password)
+    fi
+fi
 
 get_env_file_value() {
     local key="$1"

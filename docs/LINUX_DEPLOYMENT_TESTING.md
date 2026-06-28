@@ -24,7 +24,7 @@ On the Linux VM:
 
 1. Install the GitHub Actions self-hosted runner.
 2. Make sure it has the default labels `self-hosted`, `Linux`, and `X64`.
-3. Run the runner with passwordless `sudo`, or run the runner service as root on a disposable test VM.
+3. Give the runner non-interactive administrative rights. Preferred: passwordless `sudo` for the runner account. Alternative: set the `RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD` Actions secret. Disposable test VM option: run the runner service as root.
 4. Make sure `systemd`, `curl`, and `openssl` are available.
 5. Allow outbound HTTPS to GitHub.
 6. Make sure any VM host/network firewall allows the ports you want to test. The deployment script can add rules for active `firewalld` or `ufw`.
@@ -71,6 +71,7 @@ Optional Actions secrets:
 
 - `RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD`
 - `RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD`
+- `RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD`
 
 If you provide a real or pre-created PFX certificate, set both `RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PATH` and `RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD`. Otherwise the deploy script creates a self-signed test certificate under the install root.
 
