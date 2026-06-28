@@ -1,0 +1,130 @@
+name: Deploy Linux Test
+
+on:
+  push:
+    branches:
+      - development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-test-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        run: dotnet build Relaywright.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --configuration Release --no-build
+
+      - name: Publish self-contained Linux package
+        run: >
+          dotnet publish src/Relaywright.Web/Relaywright.Web.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained true
+          --output artifacts/relaywright-linux-x64
+          /p:PublishSingleFile=false
+          /p:PublishTrimmed=false
+          /p:DebugType=None
+          /p:DebugSymbols=false
+
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v7
+        with:
+          name: relaywright-linux-x64
+          path: artifacts/relaywright-linux-x64
+          if-no-files-found: error
+
+  deploy-linux-test:
+    needs: build-publish
+    runs-on: ${{ fromJson(vars.RELAYWRIGHT_LINUX_TEST_RUNS_ON || '["self-hosted","Linux","X64"]') }}
+    environment: linux-test
+
+    env:
+      RELAYWRIGHT_LINUX_TEST_INSTALL_ROOT: ${{ vars.RELAYWRIGHT_LINUX_TEST_INSTALL_ROOT }}
+      RELAYWRIGHT_LINUX_TEST_SERVICE_NAME: ${{ vars.RELAYWRIGHT_LINUX_TEST_SERVICE_NAME }}
+      RELAYWRIGHT_LINUX_TEST_DISPLAY_NAME: ${{ vars.RELAYWRIGHT_LINUX_TEST_DISPLAY_NAME }}
+      RELAYWRIGHT_LINUX_TEST_ENVIRONMENT: ${{ vars.RELAYWRIGHT_LINUX_TEST_ENVIRONMENT }}
+      RELAYWRIGHT_LINUX_TEST_URLS: ${{ vars.RELAYWRIGHT_LINUX_TEST_URLS }}
+      RELAYWRIGHT_LINUX_TEST_HEALTH_URL: ${{ vars.RELAYWRIGHT_LINUX_TEST_HEALTH_URL }}
+      RELAYWRIGHT_LINUX_TEST_DATA_DIRECTORY: ${{ vars.RELAYWRIGHT_LINUX_TEST_DATA_DIRECTORY }}
+      RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_USERNAME: ${{ vars.RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_USERNAME }}
+      RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_EMAIL: ${{ vars.RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_EMAIL }}
+      RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PATH: ${{ vars.RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PATH }}
+      RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME: ${{ vars.RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME }}
+      RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS: ${{ vars.RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS }}
+      RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS: ${{ vars.RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS }}
+      RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD }}
+      RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD }}
+
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v7
+
+      - name: Download Linux package
+        uses: actions/download-artifact@v8
+        with:
+          name: relaywright-linux-x64
+          path: artifact/relaywright-linux-x64
+
+      - name: Deploy Linux service
+        shell: bash
+        run: |
+          value_or_default() {
+            if [[ -z "$1" ]]; then
+              printf '%s' "$2"
+            else
+              printf '%s' "$1"
+            fi
+          }
+
+          args=(
+            --package-path "$PWD/artifact/relaywright-linux-x64"
+            --install-root "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_INSTALL_ROOT" "/opt/relaywright-test")"
+            --service-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_SERVICE_NAME" "relaywright-test")"
+            --display-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_DISPLAY_NAME" "Relaywright Test")"
+            --environment-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_ENVIRONMENT" "Production")"
+            --urls "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_URLS" "https://*:5443;http://*:5080")"
+            --health-url "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_HEALTH_URL" "https://127.0.0.1:5443/health")"
+            --data-directory "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_DATA_DIRECTORY" "/var/lib/relaywright-test")"
+            --bootstrap-user-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_USERNAME" "admin")"
+            --bootstrap-email "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_EMAIL" "admin@localhost")"
+            --certificate-dns-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME" "localhost")"
+            --firewall-remote-address "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS" "Any")"
+            --firewall-smtp-ports "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS" "2525")"
+            --generate-self-signed-certificate
+            --configure-firewall
+          )
+
+          if [[ -n "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD" ]]; then
+            args+=(--bootstrap-password "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD")
+          fi
+
+          if [[ -n "$RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PATH" ]]; then
+            args+=(--https-certificate-path "$RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PATH")
+          fi
+
+          if [[ -n "$RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD" ]]; then
+            args+=(--https-certificate-password "$RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD")
+          fi
+
+          bash scripts/linux/Deploy-RelaywrightTest.sh "${args[@]}"

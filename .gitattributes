@@ -1,0 +1,4 @@
+.gitattributes text eol=lf
+.github/workflows/*.yml text eol=lf
+docs/*.md text eol=lf
+*.sh text eol=lf
