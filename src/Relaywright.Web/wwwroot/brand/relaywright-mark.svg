@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Relaywright mark</title>
+  <desc id="desc">A stylized mail relay route forming an R and W monogram.</desc>
+  <rect width="64" height="64" rx="12" fill="#f8fbfc"/>
+  <path d="M12 21h22c7.2 0 12 4.3 12 10.6 0 4.5-2.4 7.9-6.5 9.6l8.5 11.8H36.7l-7.2-10.5H22.4V53H12V21Zm10.4 8.7v5.1h10.7c1.8 0 2.9-.9 2.9-2.6s-1.1-2.5-2.9-2.5H22.4Z" fill="#283038"/>
+  <path d="M8 45.5h9.8l8.6-18.8 8.6 18.8h5.4l6.9-15.4h8.5" fill="none" stroke="#088090" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50.5 23.8 57.8 30l-7.3 6.2" fill="none" stroke="#088090" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="17.5" y="30.5" width="19" height="12.5" rx="2.4" fill="#f8fbfc" stroke="#088090" stroke-width="3.2"/>
+  <path d="m19.8 33.3 7.2 6 7.2-6" fill="none" stroke="#088090" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="54" r="3.2" fill="#e8a820"/>
+  <circle cx="25" cy="54" r="3.2" fill="#e8a820"/>
+  <circle cx="34" cy="54" r="3.2" fill="#e8a820"/>
+</svg>
