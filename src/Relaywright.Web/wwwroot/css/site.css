@@ -361,7 +361,7 @@ textarea {
     margin: 0 auto;
 }
 
-.setup-page {
+.page.setup-page {
     max-width: 760px;
 }
 
