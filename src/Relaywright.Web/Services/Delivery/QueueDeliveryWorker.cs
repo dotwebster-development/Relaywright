@@ -14,6 +14,9 @@ public sealed class QueueDeliveryWorker(
     IOperationalEventService eventService,
     ILogger<QueueDeliveryWorker> logger) : BackgroundService
 {
+    private const int StateWriteRetryCount = 3;
+    private static readonly TimeSpan StateWriteRetryDelay = TimeSpan.FromMilliseconds(100);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var activeDeliveries = new List<Task>();
@@ -112,7 +115,12 @@ public sealed class QueueDeliveryWorker(
             var result = await upstreamDeliveryService.DeliverAsync(workItem, configuration, cancellationToken);
             if (result.Succeeded)
             {
-                await queueService.MarkDeliveredAsync(workItem, result, cancellationToken);
+                var markedDelivered = await TryMarkDeliveredAsync(workItem, result, cancellationToken);
+                if (!markedDelivered)
+                {
+                    return;
+                }
+
                 logger.LogInformation(
                     "Delivery processing completed successfully. MessageId={MessageId}; AttemptNumber={AttemptNumber}",
                     workItem.MessageId,
@@ -120,7 +128,12 @@ public sealed class QueueDeliveryWorker(
             }
             else
             {
-                await queueService.MarkFailedAsync(workItem, result, configuration, cancellationToken);
+                var markedFailed = await TryMarkFailedAsync(workItem, result, configuration, cancellationToken);
+                if (!markedFailed)
+                {
+                    return;
+                }
+
                 logger.LogWarning(
                     "Delivery processing completed with failure. MessageId={MessageId}; AttemptNumber={AttemptNumber}; FailureCategory={FailureCategory}; Permanent={Permanent}; ExceptionType={ExceptionType}",
                     workItem.MessageId,
@@ -130,19 +143,117 @@ public sealed class QueueDeliveryWorker(
                     result.ExceptionType);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
             logger.LogError(exception, "Delivery processing failed unexpectedly for {MessageId}", workItem.MessageId);
 
-            await eventService.WriteAsync(new OperationalEventRequest
+            var result = new DeliveryResult
             {
-                Severity = EventSeverity.Error,
-                Category = OperationalEventCategory.Delivery,
-                QueuedMessageId = workItem.MessageId,
-                RemoteIpAddress = workItem.RemoteIpAddress,
-                Message = "Delivery processing failed unexpectedly.",
-                Detail = exception.ToString()
-            });
+                FailureCategory = DeliveryFailureCategory.Transient,
+                ExceptionType = exception.GetType().Name,
+                ErrorDetail = exception.Message
+            };
+
+            await TryMarkFailedAsync(workItem, result, configuration, cancellationToken);
         }
+    }
+
+    private async Task<bool> TryMarkDeliveredAsync(
+        DeliveryWorkItem workItem,
+        DeliveryResult result,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= StateWriteRetryCount; attempt++)
+        {
+            try
+            {
+                await queueService.MarkDeliveredAsync(workItem, result, cancellationToken);
+                return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    exception,
+                    "Failed to mark delivered message after upstream success. MessageId={MessageId}; AttemptNumber={AttemptNumber}; StateWriteAttempt={StateWriteAttempt}",
+                    workItem.MessageId,
+                    workItem.AttemptNumber,
+                    attempt);
+
+                if (attempt == StateWriteRetryCount)
+                {
+                    await eventService.WriteAsync(new OperationalEventRequest
+                    {
+                        Severity = EventSeverity.Error,
+                        Category = OperationalEventCategory.Delivery,
+                        QueuedMessageId = workItem.MessageId,
+                        RemoteIpAddress = workItem.RemoteIpAddress,
+                        Message = "Queued message was accepted upstream, but local delivered state could not be persisted.",
+                        Detail = exception.ToString()
+                    }, cancellationToken);
+
+                    return false;
+                }
+
+                await Task.Delay(StateWriteRetryDelay, cancellationToken);
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<bool> TryMarkFailedAsync(
+        DeliveryWorkItem workItem,
+        DeliveryResult result,
+        RelayConfigurationSnapshot configuration,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= StateWriteRetryCount; attempt++)
+        {
+            try
+            {
+                await queueService.MarkFailedAsync(workItem, result, configuration, cancellationToken);
+                return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    exception,
+                    "Failed to persist delivery failure state. MessageId={MessageId}; AttemptNumber={AttemptNumber}; StateWriteAttempt={StateWriteAttempt}",
+                    workItem.MessageId,
+                    workItem.AttemptNumber,
+                    attempt);
+
+                if (attempt == StateWriteRetryCount)
+                {
+                    await eventService.WriteAsync(new OperationalEventRequest
+                    {
+                        Severity = EventSeverity.Error,
+                        Category = OperationalEventCategory.Delivery,
+                        QueuedMessageId = workItem.MessageId,
+                        RemoteIpAddress = workItem.RemoteIpAddress,
+                        Message = "Delivery failed, but local failure state could not be persisted.",
+                        Detail = exception.ToString()
+                    }, cancellationToken);
+
+                    return false;
+                }
+
+                await Task.Delay(StateWriteRetryDelay, cancellationToken);
+            }
+        }
+
+        return false;
     }
 }

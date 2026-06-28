@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
@@ -87,13 +88,17 @@ public sealed class IndexModel(
             PageNumber = TotalPages;
         }
 
-        var events = await query.ToListAsync(cancellationToken);
+        var (sql, parameters) = BuildPagedEventsSql(
+            Severity,
+            Category,
+            Search?.Trim(),
+            (PageNumber - 1) * PageSize,
+            PageSize);
 
-        Events = events
-            .OrderByDescending(x => x.OccurredUtc)
-            .Skip((PageNumber - 1) * PageSize)
-            .Take(PageSize)
-            .ToList();
+        Events = await dbContext.OperationalEvents
+            .FromSqlRaw(sql, parameters)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
         logger.LogDebug(
             "Logs page loaded. Severity={Severity}; Category={Category}; SearchPresent={SearchPresent}; PageNumber={PageNumber}; TotalCount={TotalCount}; ReturnedCount={ReturnedCount}; User={UserName}",
@@ -104,5 +109,63 @@ public sealed class IndexModel(
             TotalCount,
             Events.Count,
             User.Identity?.Name);
+    }
+
+    private static (string Sql, object[] Parameters) BuildPagedEventsSql(
+        EventSeverity? severity,
+        OperationalEventCategory? category,
+        string? search,
+        int offset,
+        int pageSize)
+    {
+        var filters = new List<string>();
+        var parameters = new List<object>
+        {
+            IntegerParameter("$limit", pageSize),
+            IntegerParameter("$offset", offset)
+        };
+
+        if (severity is not null)
+        {
+            filters.Add(@"oe.""Severity"" = $severity");
+            parameters.Add(IntegerParameter("$severity", (int)severity.Value));
+        }
+
+        if (category is not null)
+        {
+            filters.Add(@"oe.""Category"" = $category");
+            parameters.Add(IntegerParameter("$category", (int)category.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            filters.Add("""
+                (instr(oe."Message", $search) > 0
+                    OR (oe."Detail" IS NOT NULL AND instr(oe."Detail", $search) > 0)
+                    OR (oe."RemoteIpAddress" IS NOT NULL AND instr(oe."RemoteIpAddress", $search) > 0))
+                """);
+            parameters.Add(new SqliteParameter("$search", search));
+        }
+
+        var whereSql = filters.Count == 0
+            ? string.Empty
+            : $"{Environment.NewLine}WHERE {string.Join($"{Environment.NewLine}    AND ", filters)}";
+
+        var sql = $"""
+            SELECT oe.*
+            FROM "OperationalEvents" AS oe{whereSql}
+            ORDER BY oe."OccurredUtc" DESC
+            LIMIT $limit OFFSET $offset
+            """;
+
+        return (sql, parameters.ToArray());
+    }
+
+    private static SqliteParameter IntegerParameter(string name, int value)
+    {
+        return new SqliteParameter(name, SqliteType.Integer)
+        {
+            Value = value
+        };
     }
 }

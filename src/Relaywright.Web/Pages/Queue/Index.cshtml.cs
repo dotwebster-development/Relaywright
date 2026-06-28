@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
@@ -64,14 +65,32 @@ public sealed class IndexModel(
             PageNumber = TotalPages;
         }
 
-        var messages = await query
-            .Include(x => x.Recipients)
+        var (sql, parameters) = BuildPagedMessagesSql(
+            SelectedStatus,
+            Search?.Trim(),
+            (PageNumber - 1) * PageSize,
+            PageSize);
+
+        var orderedPage = await dbContext.QueuedMessages
+            .FromSqlRaw(sql, parameters)
+            .AsNoTracking()
             .ToListAsync(cancellationToken);
+        var orderedIds = orderedPage.Select(x => x.Id).ToArray();
+        var messageOrder = orderedIds
+            .Select((id, index) => new { id, index })
+            .ToDictionary(x => x.id, x => x.index);
+
+        var messages = orderedIds.Length == 0
+            ? []
+            : await dbContext.QueuedMessages
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(x => x.Recipients)
+                .Where(x => orderedIds.Contains(x.Id))
+                .ToListAsync(cancellationToken);
 
         Messages = messages
-            .OrderByDescending(x => x.AcceptedUtc)
-            .Skip((PageNumber - 1) * PageSize)
-            .Take(PageSize)
+            .OrderBy(x => messageOrder[x.Id])
             .ToList();
 
         logger.LogDebug(
@@ -86,4 +105,79 @@ public sealed class IndexModel(
 
     public bool IsStatusActive(string status) =>
         string.Equals(SelectedStatus, status, StringComparison.OrdinalIgnoreCase);
+
+    private static (string Sql, object[] Parameters) BuildPagedMessagesSql(
+        string selectedStatus,
+        string? search,
+        int offset,
+        int pageSize)
+    {
+        var filters = new List<string>();
+        var parameters = new List<object>
+        {
+            IntegerParameter("$limit", pageSize),
+            IntegerParameter("$offset", offset)
+        };
+
+        switch (selectedStatus)
+        {
+            case "failed":
+                filters.Add(@"qm.""Status"" IN ($failedStatus, $expiredStatus)");
+                parameters.Add(IntegerParameter("$failedStatus", (int)QueuedMessageStatus.Failed));
+                parameters.Add(IntegerParameter("$expiredStatus", (int)QueuedMessageStatus.Expired));
+                break;
+
+            case "delivered":
+                filters.Add(@"qm.""Status"" = $deliveredStatus");
+                parameters.Add(IntegerParameter("$deliveredStatus", (int)QueuedMessageStatus.Delivered));
+                break;
+
+            case "all":
+                break;
+
+            default:
+                filters.Add(@"qm.""Status"" IN ($pendingStatus, $retryStatus, $inProgressStatus)");
+                parameters.Add(IntegerParameter("$pendingStatus", (int)QueuedMessageStatus.Pending));
+                parameters.Add(IntegerParameter("$retryStatus", (int)QueuedMessageStatus.RetryScheduled));
+                parameters.Add(IntegerParameter("$inProgressStatus", (int)QueuedMessageStatus.InProgress));
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            filters.Add("""
+                (instr(qm."CorrelationId", $search) > 0
+                    OR instr(qm."EnvelopeFrom", $search) > 0
+                    OR (qm."RemoteIpAddress" IS NOT NULL AND instr(qm."RemoteIpAddress", $search) > 0)
+                    OR EXISTS (
+                        SELECT 1
+                        FROM "QueuedMessageRecipients" AS qmr
+                        WHERE qmr."QueuedMessageId" = qm."Id"
+                            AND instr(qmr."RecipientAddress", $search) > 0
+                    ))
+                """);
+            parameters.Add(new SqliteParameter("$search", search));
+        }
+
+        var whereSql = filters.Count == 0
+            ? string.Empty
+            : $"{Environment.NewLine}WHERE {string.Join($"{Environment.NewLine}    AND ", filters)}";
+
+        var sql = $"""
+            SELECT qm.*
+            FROM "QueuedMessages" AS qm{whereSql}
+            ORDER BY qm."AcceptedUtc" DESC
+            LIMIT $limit OFFSET $offset
+            """;
+
+        return (sql, parameters.ToArray());
+    }
+
+    private static SqliteParameter IntegerParameter(string name, int value)
+    {
+        return new SqliteParameter(name, SqliteType.Integer)
+        {
+            Value = value
+        };
+    }
 }

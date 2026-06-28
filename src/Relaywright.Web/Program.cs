@@ -57,7 +57,9 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/Account/Login";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
     options.SlidingExpiration = true;
 });
 
@@ -108,6 +110,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 
 app.Use(async (context, next) =>
@@ -165,7 +168,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
-app.MapGet("/health", async (
+app.MapGet("/health", () => Results.Json(new { status = "ok" })).AllowAnonymous();
+
+app.MapGet("/health/details", async (
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     AppPaths paths,
     IRelayConfigurationService relayConfigurationService,
@@ -233,6 +238,6 @@ app.MapGet("/health", async (
     return Results.Json(
         new { status = healthy ? "ok" : "degraded", checks },
         statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-}).AllowAnonymous();
+}).RequireAuthorization();
 
 app.Run();

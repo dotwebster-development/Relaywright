@@ -1,3 +1,4 @@
+using MailKit.Net.Smtp;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Delivery;
 using Xunit;
@@ -15,6 +16,42 @@ public sealed class DeliveryFailureClassifierTests
 
         Assert.True(result.IsPermanentFailure);
         Assert.Equal(DeliveryFailureCategory.Configuration, result.FailureCategory);
+    }
+
+    [Theory]
+    [InlineData(SmtpStatusCode.MailboxBusy)]
+    [InlineData(SmtpStatusCode.ServiceNotAvailable)]
+    [Trait("Category", "Unit")]
+    public void SmtpFourHundredResponsesBecomeTransientFailures(SmtpStatusCode statusCode)
+    {
+        var classifier = new DeliveryFailureClassifier();
+
+        var result = classifier.Classify(new SmtpCommandException(
+            SmtpErrorCode.RecipientNotAccepted,
+            statusCode,
+            "temporary SMTP failure"));
+
+        Assert.False(result.IsPermanentFailure);
+        Assert.Equal(DeliveryFailureCategory.Transient, result.FailureCategory);
+        Assert.Equal(((int)statusCode).ToString(), result.ResponseCode);
+    }
+
+    [Theory]
+    [InlineData(SmtpStatusCode.MailboxUnavailable)]
+    [InlineData(SmtpStatusCode.TransactionFailed)]
+    [Trait("Category", "Unit")]
+    public void SmtpFiveHundredResponsesBecomePermanentFailures(SmtpStatusCode statusCode)
+    {
+        var classifier = new DeliveryFailureClassifier();
+
+        var result = classifier.Classify(new SmtpCommandException(
+            SmtpErrorCode.RecipientNotAccepted,
+            statusCode,
+            "permanent SMTP failure"));
+
+        Assert.True(result.IsPermanentFailure);
+        Assert.Equal(DeliveryFailureCategory.Permanent, result.FailureCategory);
+        Assert.Equal(((int)statusCode).ToString(), result.ResponseCode);
     }
 
     [Fact]

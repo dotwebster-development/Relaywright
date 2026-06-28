@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -49,10 +50,13 @@ public sealed class DataSeeder(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        ValidateBootstrapUserName();
+        await RejectDefaultPasswordsOutsideDevelopmentAsync(userManager, cancellationToken);
+
         var existingAdmin = await userManager.FindByNameAsync(bootstrapAdminOptions.Value.UserName);
         if (existingAdmin is null)
         {
-            ValidateBootstrapAdminOptions();
+            ValidateBootstrapCreateOptions();
 
             var admin = new ApplicationUser
             {
@@ -79,13 +83,16 @@ public sealed class DataSeeder(
         logger.LogInformation("Data store initialization completed.");
     }
 
-    private void ValidateBootstrapAdminOptions()
+    private void ValidateBootstrapUserName()
     {
         if (string.IsNullOrWhiteSpace(bootstrapAdminOptions.Value.UserName))
         {
             throw new InvalidOperationException("Bootstrap admin user name is required.");
         }
+    }
 
+    private void ValidateBootstrapCreateOptions()
+    {
         if (string.IsNullOrWhiteSpace(bootstrapAdminOptions.Value.Email))
         {
             throw new InvalidOperationException("Bootstrap admin email is required.");
@@ -106,14 +113,48 @@ public sealed class DataSeeder(
         }
     }
 
+    private async Task RejectDefaultPasswordsOutsideDevelopmentAsync(
+        UserManager<ApplicationUser> userManager,
+        CancellationToken cancellationToken)
+    {
+        if (environment.IsDevelopment())
+        {
+            return;
+        }
+
+        var users = await userManager.Users.ToListAsync(cancellationToken);
+        foreach (var user in users)
+        {
+            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                continue;
+            }
+
+            var result = userManager.PasswordHasher.VerifyHashedPassword(
+                user,
+                user.PasswordHash,
+                BootstrapAdminOptions.DefaultDevelopmentPassword);
+
+            if (result != PasswordVerificationResult.Failed)
+            {
+                throw new InvalidOperationException(
+                    "An admin account still uses the default development password. Change it before starting outside Development.");
+            }
+        }
+    }
+
     private async Task UpgradeSchemaAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
     {
         logger.LogInformation("Checking database schema upgrades.");
 
         var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        await using var connection = new SqliteConnection(dbContext.Database.GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
+        var connection = dbContext.Database.GetDbConnection();
+        var closeConnection = connection.State != ConnectionState.Open;
+        if (closeConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
 
         await using (var command = connection.CreateCommand())
         {
@@ -166,6 +207,11 @@ public sealed class DataSeeder(
         await dbContext.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_OperationalEvents_Severity_OccurredUtc\" ON \"OperationalEvents\" (\"Severity\", \"OccurredUtc\");",
             cancellationToken);
+
+        if (closeConnection)
+        {
+            await connection.CloseAsync();
+        }
 
         logger.LogInformation("Database schema upgrade check completed.");
     }

@@ -31,27 +31,37 @@ public sealed class IndexModel(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var todayUtc = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
 
-        PendingCount = await dbContext.QueuedMessages.CountAsync(x => x.Status == QueuedMessageStatus.Pending, cancellationToken);
-        RetryCount =
-            await dbContext.QueuedMessages.CountAsync(x => x.Status == QueuedMessageStatus.RetryScheduled, cancellationToken)
-            + await dbContext.QueuedMessages.CountAsync(x => x.Status == QueuedMessageStatus.InProgress, cancellationToken);
-        FailedCount =
-            await dbContext.QueuedMessages.CountAsync(x => x.Status == QueuedMessageStatus.Failed, cancellationToken)
-            + await dbContext.QueuedMessages.CountAsync(x => x.Status == QueuedMessageStatus.Expired, cancellationToken);
-        DeliveredTodayCount = (await dbContext.QueuedMessages
-            .Where(x => x.Status == QueuedMessageStatus.Delivered)
-            .Select(x => x.DeliveredUtc)
-            .ToListAsync(cancellationToken))
-            .Count(x => x != null && x >= todayUtc);
+        PendingCount = await dbContext.QueuedMessages
+            .CountAsync(x => x.Status == QueuedMessageStatus.Pending, cancellationToken);
+        RetryCount = await dbContext.QueuedMessages
+            .CountAsync(x =>
+                x.Status == QueuedMessageStatus.RetryScheduled
+                || x.Status == QueuedMessageStatus.InProgress,
+                cancellationToken);
+        FailedCount = await dbContext.QueuedMessages
+            .CountAsync(x =>
+                x.Status == QueuedMessageStatus.Failed
+                || x.Status == QueuedMessageStatus.Expired,
+                cancellationToken);
+        DeliveredTodayCount = await dbContext.QueuedMessages
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM "QueuedMessages"
+                WHERE "Status" = {(int)QueuedMessageStatus.Delivered}
+                    AND "DeliveredUtc" IS NOT NULL
+                    AND "DeliveredUtc" >= {todayUtc}
+                """)
+            .CountAsync(cancellationToken);
 
-        var recentEvents = await dbContext.OperationalEvents
+        RecentEvents = await dbContext.OperationalEvents
+            .FromSqlRaw("""
+                SELECT *
+                FROM "OperationalEvents"
+                ORDER BY "OccurredUtc" DESC
+                LIMIT 20
+                """)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-
-        RecentEvents = recentEvents
-            .OrderByDescending(x => x.OccurredUtc)
-            .Take(20)
-            .ToList();
 
         logger.LogDebug(
             "Dashboard loaded. Pending={PendingCount}; Retry={RetryCount}; Failed={FailedCount}; DeliveredToday={DeliveredTodayCount}; RecentEventCount={RecentEventCount}; Listener={ListenerBindAddress}:{ListenerPort}; User={UserName}",

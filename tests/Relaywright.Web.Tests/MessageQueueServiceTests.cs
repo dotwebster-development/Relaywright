@@ -13,6 +13,56 @@ namespace Relaywright.Web.Tests;
 public sealed class MessageQueueServiceTests
 {
     [Fact]
+    public async Task TryClaimNextClaimsOnlyDueEligibleMessage()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await fixture.AddMessageAsync(QueuedMessageStatus.Pending, nextAttemptAtUtc: now.AddHours(1));
+        var due = await fixture.AddMessageAsync(QueuedMessageStatus.Pending, nextAttemptAtUtc: now.AddMinutes(-1));
+
+        var claimed = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(due.Id, claimed!.MessageId);
+        Assert.Equal(1, claimed.AttemptNumber);
+        Assert.Equal(QueuedMessageStatus.InProgress, await fixture.GetStatusAsync(due.Id));
+        Assert.Equal(1, await fixture.GetDeliveryAttemptCountAsync(due.Id));
+    }
+
+    [Fact]
+    public async Task TryClaimNextDoesNotImmediatelyDoubleClaim()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var message = await fixture.AddMessageAsync(QueuedMessageStatus.Pending);
+
+        var firstClaim = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+        var secondClaim = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+
+        Assert.NotNull(firstClaim);
+        Assert.Equal(message.Id, firstClaim!.MessageId);
+        Assert.Null(secondClaim);
+        Assert.Equal(1, await fixture.GetDeliveryAttemptCountAsync(message.Id));
+    }
+
+    [Fact]
+    public async Task TryClaimNextRecoversStaleInProgressMessage()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var message = await fixture.AddMessageAsync(
+            QueuedMessageStatus.InProgress,
+            attemptCount: 2,
+            lastAttemptStartedUtc: DateTimeOffset.UtcNow.AddMinutes(-20));
+
+        var claimed = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(message.Id, claimed!.MessageId);
+        Assert.Equal(3, claimed.AttemptNumber);
+        Assert.Equal(3, (await fixture.FindAsync(message.Id))!.AttemptCount);
+        Assert.Equal(1, await fixture.GetDeliveryAttemptCountAsync(message.Id));
+    }
+
+    [Fact]
     public async Task RetryNowRejectsDeliveredMessage()
     {
         await using var fixture = await QueueFixture.CreateAsync();
@@ -51,6 +101,50 @@ public sealed class MessageQueueServiceTests
         Assert.Equal("Queued message purged.", result.Message);
         Assert.Null(await fixture.FindAsync(message.Id));
         Assert.Contains(message.SpoolFileRelativePath, fixture.SpoolService.DeletedPaths);
+    }
+
+    [Fact]
+    public async Task CleanupOnlyRemovesRetentionEligibleRecordsAndSpoolFiles()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var deliveredOld = await fixture.AddMessageAsync(
+            QueuedMessageStatus.Delivered,
+            deliveredUtc: now.AddHours(-2),
+            lastAttemptCompletedUtc: now.AddHours(-2));
+        var deliveredFresh = await fixture.AddMessageAsync(
+            QueuedMessageStatus.Delivered,
+            deliveredUtc: now,
+            lastAttemptCompletedUtc: now);
+        var failedOld = await fixture.AddMessageAsync(
+            QueuedMessageStatus.Failed,
+            lastAttemptCompletedUtc: now.AddHours(-2));
+        var failedFresh = await fixture.AddMessageAsync(
+            QueuedMessageStatus.Failed,
+            lastAttemptCompletedUtc: now);
+        var expiredActive = await fixture.AddMessageAsync(
+            QueuedMessageStatus.Pending,
+            expiresUtc: now.AddMinutes(-1));
+        await fixture.AddOperationalEventAsync(now.AddHours(-2));
+        await fixture.AddOperationalEventAsync(now);
+
+        var deleted = await fixture.Service.CleanupAsync(new RelayConfigurationSnapshot
+        {
+            DeliveredRetentionHours = 1,
+            FailedRetentionHours = 1,
+            EventRetentionHours = 1
+        }, CancellationToken.None);
+
+        Assert.Equal(3, deleted);
+        Assert.Null(await fixture.FindAsync(deliveredOld.Id));
+        Assert.Null(await fixture.FindAsync(failedOld.Id));
+        Assert.NotNull(await fixture.FindAsync(deliveredFresh.Id));
+        Assert.NotNull(await fixture.FindAsync(failedFresh.Id));
+        Assert.Equal(QueuedMessageStatus.Expired, await fixture.GetStatusAsync(expiredActive.Id));
+        Assert.Contains(deliveredOld.SpoolFileRelativePath, fixture.SpoolService.DeletedPaths);
+        Assert.Contains(failedOld.SpoolFileRelativePath, fixture.SpoolService.DeletedPaths);
+        Assert.DoesNotContain(expiredActive.SpoolFileRelativePath, fixture.SpoolService.DeletedPaths);
+        Assert.Equal(1, await fixture.GetOperationalEventCountAsync());
     }
 
     private sealed class QueueFixture : IAsyncDisposable
@@ -92,8 +186,17 @@ public sealed class MessageQueueServiceTests
             return new QueueFixture(connection, factory);
         }
 
-        public async Task<QueuedMessage> AddMessageAsync(QueuedMessageStatus status)
+        public async Task<QueuedMessage> AddMessageAsync(
+            QueuedMessageStatus status,
+            DateTimeOffset? acceptedUtc = null,
+            DateTimeOffset? nextAttemptAtUtc = null,
+            DateTimeOffset? lastAttemptStartedUtc = null,
+            DateTimeOffset? lastAttemptCompletedUtc = null,
+            DateTimeOffset? deliveredUtc = null,
+            DateTimeOffset? expiresUtc = null,
+            int attemptCount = 0)
         {
+            var accepted = acceptedUtc ?? DateTimeOffset.UtcNow;
             await using var dbContext = _dbContextFactory.CreateDbContext();
             var message = new QueuedMessage
             {
@@ -102,13 +205,17 @@ public sealed class MessageQueueServiceTests
                 EnvelopeFrom = "sender@example.test",
                 SpoolFileRelativePath = $"{Guid.NewGuid():N}.eml",
                 Status = status,
-                AcceptedUtc = DateTimeOffset.UtcNow,
-                CreatedUtc = DateTimeOffset.UtcNow,
-                NextAttemptAtUtc = DateTimeOffset.UtcNow,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1),
-                LastAttemptCompletedUtc = status is QueuedMessageStatus.Failed or QueuedMessageStatus.Expired
-                    ? DateTimeOffset.UtcNow
-                    : null
+                AttemptCount = attemptCount,
+                AcceptedUtc = accepted,
+                CreatedUtc = accepted,
+                NextAttemptAtUtc = nextAttemptAtUtc ?? accepted,
+                ExpiresUtc = expiresUtc ?? accepted.AddHours(1),
+                LastAttemptStartedUtc = lastAttemptStartedUtc,
+                LastAttemptCompletedUtc = lastAttemptCompletedUtc
+                    ?? (status is QueuedMessageStatus.Failed or QueuedMessageStatus.Expired
+                        ? accepted
+                        : null),
+                DeliveredUtc = deliveredUtc
             };
 
             message.Recipients.Add(new QueuedMessageRecipient
@@ -121,6 +228,17 @@ public sealed class MessageQueueServiceTests
             return message;
         }
 
+        public async Task AddOperationalEventAsync(DateTimeOffset occurredUtc)
+        {
+            await using var dbContext = _dbContextFactory.CreateDbContext();
+            dbContext.OperationalEvents.Add(new OperationalEvent
+            {
+                OccurredUtc = occurredUtc,
+                Message = "event"
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
         public async Task<QueuedMessage?> FindAsync(Guid id)
         {
             await using var dbContext = _dbContextFactory.CreateDbContext();
@@ -130,6 +248,18 @@ public sealed class MessageQueueServiceTests
         public async Task<QueuedMessageStatus?> GetStatusAsync(Guid id)
         {
             return (await FindAsync(id))?.Status;
+        }
+
+        public async Task<int> GetDeliveryAttemptCountAsync(Guid id)
+        {
+            await using var dbContext = _dbContextFactory.CreateDbContext();
+            return await dbContext.DeliveryAttempts.CountAsync(x => x.QueuedMessageId == id);
+        }
+
+        public async Task<int> GetOperationalEventCountAsync()
+        {
+            await using var dbContext = _dbContextFactory.CreateDbContext();
+            return await dbContext.OperationalEvents.CountAsync();
         }
 
         public async ValueTask DisposeAsync()

@@ -32,6 +32,27 @@ public sealed class RazorPageOrderingTests
     }
 
     [Fact]
+    public async Task QueuePagePaginatesInSqliteOrder()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var ids = new List<Guid>();
+        var start = DateTimeOffset.UtcNow.AddHours(-1);
+        for (var i = 0; i < 55; i++)
+        {
+            ids.Add(await fixture.AddQueuedMessageAsync(start.AddMinutes(i)));
+        }
+
+        var model = fixture.CreateQueueModel();
+        model.PageNumber = 2;
+
+        await model.OnGetAsync(null, CancellationToken.None);
+
+        Assert.Equal(55, model.TotalCount);
+        Assert.Equal(2, model.TotalPages);
+        Assert.Equal(ids.Take(5).Reverse(), model.Messages.Select(x => x.Id));
+    }
+
+    [Fact]
     public async Task LogsPageOrdersEventsByOccurredUtcWithSqlite()
     {
         await using var fixture = await PageFixture.CreateAsync();
@@ -43,6 +64,26 @@ public sealed class RazorPageOrderingTests
 
         Assert.Equal(2, model.TotalCount);
         Assert.Equal(["newer", "older"], model.Events.Select(x => x.Message));
+    }
+
+    [Fact]
+    public async Task LogsPagePaginatesInSqliteOrder()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var start = DateTimeOffset.UtcNow.AddHours(-1);
+        for (var i = 0; i < 55; i++)
+        {
+            await fixture.AddOperationalEventAsync($"event-{i}", start.AddMinutes(i));
+        }
+
+        var model = fixture.CreateLogsModel();
+        model.PageNumber = 2;
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(55, model.TotalCount);
+        Assert.Equal(2, model.TotalPages);
+        Assert.Equal(Enumerable.Range(0, 5).Reverse().Select(x => $"event-{x}"), model.Events.Select(x => x.Message));
     }
 
     [Fact]

@@ -1,0 +1,341 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$PackagePath,
+
+    [string]$InstallRoot = "C:\Relaywright\Test",
+
+    [string]$ServiceName = "RelaywrightTest",
+
+    [string]$DisplayName = "Relaywright Test",
+
+    [string]$EnvironmentName = "Production",
+
+    [string]$Urls = "https://*:5443;http://*:5080",
+
+    [string]$HealthUrl = "https://127.0.0.1:5443/health",
+
+    [string]$DataDirectory = "",
+
+    [string]$BootstrapUserName = "admin",
+
+    [string]$BootstrapEmail = "admin@localhost",
+
+    [string]$BootstrapPassword = "",
+
+    [string]$HttpsCertificatePath = "",
+
+    [string]$HttpsCertificatePassword = "",
+
+    [switch]$GenerateSelfSignedCertificate,
+
+    [string]$CertificateDnsName = "localhost",
+
+    [int]$HealthTimeoutSeconds = 90
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "==> $Message"
+}
+
+function Assert-Administrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw "This script must run as Administrator because it creates and updates a Windows service."
+    }
+}
+
+function New-RandomPassword {
+    $bytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+        return [Convert]::ToBase64String($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+}
+
+function Get-ServiceEnvironmentValue {
+    param(
+        [string]$Name,
+        [string]$VariableName
+    )
+
+    $registryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$Name"
+    if (-not (Test-Path $registryPath)) {
+        return $null
+    }
+
+    $environment = (Get-ItemProperty -Path $registryPath -Name Environment -ErrorAction SilentlyContinue).Environment
+    foreach ($entry in @($environment)) {
+        if ($entry -like "$VariableName=*") {
+            return $entry.Substring($VariableName.Length + 1)
+        }
+    }
+
+    return $null
+}
+
+function Wait-ServiceStatus {
+    param(
+        [string]$Name,
+        [string]$Status,
+        [int]$TimeoutSeconds = 30
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+        if ($service -and $service.Status.ToString() -eq $Status) {
+            return
+        }
+
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Service '$Name' did not reach status '$Status' within $TimeoutSeconds seconds."
+}
+
+function Invoke-HealthCheck {
+    param([string]$Url)
+
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return $null
+    }
+
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        return Invoke-WebRequest -Uri $Url -UseBasicParsing -SkipCertificateCheck -TimeoutSec 10
+    }
+
+    $previousCallback = [Net.ServicePointManager]::ServerCertificateValidationCallback
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    try {
+        return Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 10
+    }
+    finally {
+        [Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCallback
+    }
+}
+
+function Ensure-TestCertificate {
+    param(
+        [string]$Path,
+        [string]$Password,
+        [string]$DnsName,
+        [string]$Service
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $Path = Join-Path $InstallRoot "certs\relaywright-test.pfx"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Password)) {
+        $Password = Get-ServiceEnvironmentValue `
+            -Name $Service `
+            -VariableName "ASPNETCORE_Kestrel__Certificates__Default__Password"
+    }
+
+    if ((Test-Path $Path) -and -not [string]::IsNullOrWhiteSpace($Password)) {
+        return @{
+            Path = $Path
+            Password = $Password
+        }
+    }
+
+    if (-not $GenerateSelfSignedCertificate) {
+        throw "Production-like HTTPS requires a certificate. Provide HttpsCertificatePath and HttpsCertificatePassword, or pass -GenerateSelfSignedCertificate for test VMs."
+    }
+
+    Write-Step "Creating self-signed HTTPS certificate for test VM"
+    $certificateDirectory = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($certificateDirectory)) {
+        New-Item -ItemType Directory -Path $certificateDirectory -Force | Out-Null
+    }
+
+    $Password = New-RandomPassword
+    $securePassword = ConvertTo-SecureString $Password -AsPlainText -Force
+    $dnsNames = @($DnsName)
+    if (-not [string]::IsNullOrWhiteSpace($env:COMPUTERNAME) -and $dnsNames -notcontains $env:COMPUTERNAME) {
+        $dnsNames += $env:COMPUTERNAME
+    }
+
+    $certificate = New-SelfSignedCertificate `
+        -DnsName $dnsNames `
+        -CertStoreLocation "Cert:\LocalMachine\My" `
+        -NotAfter (Get-Date).AddYears(2) `
+        -KeyExportPolicy Exportable
+
+    try {
+        Export-PfxCertificate `
+            -Cert "Cert:\LocalMachine\My\$($certificate.Thumbprint)" `
+            -FilePath $Path `
+            -Password $securePassword `
+            -Force | Out-Null
+    }
+    finally {
+        Remove-Item -Path "Cert:\LocalMachine\My\$($certificate.Thumbprint)" -Force -ErrorAction SilentlyContinue
+    }
+
+    return @{
+        Path = $Path
+        Password = $Password
+    }
+}
+
+Assert-Administrator
+
+if ([string]::IsNullOrWhiteSpace($BootstrapPassword) -and -not [string]::IsNullOrWhiteSpace($env:RELAYWRIGHT_BOOTSTRAP_PASSWORD)) {
+    $BootstrapPassword = $env:RELAYWRIGHT_BOOTSTRAP_PASSWORD
+}
+
+if ([string]::IsNullOrWhiteSpace($DataDirectory)) {
+    $DataDirectory = Join-Path $InstallRoot "App_Data"
+}
+
+if ($EnvironmentName -ne "Development" -and [string]::IsNullOrWhiteSpace($BootstrapPassword)) {
+    throw "BootstrapPassword is required outside Development so startup cannot seed the known development password."
+}
+
+$resolvedPackagePath = Resolve-Path -Path $PackagePath
+$releasesRoot = Join-Path $InstallRoot "releases"
+$releaseName = Get-Date -Format "yyyyMMdd-HHmmss"
+$releasePath = Join-Path $releasesRoot $releaseName
+$stagingRoot = Join-Path $InstallRoot "staging"
+
+Write-Step "Preparing directories"
+New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $releasesRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $DataDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+
+if (Test-Path $releasePath) {
+    Remove-Item -LiteralPath $releasePath -Recurse -Force
+}
+
+New-Item -ItemType Directory -Path $releasePath -Force | Out-Null
+
+if ((Get-Item $resolvedPackagePath).PSIsContainer) {
+    Write-Step "Copying package directory to release $releaseName"
+    Copy-Item -Path (Join-Path $resolvedPackagePath "*") -Destination $releasePath -Recurse -Force
+}
+else {
+    Write-Step "Expanding package archive to release $releaseName"
+    Expand-Archive -Path $resolvedPackagePath -DestinationPath $releasePath -Force
+}
+
+$exePath = Join-Path $releasePath "Relaywright.Web.exe"
+if (-not (Test-Path $exePath)) {
+    throw "Relaywright.Web.exe was not found in package path '$PackagePath'."
+}
+
+if ($EnvironmentName -ne "Development" -and $Urls -match "https://") {
+    $certificate = Ensure-TestCertificate `
+        -Path $HttpsCertificatePath `
+        -Password $HttpsCertificatePassword `
+        -DnsName $CertificateDnsName `
+        -Service $ServiceName
+    $HttpsCertificatePath = $certificate.Path
+    $HttpsCertificatePassword = $certificate.Password
+}
+
+$existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($existingService -and $existingService.Status -ne "Stopped") {
+    Write-Step "Stopping service $ServiceName"
+    Stop-Service -Name $ServiceName -Force
+    Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds 45
+}
+
+$binaryPath = "`"$exePath`""
+if ($existingService) {
+    Write-Step "Updating service $ServiceName"
+    & sc.exe config $ServiceName binPath= $binaryPath DisplayName= $DisplayName start= auto | Out-Host
+}
+else {
+    Write-Step "Creating service $ServiceName"
+    New-Service `
+        -Name $ServiceName `
+        -DisplayName $DisplayName `
+        -BinaryPathName $binaryPath `
+        -StartupType Automatic | Out-Null
+}
+
+& sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/""/60000 | Out-Host
+
+$serviceEnvironment = @(
+    "ASPNETCORE_ENVIRONMENT=$EnvironmentName",
+    "ASPNETCORE_URLS=$Urls",
+    "Storage__DataDirectory=$DataDirectory",
+    "BootstrapAdmin__UserName=$BootstrapUserName",
+    "BootstrapAdmin__Email=$BootstrapEmail"
+)
+
+if (-not [string]::IsNullOrWhiteSpace($BootstrapPassword)) {
+    $serviceEnvironment += "BootstrapAdmin__Password=$BootstrapPassword"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HttpsCertificatePath)) {
+    $serviceEnvironment += "ASPNETCORE_Kestrel__Certificates__Default__Path=$HttpsCertificatePath"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HttpsCertificatePassword)) {
+    $serviceEnvironment += "ASPNETCORE_Kestrel__Certificates__Default__Password=$HttpsCertificatePassword"
+}
+
+Write-Step "Writing service environment"
+$serviceRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
+New-ItemProperty `
+    -Path $serviceRegistryPath `
+    -Name Environment `
+    -Value $serviceEnvironment `
+    -PropertyType MultiString `
+    -Force | Out-Null
+
+Write-Step "Starting service $ServiceName"
+Start-Service -Name $ServiceName
+Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds 45
+
+if (-not [string]::IsNullOrWhiteSpace($HealthUrl)) {
+    Write-Step "Waiting for health check $HealthUrl"
+    $deadline = (Get-Date).AddSeconds($HealthTimeoutSeconds)
+    $lastError = $null
+    do {
+        try {
+            $response = Invoke-HealthCheck -Url $HealthUrl
+            if ($response.StatusCode -eq 200 -and $response.Content -match '"status"\s*:\s*"ok"') {
+                Write-Step "Health check passed"
+                $lastError = $null
+                break
+            }
+
+            $lastError = "Unexpected health response: HTTP $($response.StatusCode) $($response.Content)"
+        }
+        catch {
+            $lastError = $_.Exception.Message
+        }
+
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    if ($lastError) {
+        throw "Health check did not pass within $HealthTimeoutSeconds seconds. Last error: $lastError"
+    }
+}
+
+Write-Step "Pruning old releases"
+Get-ChildItem -Path $releasesRoot -Directory |
+    Sort-Object CreationTime -Descending |
+    Select-Object -Skip 5 |
+    Remove-Item -Recurse -Force
+
+Write-Step "Relaywright Windows test deployment complete"
+Write-Host "Service: $ServiceName"
+Write-Host "Release: $releasePath"
+Write-Host "Data: $DataDirectory"
+Write-Host "Urls: $Urls"
