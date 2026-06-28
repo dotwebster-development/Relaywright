@@ -41,8 +41,14 @@
                 </nav>
 
                 <div class="rail-footer">
-                    <p class="rail-footer-title">Single-upstream relay</p>
-                    <p class="rail-footer-copy">Stable routing, IP filtering, queue visibility, and diagnostics in one workspace.</p>
+                    <div class="rail-account">
+                        <p class="rail-account-label">Signed in</p>
+                        <p class="rail-account-user">@User.Identity?.Name</p>
+                        <a class="rail-account-link" asp-page="/Account/ChangePassword">Password</a>
+                        <form method="post" asp-page="/Account/Logout" class="rail-account-form">
+                            <button type="submit" class="secondary-button">Logout</button>
+                        </form>
+                    </div>
                 </div>
             </aside>
         }
@@ -50,27 +56,13 @@
         <div class="workspace">
             @if (isAuthenticated && navState is not null)
             {
-                <header class="utility-bar">
-                    <div class="utility-context">
+                <nav class="section-nav" aria-label="@($"{navState.ActiveSection.Label} pages")">
+                    <div class="section-nav-heading">
                         <button type="button" class="nav-toggle" data-nav-toggle aria-controls="app-rail" aria-expanded="false">
                             Menu
                         </button>
-                        <div>
-                            <p class="utility-kicker">@navState.ActiveSection.Label</p>
-                            <p class="utility-copy">@navState.ActiveSection.Description</p>
-                        </div>
+                        <div class="section-nav-label">@navState.ActiveSection.Label</div>
                     </div>
-                    <div class="utility-actions">
-                        <span class="utility-user">@User.Identity?.Name</span>
-                        <a class="utility-link" asp-page="/Account/ChangePassword">Password</a>
-                        <form method="post" asp-page="/Account/Logout" class="inline-form">
-                            <button type="submit" class="secondary-button">Logout</button>
-                        </form>
-                    </div>
-                </header>
-
-                <nav class="section-nav" aria-label="@($"{navState.ActiveSection.Label} pages")">
-                    <div class="section-nav-label">@navState.ActiveSection.Label</div>
                     <div class="section-nav-items">
                         @foreach (var item in navState.ActiveSection.Items)
                         {
