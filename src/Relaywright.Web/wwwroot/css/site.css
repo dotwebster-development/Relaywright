@@ -440,6 +440,7 @@ textarea {
 
 .page.setup-page {
     max-width: 760px;
+    margin: 0 auto;
 }
 
 .setup-panel {
@@ -480,7 +481,7 @@ textarea {
 
 .setup-progress {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     padding: 0;
     margin: 0;
