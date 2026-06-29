@@ -202,6 +202,14 @@ begin
     Result := '';
 end;
 
+function PsBool(Value: Boolean): String;
+begin
+  if Value then
+    Result := 'true'
+  else
+    Result := 'false';
+end;
+
 procedure SaveUninstallScript;
 var
   Script: String;
@@ -238,7 +246,7 @@ begin
     ' -FirewallRemoteAddress ' + Quote(FirewallPage.Values[0]) +
     ' -BootstrapUserName ' + Quote(BootstrapPage.Values[0]) +
     ' -BootstrapEmail ' + Quote(BootstrapPage.Values[1]) +
-    ' -GenerateSelfSignedCertificate:$' + LowerCase(BoolToStr(OptionPage.Values[2], True)) +
+    ' -GenerateSelfSignedCertificate:$' + PsBool(OptionPage.Values[2]) +
     ' -NonInteractive';
 
   Params := Params + BoolParameter('EnableHttp', OptionPage.Values[0]);
