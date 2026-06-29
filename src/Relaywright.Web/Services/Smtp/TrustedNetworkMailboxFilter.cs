@@ -21,6 +21,7 @@ public sealed class TrustedNetworkMailboxFilter(
         CancellationToken cancellationToken)
     {
         var remoteIp = context.GetRemoteIpAddress();
+        var envelopeFrom = SmtpMailboxFormatter.Format(from);
         var profile = await trustedNetworkService.FindMatchingAsync(remoteIp, cancellationToken);
         if (profile is null)
         {
@@ -28,7 +29,7 @@ public sealed class TrustedNetworkMailboxFilter(
                 "SMTP MAIL FROM denied because remote IP is not trusted. SessionId={SessionId}; RemoteIp={RemoteIp}; EnvelopeFrom={EnvelopeFrom}; DeclaredSize={DeclaredSize}",
                 context.GetOrCreateSessionId(),
                 remoteIp?.ToString(),
-                from.ToString(),
+                envelopeFrom,
                 size);
 
             await eventService.WriteAsync(new OperationalEventRequest
@@ -44,7 +45,7 @@ public sealed class TrustedNetworkMailboxFilter(
         }
 
         var policy = await trustedDevicePolicyService.GetPolicyAsync(cancellationToken);
-        var policyDecision = trustedDevicePolicyService.CanAcceptFrom(profile, policy, from.ToString() ?? string.Empty, size);
+        var policyDecision = trustedDevicePolicyService.CanAcceptFrom(profile, policy, envelopeFrom, size);
         if (!policyDecision.Allowed)
         {
             await WriteDeniedAsync(context, remoteIp?.ToString(), policyDecision.Message, cancellationToken);
@@ -53,7 +54,7 @@ public sealed class TrustedNetworkMailboxFilter(
                 context.GetOrCreateSessionId(),
                 remoteIp?.ToString(),
                 profile.Id,
-                from.ToString(),
+                envelopeFrom,
                 policyDecision.Message);
             return false;
         }
@@ -78,7 +79,7 @@ public sealed class TrustedNetworkMailboxFilter(
             context.GetOrCreateSessionId(),
             remoteIp?.ToString(),
             profile.Id,
-            from.ToString(),
+            envelopeFrom,
             size);
 
         return true;
@@ -91,6 +92,8 @@ public sealed class TrustedNetworkMailboxFilter(
         CancellationToken cancellationToken)
     {
         var remoteIp = context.GetRemoteIpAddress();
+        var envelopeFrom = SmtpMailboxFormatter.Format(from);
+        var recipient = SmtpMailboxFormatter.Format(to);
         var profile = await trustedNetworkService.FindMatchingAsync(remoteIp, cancellationToken);
         if (profile is null)
         {
@@ -100,7 +103,7 @@ public sealed class TrustedNetworkMailboxFilter(
 
         var policy = await trustedDevicePolicyService.GetPolicyAsync(cancellationToken);
         var recipientNumber = context.GetNextRecipientNumber();
-        var decision = trustedDevicePolicyService.CanDeliverTo(profile, policy, to.ToString() ?? string.Empty, recipientNumber);
+        var decision = trustedDevicePolicyService.CanDeliverTo(profile, policy, recipient, recipientNumber);
         if (!decision.Allowed)
         {
             await WriteDeniedAsync(context, remoteIp?.ToString(), decision.Message, cancellationToken);
@@ -109,8 +112,8 @@ public sealed class TrustedNetworkMailboxFilter(
                 context.GetOrCreateSessionId(),
                 remoteIp?.ToString(),
                 profile.Id,
-                from.ToString(),
-                to.ToString(),
+                envelopeFrom,
+                recipient,
                 recipientNumber,
                 decision.Message);
             return false;
@@ -122,8 +125,8 @@ public sealed class TrustedNetworkMailboxFilter(
             "SMTP RCPT TO accepted. SessionId={SessionId}; RemoteIp={RemoteIp}; EnvelopeFrom={EnvelopeFrom}; Recipient={Recipient}",
             context.GetOrCreateSessionId(),
             remoteIp?.ToString(),
-            from.ToString(),
-            to.ToString());
+            envelopeFrom,
+            recipient);
 
         return true;
     }
