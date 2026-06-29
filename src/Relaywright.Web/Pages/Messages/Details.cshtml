@@ -11,19 +11,28 @@
             <h1>Message Details</h1>
             <p class="page-summary">Review queue metadata, parsed headers, and recent delivery attempts for a single accepted message.</p>
         </div>
-        <div class="page-actions">
-            <a asp-page="/Queue/Index">Back To Queue</a>
-        </div>
     </header>
+
+    <div class="surface-toolbar">
+        <div class="toolbar-right">
+            <div class="page-actions">
+                <a asp-page="/Queue/Index">Back To Queue</a>
+            </div>
+        </div>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
 
     @if (Model.Message is null)
     {
-        <p>Message not found.</p>
+        <section class="panel">
+            <p>Message not found.</p>
+        </section>
     }
     else
     {

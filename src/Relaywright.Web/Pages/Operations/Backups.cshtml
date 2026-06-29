@@ -11,25 +11,51 @@
             <h1>Backups</h1>
             <p class="page-summary">Create and validate backup bundles for the database, spool, Data Protection keys, certificates, and listener configuration.</p>
         </div>
-        <div class="page-actions">
-            <form method="post" asp-page-handler="Create" class="inline-form">
-                <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional encryption password" />
-                <button type="submit">Create Backup</button>
-            </form>
-        </div>
     </header>
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
+
+    <div class="surface-toolbar">
+        <div class="toolbar-right">
+            <div class="page-actions">
+                <form method="post" asp-page-handler="Create" class="inline-form">
+                    <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional encryption password" />
+                    <button type="submit">Create Backup</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <section class="panel">
+        <h2>Restore Readiness</h2>
+        <dl class="kv">
+            <dt>Status</dt>
+            <dd><span class="status-badge @(Model.Readiness.IsReady ? "status-delivered" : "severity-warning")">@(Model.Readiness.IsReady ? "Ready" : "Needs attention")</span></dd>
+            <dt>Last Good Backup</dt>
+            <dd>@(Model.Readiness.LastGoodBackupUtc?.ToLocalTime().ToString("g") ?? "None")</dd>
+            <dt>Age</dt>
+            <dd>@(Model.Readiness.LastGoodBackupAgeHours is null ? "Not available" : $"{Model.Readiness.LastGoodBackupAgeHours} hour(s)")</dd>
+            <dt>Stale After</dt>
+            <dd>@Model.Readiness.StaleAfterHours hour(s)</dd>
+            <dt>Backup Storage</dt>
+            <dd>@Relaywright.Web.Pages.IndexModel.FormatBytes(Model.Readiness.BackupStorageBytes)</dd>
+            <dt>Message</dt>
+            <dd>@Model.Readiness.Message</dd>
+        </dl>
+    </section>
 
     <section class="settings-block">
         <div class="settings-block-title">Schedule</div>
         <form method="post" asp-page-handler="SaveSchedule" class="compact-grid">
             <div class="toggle-field">
-                <label class="toggle-control">
+                <label class="switch-control">
                     <input asp-for="Schedule.IsEnabled" type="checkbox" />
+                    <span class="switch-control-track" aria-hidden="true"></span>
                     <span>Scheduled Backups</span>
                 </label>
             </div>

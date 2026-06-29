@@ -13,14 +13,14 @@ public sealed class IndexModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IRelayConfigurationService relayConfigurationService,
     IRuntimeStatusService runtimeStatusService,
+    IDashboardMetricsService dashboardMetricsService,
     ILogger<IndexModel> logger) : PageModel
 {
     public RelayConfigurationSnapshot Configuration { get; private set; } = new();
 
     public RuntimeStatusSnapshot RuntimeStatus { get; private set; } = new();
 
-    [BindProperty]
-    public string? PauseReason { get; set; }
+    public DashboardMetricsSnapshot Metrics { get; private set; } = new();
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -39,6 +39,7 @@ public sealed class IndexModel(
     {
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
         RuntimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
+        Metrics = await dashboardMetricsService.GetSnapshotAsync(Configuration, cancellationToken);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var todayUtc = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
@@ -87,9 +88,23 @@ public sealed class IndexModel(
             User.Identity?.Name);
     }
 
+    public static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        var value = (double)Math.Max(0, bytes);
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.#} {units[unit]}";
+    }
+
     public async Task<IActionResult> OnPostPauseAsync(CancellationToken cancellationToken)
     {
-        await runtimeStatusService.PauseDeliveryAsync(PauseReason, User.Identity?.Name, cancellationToken);
+        await runtimeStatusService.PauseDeliveryAsync(null, User.Identity?.Name, cancellationToken);
         StatusMessage = "Outbound delivery paused.";
         logger.LogWarning("Outbound delivery pause requested from dashboard. User={UserName}", User.Identity?.Name);
         return RedirectToPage();

@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages.Settings;
 
 public sealed class TrustedNetworksModel(
     ITrustedNetworkService trustedNetworkService,
+    IConfigurationSnapshotService configurationSnapshotService,
     ILogger<TrustedNetworksModel> logger) : PageModel
 {
     [BindProperty]
@@ -35,6 +37,11 @@ public sealed class TrustedNetworksModel(
     {
         try
         {
+            await configurationSnapshotService.CaptureAsync(
+                ConfigurationSnapshotService.TrustedNetworksArea,
+                User.Identity?.Name,
+                "Snapshot before trusted network save.",
+                cancellationToken);
             await trustedNetworkService.AddOrUpdateAsync(Input, cancellationToken);
             StatusMessage = "Trusted network saved.";
             logger.LogInformation(
@@ -66,6 +73,11 @@ public sealed class TrustedNetworksModel(
 
     public async Task<IActionResult> OnPostDeleteAsync(int id, CancellationToken cancellationToken)
     {
+        await configurationSnapshotService.CaptureAsync(
+            ConfigurationSnapshotService.TrustedNetworksArea,
+            User.Identity?.Name,
+            "Snapshot before trusted network delete.",
+            cancellationToken);
         await trustedNetworkService.DeleteAsync(id, cancellationToken);
         StatusMessage = "Trusted network deleted.";
         logger.LogInformation("Trusted network delete requested from admin page. Id={TrustedNetworkId}; User={UserName}", id, User.Identity?.Name);

@@ -4,6 +4,8 @@ namespace Relaywright.Web.UI;
 
 public sealed record AppNavItem(string Label, string Page);
 
+public sealed record SettingsSearchItem(string Label, string Group, string Page, string Keywords);
+
 public sealed record AppNavSection(
     string Key,
     string Label,
@@ -17,6 +19,8 @@ public sealed class AppNavState(
     string activeItemPage)
 {
     public IReadOnlyList<AppNavSection> Sections { get; } = sections;
+
+    public IReadOnlyList<SettingsSearchItem> SettingsSearchItems { get; } = AppNavigation.SettingsSearchItems;
 
     public string ActiveSectionKey { get; } = activeSectionKey;
 
@@ -76,7 +80,9 @@ public static class AppNavigation
             [
                 new AppNavItem("Alerts", "/Operations/Alerts"),
                 new AppNavItem("Backups", "/Operations/Backups"),
+                new AppNavItem("Change History", "/Operations/ChangeHistory"),
                 new AppNavItem("Web Interface", "/Settings/WebHttps"),
+                new AppNavItem("Certificate", "/Settings/WebCertificate"),
                 new AppNavItem("Password", "/Account/ChangePassword")
             ]),
         new AppNavSection(
@@ -86,8 +92,58 @@ public static class AppNavigation
             "/Diagnostics/Index",
             [
                 new AppNavItem("Diagnostics", "/Diagnostics/Index"),
+                new AppNavItem("Flow Checker", "/Diagnostics/Flow"),
                 new AppNavItem("Test Email", "/Diagnostics/TestEmail")
             ])
+    ];
+
+    internal static readonly SettingsSearchItem[] SettingsSearchItems =
+    [
+        new SettingsSearchItem(
+            "Relay Settings",
+            "Settings",
+            "/Settings/Relay",
+            "smtp listener bind address port hostname starttls upstream smart host relay timeout authentication oauth basic username password retry cleanup retention delivery queue certificate"),
+        new SettingsSearchItem(
+            "Submission Policy",
+            "Settings",
+            "/Settings/SubmissionPolicy",
+            "policy max message size recipients allowed senders blocked senders recipient domains allowed domains blocked domains acceptance rules"),
+        new SettingsSearchItem(
+            "Trusted IPs",
+            "Settings",
+            "/Settings/TrustedNetworks",
+            "trusted networks cidr ip devices printers scanner owner location rate limit hourly max size recipients allowed blocked senders domains"),
+        new SettingsSearchItem(
+            "Alerts",
+            "System",
+            "/Operations/Alerts",
+            "alerts thresholds cooldown email recipients notifications queue depth oldest message failed expired listener down disk space certificate expiry upstream failures"),
+        new SettingsSearchItem(
+            "Backups",
+            "System",
+            "/Operations/Backups",
+            "backup restore readiness schedule retention validation encryption password download delete database spool keys certificates"),
+        new SettingsSearchItem(
+            "Web Interface",
+            "System",
+            "/Settings/WebHttps",
+            "admin web interface listener https http port restart service browser ui"),
+        new SettingsSearchItem(
+            "Certificate",
+            "System",
+            "/Settings/WebCertificate",
+            "https certificate pfx p12 pem private key self signed dns names expiry password cert upload"),
+        new SettingsSearchItem(
+            "Change History",
+            "System",
+            "/Operations/ChangeHistory",
+            "change history snapshots rollback revert settings configuration restore previous"),
+        new SettingsSearchItem(
+            "Password",
+            "System",
+            "/Account/ChangePassword",
+            "admin account password credentials login change password")
     ];
 
     public static AppNavState Resolve(PathString requestPath)
@@ -120,6 +176,11 @@ public static class AppNavigation
             return (SystemKey, "/Settings/WebHttps");
         }
 
+        if (currentPath.StartsWith("/Settings/WebCertificate", StringComparison.OrdinalIgnoreCase))
+        {
+            return (SystemKey, "/Settings/WebCertificate");
+        }
+
         if (currentPath.StartsWith("/Settings", StringComparison.OrdinalIgnoreCase))
         {
             return (SettingsKey, "/Settings/Relay");
@@ -133,6 +194,11 @@ public static class AppNavigation
         if (currentPath.StartsWith("/Operations/Backups", StringComparison.OrdinalIgnoreCase))
         {
             return (SystemKey, "/Operations/Backups");
+        }
+
+        if (currentPath.StartsWith("/Operations/ChangeHistory", StringComparison.OrdinalIgnoreCase))
+        {
+            return (SystemKey, "/Operations/ChangeHistory");
         }
 
         if (currentPath.StartsWith("/Account/ChangePassword", StringComparison.OrdinalIgnoreCase))
@@ -158,9 +224,17 @@ public static class AppNavigation
 
         if (currentPath.StartsWith("/Diagnostics", StringComparison.OrdinalIgnoreCase))
         {
-            return currentPath.StartsWith("/Diagnostics/TestEmail", StringComparison.OrdinalIgnoreCase)
-                ? (DiagnosticsKey, "/Diagnostics/TestEmail")
-                : (DiagnosticsKey, "/Diagnostics/Index");
+            if (currentPath.StartsWith("/Diagnostics/TestEmail", StringComparison.OrdinalIgnoreCase))
+            {
+                return (DiagnosticsKey, "/Diagnostics/TestEmail");
+            }
+
+            if (currentPath.StartsWith("/Diagnostics/Flow", StringComparison.OrdinalIgnoreCase))
+            {
+                return (DiagnosticsKey, "/Diagnostics/Flow");
+            }
+
+            return (DiagnosticsKey, "/Diagnostics/Index");
         }
 
         return (OverviewKey, "/Index");

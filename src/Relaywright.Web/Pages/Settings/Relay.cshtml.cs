@@ -7,12 +7,14 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Relay;
 
 namespace Relaywright.Web.Pages.Settings;
 
 public sealed class RelayModel(
     IRelayConfigurationService relayConfigurationService,
+    IConfigurationSnapshotService configurationSnapshotService,
     ILogger<RelayModel> logger) : PageModel
 {
     [BindProperty]
@@ -95,6 +97,11 @@ public sealed class RelayModel(
 
         try
         {
+            await configurationSnapshotService.CaptureAsync(
+                ConfigurationSnapshotService.RelayArea,
+                User.Identity?.Name,
+                "Snapshot before relay settings save.",
+                cancellationToken);
             await relayConfigurationService.SaveAsync(Input, cancellationToken);
             StatusMessage = "Relay settings saved.";
             logger.LogInformation(

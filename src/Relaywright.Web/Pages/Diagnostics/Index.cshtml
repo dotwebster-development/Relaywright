@@ -11,10 +11,15 @@
             <h1>Diagnostics</h1>
             <p class="page-summary">Confirm the current upstream relay target and run a direct connection test from this host without leaving the admin interface.</p>
         </div>
-        <div class="page-actions">
-            <a asp-page="/Diagnostics/TestEmail">Open Test Email</a>
-        </div>
     </header>
+
+    <div class="surface-toolbar">
+        <div class="toolbar-right">
+            <div class="page-actions">
+                <a asp-page="/Diagnostics/TestEmail">Open Test Email</a>
+            </div>
+        </div>
+    </div>
 
     <section class="panel">
         <h2>Connectivity Test</h2>

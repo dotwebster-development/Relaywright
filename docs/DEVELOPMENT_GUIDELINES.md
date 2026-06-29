@@ -82,11 +82,14 @@ Use these guidelines when changing Relaywright. They are intentionally conservat
 
 - Delivery pause/resume must affect outbound delivery only. SMTP intake must continue to accept and spool mail from trusted devices.
 - Pulse `IQueueSignal` when resuming delivery or after queue changes that should wake the delivery worker.
+- Admin web listener and web certificate changes require a full application restart; use the restart service so unsupported hosting leaves a visible restart-required state instead of stopping the process.
 - Keep alert evaluation deterministic and avoid live network dependencies in tests.
 - Alert notifications must send directly through the configured upstream relay path rather than through the queued message pipeline.
 - Backup creation must hold the backup coordinator lock while collecting spool files referenced by the database snapshot.
 - Backup validation should prove restore readiness without performing destructive restore work from the admin UI.
 - Diagnostics should store staged results and sanitized details, not full SMTP transcripts.
+- Submission flow diagnostics must reuse trusted-network and submission-policy services, and must not consume device rate-limit quota.
+- Settings pages that support rollback should capture a configuration snapshot before saving or deleting operator-managed settings.
 
 ## Razor Pages UI
 
@@ -120,6 +123,9 @@ Add tests for:
 - backup bundle creation/validation and retention pruning
 - alert thresholds, cooldowns, notification recording, and SQLite-backed history ordering
 - diagnostic run/stage persistence without secret or message-body leakage
+- application restart-required state and unsupported-host fallback behavior
+- submission flow checks without mutating rate-limit counters
+- configuration snapshot creation and rollback behavior
 
 Do not add automated tests that require real printers, live SMTP relays, Microsoft Entra tenants, or machine-specific local IP addresses.
 

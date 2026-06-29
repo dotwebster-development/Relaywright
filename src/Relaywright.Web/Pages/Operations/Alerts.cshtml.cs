@@ -2,11 +2,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Alerts;
+using Relaywright.Web.Services.ConfigurationHistory;
 
 namespace Relaywright.Web.Pages.Operations;
 
 public sealed class AlertsModel(
     IAlertService alertService,
+    IConfigurationSnapshotService configurationSnapshotService,
     ILogger<AlertsModel> logger) : PageModel
 {
     public IReadOnlyList<AlertRule> Rules { get; private set; } = Array.Empty<AlertRule>();
@@ -38,6 +40,11 @@ public sealed class AlertsModel(
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
+        await configurationSnapshotService.CaptureAsync(
+            ConfigurationSnapshotService.AlertRulesArea,
+            User.Identity?.Name,
+            "Snapshot before alert rule save.",
+            cancellationToken);
         await alertService.SaveRuleAsync(new AlertRule
         {
             Id = RuleId,

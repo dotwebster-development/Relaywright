@@ -15,7 +15,9 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
 
     <form method="post" class="relay-settings">
@@ -25,8 +27,9 @@
             <div class="settings-block-title">Listener</div>
             <div class="compact-grid">
                 <div class="toggle-field">
-                    <label class="toggle-control">
+                    <label class="switch-control">
                         <input asp-for="BindToAllInterfaces" type="checkbox" data-bind-all />
+                        <span class="switch-control-track" aria-hidden="true"></span>
                         <span>All Interfaces</span>
                     </label>
                 </div>
@@ -47,8 +50,9 @@
                     <input asp-for="Input.MaxMessageSizeBytes" type="number" />
                 </label>
                 <div class="toggle-field">
-                    <label class="toggle-control">
+                    <label class="switch-control">
                         <input asp-for="Input.EnableStartTls" type="checkbox" data-starttls-toggle />
+                        <span class="switch-control-track" aria-hidden="true"></span>
                         <span>STARTTLS</span>
                     </label>
                 </div>
@@ -87,8 +91,9 @@
                     <input asp-for="Input.UpstreamTimeoutSeconds" type="number" />
                 </label>
                 <div class="toggle-field">
-                    <label class="toggle-control">
+                    <label class="switch-control">
                         <input asp-for="Input.UseUpstreamAuthentication" type="checkbox" data-auth-toggle />
+                        <span class="switch-control-track" aria-hidden="true"></span>
                         <span>Authentication</span>
                     </label>
                 </div>
@@ -164,8 +169,12 @@
             </div>
         </section>
 
-        <div class="actions compact-actions">
-            <button type="submit">Save Settings</button>
+        <div class="surface-toolbar">
+            <div class="toolbar-right">
+                <div class="actions compact-actions">
+                    <button type="submit">Save Settings</button>
+                </div>
+            </div>
         </div>
     </form>
 </section>

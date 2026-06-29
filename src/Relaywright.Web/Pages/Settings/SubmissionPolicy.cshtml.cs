@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages.Settings;
 
 public sealed class SubmissionPolicyModel(
     ITrustedDevicePolicyService trustedDevicePolicyService,
+    IConfigurationSnapshotService configurationSnapshotService,
     ILogger<SubmissionPolicyModel> logger) : PageModel
 {
     [BindProperty]
@@ -27,6 +29,11 @@ public sealed class SubmissionPolicyModel(
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
+        await configurationSnapshotService.CaptureAsync(
+            ConfigurationSnapshotService.SubmissionPolicyArea,
+            User.Identity?.Name,
+            "Snapshot before submission policy save.",
+            cancellationToken);
         await trustedDevicePolicyService.SavePolicyAsync(Input, cancellationToken);
 
         StatusMessage = "Submission policy saved.";

@@ -2,14 +2,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Backups;
+using Relaywright.Web.Services.ConfigurationHistory;
 
 namespace Relaywright.Web.Pages.Operations;
 
 public sealed class BackupsModel(
     IBackupService backupService,
+    IConfigurationSnapshotService configurationSnapshotService,
     ILogger<BackupsModel> logger) : PageModel
 {
     public IReadOnlyList<BackupRun> Runs { get; private set; } = Array.Empty<BackupRun>();
+
+    public BackupReadiness Readiness { get; private set; } = new();
 
     [BindProperty]
     public BackupScheduleState Schedule { get; set; } = new();
@@ -48,6 +52,11 @@ public sealed class BackupsModel(
 
     public async Task<IActionResult> OnPostSaveScheduleAsync(CancellationToken cancellationToken)
     {
+        await configurationSnapshotService.CaptureAsync(
+            ConfigurationSnapshotService.BackupScheduleArea,
+            User.Identity?.Name,
+            "Snapshot before backup schedule save.",
+            cancellationToken);
         await backupService.SaveScheduleAsync(Schedule, cancellationToken);
         StatusMessage = "Backup schedule saved.";
         return RedirectToPage();
@@ -85,5 +94,6 @@ public sealed class BackupsModel(
     {
         Runs = await backupService.GetRunsAsync(cancellationToken);
         Schedule = await backupService.GetScheduleAsync(cancellationToken);
+        Readiness = await backupService.GetReadinessAsync(cancellationToken);
     }
 }

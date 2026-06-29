@@ -13,48 +13,69 @@
         </div>
     </header>
 
-    <nav class="tabs logs-tabs" aria-label="Log sections">
-        @foreach (var tab in Model.Sections)
-        {
-            if (tab.CategoryValue is null)
-            {
-                <a asp-page="/Logs/Index"
-                   asp-route-severity="@Model.Severity"
-                   asp-route-search="@Model.Search"
-                   class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
-                   aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
-            }
-            else
-            {
-                <a asp-page="/Logs/Index"
-                   asp-route-category="@tab.CategoryValue"
-                   asp-route-severity="@Model.Severity"
-                   asp-route-search="@Model.Search"
-                   class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
-                   aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
-            }
-        }
-    </nav>
-
-    <form method="get" class="filter-row">
-        <input asp-for="Category" type="hidden" />
-        <label>
-            <span>Severity</span>
-            <select asp-for="Severity">
-                <option value="">All</option>
-                @foreach (var value in Enum.GetValues<EventSeverity>())
+    <div class="surface-toolbar">
+        <div class="toolbar-left">
+            <nav class="tabs logs-tabs" aria-label="Log sections">
+                @foreach (var tab in Model.Sections)
                 {
-                    <option value="@value">@value</option>
+                    if (tab.CategoryValue is null)
+                    {
+                        <a asp-page="/Logs/Index"
+                           asp-route-severity="@Model.Severity"
+                           asp-route-search="@Model.Search"
+                           class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
+                           aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
+                    }
+                    else
+                    {
+                        <a asp-page="/Logs/Index"
+                           asp-route-category="@tab.CategoryValue"
+                           asp-route-severity="@Model.Severity"
+                           asp-route-search="@Model.Search"
+                           class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
+                           aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
+                    }
                 }
-            </select>
-        </label>
-        <label>
-            <span>Search</span>
-            <input asp-for="Search" placeholder="Message, detail, remote IP" />
-        </label>
-        <button type="submit">Filter</button>
-        <a asp-page="/Logs/Index" asp-route-category="@Model.Category">Clear</a>
-    </form>
+            </nav>
+
+            <form method="get" class="filter-row">
+                <input asp-for="Category" type="hidden" />
+                <label>
+                    <span>Severity</span>
+                    <select asp-for="Severity">
+                        <option value="">All</option>
+                        @foreach (var value in Enum.GetValues<EventSeverity>())
+                        {
+                            <option value="@value">@value</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <input asp-for="Search" type="search" placeholder="Message, detail, remote IP" aria-label="Search logs" />
+                </label>
+                <button type="submit">Filter</button>
+                <a asp-page="/Logs/Index" asp-route-category="@Model.Category">Clear</a>
+            </form>
+        </div>
+        <div class="toolbar-right">
+            <div class="auto-refresh-controls" data-auto-refresh="relaywright.logs">
+                <label class="switch-control">
+                    <input type="checkbox" data-auto-refresh-toggle />
+                    <span class="switch-control-track" aria-hidden="true"></span>
+                    <span>Auto Refresh</span>
+                </label>
+                <label class="auto-refresh-interval">
+                    <span>Every</span>
+                    <select data-auto-refresh-interval>
+                        <option value="10">10s</option>
+                        <option value="30" selected>30s</option>
+                        <option value="60">60s</option>
+                    </select>
+                </label>
+                <span class="status-badge" data-auto-refresh-status>Off</span>
+            </div>
+        </div>
+    </div>
 
     <div class="table-wrap">
         <table class="table">
@@ -99,3 +120,7 @@
         </nav>
     }
 </section>
+
+@section Scripts {
+    <script src="~/js/auto-refresh.js" asp-append-version="true"></script>
+}

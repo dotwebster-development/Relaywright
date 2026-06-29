@@ -9,6 +9,19 @@ public sealed class TrustedDeviceRateLimiter : ITrustedDeviceRateLimiter
 
     public SubmissionPolicyDecision CanAcceptMessage(TrustedNetwork profile, string? remoteIpAddress)
     {
+        return Evaluate(profile, remoteIpAddress, recordAcceptedMessage: true);
+    }
+
+    public SubmissionPolicyDecision PreviewAcceptMessage(TrustedNetwork profile, string? remoteIpAddress)
+    {
+        return Evaluate(profile, remoteIpAddress, recordAcceptedMessage: false);
+    }
+
+    private SubmissionPolicyDecision Evaluate(
+        TrustedNetwork profile,
+        string? remoteIpAddress,
+        bool recordAcceptedMessage)
+    {
         if (profile.RateLimitMessagesPerHour is null or <= 0)
         {
             return SubmissionPolicyDecision.Allow();
@@ -32,7 +45,10 @@ public sealed class TrustedDeviceRateLimiter : ITrustedDeviceRateLimiter
                     $"Device profile rate limit exceeded ({profile.RateLimitMessagesPerHour.Value} message(s) per hour).");
             }
 
-            queue.Enqueue(now);
+            if (recordAcceptedMessage)
+            {
+                queue.Enqueue(now);
+            }
         }
 
         return SubmissionPolicyDecision.Allow();

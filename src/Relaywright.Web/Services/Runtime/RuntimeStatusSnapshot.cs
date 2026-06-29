@@ -10,6 +10,16 @@ public sealed class RuntimeStatusSnapshot
 
     public DateTimeOffset? DeliveryPausedUtc { get; init; }
 
+    public bool RestartRequired { get; init; }
+
+    public string? RestartReason { get; init; }
+
+    public string? RestartRequestedBy { get; init; }
+
+    public DateTimeOffset? RestartRequestedUtc { get; init; }
+
+    public bool RestartSupported { get; init; }
+
     public RuntimeComponentState SmtpListener { get; init; } = new();
 
     public RuntimeComponentState DeliveryWorker { get; init; } = new();

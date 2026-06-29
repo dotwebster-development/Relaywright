@@ -15,7 +15,9 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
 
     <section class="panel">
@@ -43,8 +45,9 @@
                     <input asp-for="Input.Location" />
                 </label>
                 <div class="toggle-field">
-                    <label class="toggle-control">
+                    <label class="switch-control">
                         <input asp-for="Input.IsEnabled" type="checkbox" />
+                        <span class="switch-control-track" aria-hidden="true"></span>
                         <span>Enabled</span>
                     </label>
                 </div>

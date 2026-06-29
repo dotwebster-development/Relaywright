@@ -322,9 +322,45 @@ public sealed class DataSeeder(
                 "DeliveryPauseReason" TEXT NULL,
                 "DeliveryPausedBy" TEXT NULL,
                 "DeliveryPausedUtc" TEXT NULL,
+                "RestartRequired" INTEGER NOT NULL DEFAULT 0,
+                "RestartReason" TEXT NULL,
+                "RestartRequestedBy" TEXT NULL,
+                "RestartRequestedUtc" TEXT NULL,
+                "RestartSupported" INTEGER NOT NULL DEFAULT 0,
                 "UpdatedUtc" TEXT NOT NULL
             );
             """,
+            cancellationToken);
+        var runtimeControlColumns = await GetColumnNamesAsync(dbContext, "RuntimeControlStates", cancellationToken);
+        await AddColumnIfMissingAsync(
+            dbContext,
+            runtimeControlColumns,
+            "RestartRequired",
+            "ALTER TABLE \"RuntimeControlStates\" ADD COLUMN \"RestartRequired\" INTEGER NOT NULL DEFAULT 0;",
+            cancellationToken);
+        await AddColumnIfMissingAsync(
+            dbContext,
+            runtimeControlColumns,
+            "RestartReason",
+            "ALTER TABLE \"RuntimeControlStates\" ADD COLUMN \"RestartReason\" TEXT NULL;",
+            cancellationToken);
+        await AddColumnIfMissingAsync(
+            dbContext,
+            runtimeControlColumns,
+            "RestartRequestedBy",
+            "ALTER TABLE \"RuntimeControlStates\" ADD COLUMN \"RestartRequestedBy\" TEXT NULL;",
+            cancellationToken);
+        await AddColumnIfMissingAsync(
+            dbContext,
+            runtimeControlColumns,
+            "RestartRequestedUtc",
+            "ALTER TABLE \"RuntimeControlStates\" ADD COLUMN \"RestartRequestedUtc\" TEXT NULL;",
+            cancellationToken);
+        await AddColumnIfMissingAsync(
+            dbContext,
+            runtimeControlColumns,
+            "RestartSupported",
+            "ALTER TABLE \"RuntimeControlStates\" ADD COLUMN \"RestartSupported\" INTEGER NOT NULL DEFAULT 0;",
             cancellationToken);
 
         await dbContext.Database.ExecuteSqlRawAsync(
@@ -450,6 +486,24 @@ public sealed class DataSeeder(
             cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_DiagnosticStages_DiagnosticRunId_Sequence\" ON \"DiagnosticStages\" (\"DiagnosticRunId\", \"Sequence\");",
+            cancellationToken);
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ConfigurationSnapshots" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_ConfigurationSnapshots" PRIMARY KEY,
+                "Area" TEXT NOT NULL,
+                "DisplayName" TEXT NOT NULL,
+                "Summary" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL,
+                "CreatedBy" TEXT NULL,
+                "CreatedUtc" TEXT NOT NULL,
+                "IsRollback" INTEGER NOT NULL
+            );
+            """,
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_ConfigurationSnapshots_Area_CreatedUtc\" ON \"ConfigurationSnapshots\" (\"Area\", \"CreatedUtc\");",
             cancellationToken);
 
         if (closeConnection)

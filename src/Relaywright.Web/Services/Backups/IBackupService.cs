@@ -23,6 +23,8 @@ public interface IBackupService
 
     Task<BackupOperationResult> DeleteAsync(Guid id, CancellationToken cancellationToken);
 
+    Task<BackupReadiness> GetReadinessAsync(CancellationToken cancellationToken);
+
     Task<string?> GetBackupPathAsync(Guid id, CancellationToken cancellationToken);
 
     Task PruneByRetentionAsync(int retentionCount, CancellationToken cancellationToken);

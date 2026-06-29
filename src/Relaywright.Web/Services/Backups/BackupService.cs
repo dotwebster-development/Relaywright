@@ -158,6 +158,11 @@ public sealed class BackupService(
                 Detail = run.FileName
             }, cancellationToken);
 
+            var validation = await ValidateAsync(run.Id, cancellationToken, encryptionPassword);
+            run.LastValidatedUtc = DateTimeOffset.UtcNow;
+            run.LastValidationSucceeded = validation.Succeeded;
+            run.LastValidationMessage = validation.Message;
+
             return run;
         }
         catch (Exception exception)
@@ -292,6 +297,55 @@ public sealed class BackupService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var run = await dbContext.BackupRuns.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         return run is null ? null : GetBackupPath(run);
+    }
+
+    public async Task<BackupReadiness> GetReadinessAsync(CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var schedule = await dbContext.BackupScheduleStates
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken)
+            ?? new BackupScheduleState();
+        var runs = await dbContext.BackupRuns
+            .AsNoTracking()
+            .Where(x => x.Status == BackupRunStatus.Succeeded && x.LastValidationSucceeded == true)
+            .ToListAsync(cancellationToken);
+        var latest = runs
+            .OrderByDescending(x => x.LastValidatedUtc ?? x.CompletedUtc ?? x.StartedUtc)
+            .FirstOrDefault();
+        var staleAfterHours = schedule.IsEnabled
+            ? Math.Max(24, schedule.IntervalHours * 2)
+            : 168;
+        var backupStorageBytes = DirectorySize(appPaths.BackupDirectory);
+
+        if (latest is null)
+        {
+            return new BackupReadiness
+            {
+                IsReady = false,
+                StaleAfterHours = staleAfterHours,
+                BackupStorageBytes = backupStorageBytes,
+                Message = "No validated backup is available."
+            };
+        }
+
+        var goodUtc = latest.LastValidatedUtc ?? latest.CompletedUtc ?? latest.StartedUtc;
+        var ageHours = Math.Max(0, (long)(now - goodUtc).TotalHours);
+        var ready = ageHours <= staleAfterHours;
+
+        return new BackupReadiness
+        {
+            IsReady = ready,
+            BackupId = latest.Id,
+            LastGoodBackupUtc = goodUtc,
+            LastGoodBackupAgeHours = ageHours,
+            StaleAfterHours = staleAfterHours,
+            BackupStorageBytes = backupStorageBytes,
+            Message = ready
+                ? $"Last validated backup is {ageHours} hour(s) old."
+                : $"Last validated backup is stale at {ageHours} hour(s) old."
+        };
     }
 
     public async Task PruneByRetentionAsync(int retentionCount, CancellationToken cancellationToken)
@@ -435,6 +489,17 @@ public sealed class BackupService(
         return string.IsNullOrWhiteSpace(run.FileName)
             ? null
             : Path.Combine(appPaths.BackupDirectory, Path.GetFileName(run.FileName));
+    }
+
+    private static long DirectorySize(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return 0;
+        }
+
+        return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+            .Sum(file => new FileInfo(file).Length);
     }
 
     private static string ToZipSpoolEntry(string relativePath)

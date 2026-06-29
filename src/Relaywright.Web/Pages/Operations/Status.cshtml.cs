@@ -10,9 +10,6 @@ public sealed class StatusModel(
 {
     public RuntimeStatusSnapshot Status { get; private set; } = new();
 
-    [BindProperty]
-    public string? PauseReason { get; set; }
-
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -23,7 +20,7 @@ public sealed class StatusModel(
 
     public async Task<IActionResult> OnPostPauseAsync(CancellationToken cancellationToken)
     {
-        await runtimeStatusService.PauseDeliveryAsync(PauseReason, User.Identity?.Name, cancellationToken);
+        await runtimeStatusService.PauseDeliveryAsync(null, User.Identity?.Name, cancellationToken);
         StatusMessage = "Outbound delivery paused.";
         logger.LogWarning("Outbound delivery pause requested from operations status page. User={UserName}", User.Identity?.Name);
         return RedirectToPage();

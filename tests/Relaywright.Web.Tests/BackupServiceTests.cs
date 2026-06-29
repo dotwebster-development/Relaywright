@@ -74,6 +74,7 @@ public sealed class BackupServiceTests
         var validation = await service.ValidateAsync(run.Id, CancellationToken.None);
 
         Assert.Equal(BackupRunStatus.Succeeded, run.Status);
+        Assert.True(run.LastValidationSucceeded);
         Assert.True(validation.Succeeded);
         var backupPath = await service.GetBackupPathAsync(run.Id, CancellationToken.None);
         Assert.True(File.Exists(backupPath));
@@ -112,6 +113,29 @@ public sealed class BackupServiceTests
         Assert.EndsWith(".rwbak", run.FileName, StringComparison.OrdinalIgnoreCase);
         Assert.False(withoutPassword.Succeeded);
         Assert.True(withPassword.Succeeded);
+    }
+
+    [Fact]
+    public async Task ReadinessUsesLatestValidatedBackup()
+    {
+        using var appData = TempAppData.Create();
+        await File.WriteAllTextAsync(Path.Combine(appData.Paths.KeyRingDirectory, "key.xml"), "<key />");
+        var factory = await CreateFileBackedDatabaseAsync(appData);
+        var service = new BackupService(
+            factory,
+            new BackupCoordinator(),
+            new RecordingOperationalEventService(),
+            appData.Paths,
+            NullLogger<BackupService>.Instance);
+
+        var run = await service.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
+
+        var readiness = await service.GetReadinessAsync(CancellationToken.None);
+
+        Assert.True(run.LastValidationSucceeded);
+        Assert.True(readiness.IsReady);
+        Assert.Equal(run.Id, readiness.BackupId);
+        Assert.True(readiness.BackupStorageBytes > 0);
     }
 
     [Fact]

@@ -15,7 +15,9 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
 
     <form method="post" asp-page-handler="Save" class="relay-settings">
@@ -26,8 +28,9 @@
             <div class="settings-block-title">Global Rules</div>
             <div class="compact-grid">
                 <div class="toggle-field">
-                    <label class="toggle-control">
+                    <label class="switch-control">
                         <input asp-for="Input.IsEnabled" type="checkbox" />
+                        <span class="switch-control-track" aria-hidden="true"></span>
                         <span>Policy Enabled</span>
                     </label>
                 </div>
@@ -73,8 +76,12 @@
             <p class="field-hint">Recipient rules match domains only. Block lists take precedence over allowed lists.</p>
         </section>
 
-        <div class="actions compact-actions">
-            <button type="submit">Save Policy</button>
+        <div class="surface-toolbar">
+            <div class="toolbar-right">
+                <div class="actions compact-actions">
+                    <button type="submit">Save Policy</button>
+                </div>
+            </div>
         </div>
     </form>
 </section>

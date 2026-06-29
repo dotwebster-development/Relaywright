@@ -8,6 +8,7 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Tests.Support;
 using Xunit;
 
@@ -187,6 +188,7 @@ public sealed class RazorPageOrderingTests
                 _dbContextFactory,
                 new TestRelayConfigurationService(),
                 new StaticRuntimeStatusService(),
+                new TestDashboardMetricsService(),
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
@@ -231,6 +233,16 @@ public sealed class RazorPageOrderingTests
         public Task SaveAsync(RelayConfigurationEditModel model, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
+        }
+    }
+
+    private sealed class TestDashboardMetricsService : IDashboardMetricsService
+    {
+        public Task<DashboardMetricsSnapshot> GetSnapshotAsync(
+            RelayConfigurationSnapshot configuration,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new DashboardMetricsSnapshot());
         }
     }
 

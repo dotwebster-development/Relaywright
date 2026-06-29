@@ -15,7 +15,9 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
 
     <section class="panel">
@@ -27,8 +29,6 @@
             <dd>@Model.Status.DeliveryPausedBy</dd>
             <dt>Paused At</dt>
             <dd>@Model.Status.DeliveryPausedUtc?.ToLocalTime()</dd>
-            <dt>Reason</dt>
-            <dd>@Model.Status.DeliveryPauseReason</dd>
         </dl>
         <div class="actions">
             @if (Model.Status.IsDeliveryPaused)
@@ -39,11 +39,7 @@
             }
             else
             {
-                <form method="post" asp-page-handler="Pause" class="filter-row">
-                    <label>
-                        <span>Reason</span>
-                        <input asp-for="PauseReason" placeholder="Maintenance, upstream outage, operator hold" />
-                    </label>
+                <form method="post" asp-page-handler="Pause" class="inline-form">
                     <button type="submit">Pause Delivery</button>
                 </form>
             }

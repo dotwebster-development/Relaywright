@@ -5,10 +5,12 @@
 }
 
 <section class="page">
-    <h1>Error</h1>
-    <p>An unexpected error occurred while processing the request.</p>
-    @if (!string.IsNullOrWhiteSpace(Model.RequestId))
-    {
-        <p class="muted">Request ID: @Model.RequestId</p>
-    }
+    <section class="panel">
+        <h1>Error</h1>
+        <p>An unexpected error occurred while processing the request.</p>
+        @if (!string.IsNullOrWhiteSpace(Model.RequestId))
+        {
+            <p class="muted">Request ID: @Model.RequestId</p>
+        }
+    </section>
 </section>

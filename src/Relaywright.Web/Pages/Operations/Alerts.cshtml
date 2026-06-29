@@ -11,17 +11,24 @@
             <h1>Alerts</h1>
             <p class="page-summary">Configure local alert thresholds and optional email notification recipients for operational conditions.</p>
         </div>
-        <div class="page-actions">
-            <form method="post" asp-page-handler="Evaluate" class="inline-form">
-                <button type="submit">Evaluate Now</button>
-            </form>
-        </div>
     </header>
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
+
+    <div class="surface-toolbar">
+        <div class="toolbar-right">
+            <div class="page-actions">
+                <form method="post" asp-page-handler="Evaluate" class="inline-form">
+                    <button type="submit">Evaluate Now</button>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <section class="panel">
         <h2>Rules</h2>
@@ -50,8 +57,9 @@
                                 <input type="hidden" name="RuleId" value="@rule.Id" />
                                 <div class="compact-grid">
                                     <div class="toggle-field">
-                                        <label class="toggle-control">
+                                        <label class="switch-control">
                                             <input type="checkbox" name="IsEnabled" value="true" checked="@rule.IsEnabled" />
+                                            <span class="switch-control-track" aria-hidden="true"></span>
                                             <span>Enabled</span>
                                         </label>
                                         <input type="hidden" name="IsEnabled" value="false" />

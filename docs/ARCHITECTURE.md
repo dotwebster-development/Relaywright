@@ -99,9 +99,12 @@ Cleanup and purge paths coordinate with backups through `IBackupCoordinator` so 
 Runtime status, alerts, backups, diagnostics, and queue actions are intentionally operational rather than decorative:
 
 - `RuntimeStatusService` tracks hosted-service state, delivery pause state, active deliveries, and cleanup heartbeat data.
+- `ApplicationRestartService` persists restart-required state and requests a graceful process stop only when hosted by a restart-capable service manager.
+- `DashboardMetricsService` summarizes recent message flow, storage usage, outgoing upstream route-local IP, and backup readiness.
 - `AlertService` evaluates built-in operational risk rules and sends direct upstream email notifications when configured.
-- `BackupService` creates, validates, downloads, deletes, and prunes backup bundles. Encrypted manual backups use a one-time password; scheduled backups remain unencrypted because the password is not stored.
-- `DiagnosticRunRecorder` persists staged connectivity and test-email diagnostics without SMTP transcripts, secrets, or message bodies.
+- `BackupService` creates, validates, downloads, deletes, and prunes backup bundles. Encrypted manual backups use a one-time password; scheduled backups remain unencrypted because the password is not stored. Successful backups are validated immediately so the dashboard can report restore readiness.
+- `DiagnosticRunRecorder` persists staged connectivity, submission flow, and test-email diagnostics without SMTP transcripts, secrets, or message bodies.
+- `ConfigurationSnapshotService` stores settings snapshots before operator changes and can roll back supported settings areas without touching queue, spool, keys, or certificate files.
 - `MessageQueueService` supports single and bulk retry/purge operations while preserving queue-state guards and spool deletion ordering.
 
 ## Security Boundaries
@@ -121,7 +124,7 @@ Navigation is centralized in `UI/AppNavigation.cs`.
 - Overview: dashboard, runtime status, and outbound delivery pause/resume
 - Settings: relay settings, submission policy, and trusted IP profiles
 - Operations: queue and logs
-- System: alerts, backups, admin web listener/certificate settings, and password changes
-- Diagnostics: upstream connectivity checks and test email
+- System: alerts, backups, change history, admin web listener settings, admin web certificate settings, and password changes
+- Diagnostics: upstream connectivity checks, submission flow checks, and test email
 
 The UI is server-rendered Razor Pages with small page-local scripts for form behavior.

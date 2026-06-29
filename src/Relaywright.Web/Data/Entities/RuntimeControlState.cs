@@ -12,5 +12,15 @@ public sealed class RuntimeControlState
 
     public DateTimeOffset? DeliveryPausedUtc { get; set; }
 
+    public bool RestartRequired { get; set; }
+
+    public string? RestartReason { get; set; }
+
+    public string? RestartRequestedBy { get; set; }
+
+    public DateTimeOffset? RestartRequestedUtc { get; set; }
+
+    public bool RestartSupported { get; set; }
+
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
 }

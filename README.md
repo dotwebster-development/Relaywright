@@ -11,6 +11,7 @@ Windows-first SMTP relay gateway built on ASP.NET Core 10, SQLite, SmtpServer, a
 - Provides a built-in Razor Pages admin UI
 - Stores configuration, queue metadata, auth, diagnostics, alerts, backup history, and operational events in SQLite
 - Provides runtime pause/resume, queue retry/purge, diagnostics, alerts, and backup bundles from the admin UI
+- Shows dashboard metrics, backup readiness, outgoing upstream route IP, submission flow checks, and settings rollback history
 
 ## Verified toolchain
 

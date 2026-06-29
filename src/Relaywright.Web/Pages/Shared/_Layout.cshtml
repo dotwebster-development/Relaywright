@@ -70,6 +70,21 @@
                                aria-current="@(navState.IsItemActive(item) ? "page" : null)">@item.Label</a>
                         }
                     </div>
+                    <div class="settings-search" data-settings-search>
+                        <input type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off" data-settings-search-input />
+                        <div class="settings-search-results" data-settings-search-results hidden>
+                            @foreach (var item in navState.SettingsSearchItems)
+                            {
+                                <a asp-page="@item.Page"
+                                   data-settings-search-item
+                                   data-settings-search-text="@($"{item.Label} {item.Group} {item.Keywords}")">
+                                    <span>@item.Label</span>
+                                    <small>@item.Group</small>
+                                </a>
+                            }
+                            <div class="settings-search-empty" data-settings-search-empty hidden>No matching settings</div>
+                        </div>
+                    </div>
                 </nav>
             }
             else
@@ -139,6 +154,75 @@
             } else {
                 desktopMedia.addListener(handleDesktopChange);
             }
+        })();
+
+        (() => {
+            const root = document.querySelector('[data-settings-search]');
+            if (!root) {
+                return;
+            }
+
+            const input = root.querySelector('[data-settings-search-input]');
+            const results = root.querySelector('[data-settings-search-results]');
+            const items = Array.from(root.querySelectorAll('[data-settings-search-item]'));
+            const empty = root.querySelector('[data-settings-search-empty]');
+
+            if (!input || !results || items.length === 0) {
+                return;
+            }
+
+            const normalize = (value) => value.trim().toLowerCase();
+            const visibleItems = () => items.filter((item) => !item.hidden);
+
+            const setOpen = (isOpen) => {
+                results.hidden = !isOpen;
+                input.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            };
+
+            const update = () => {
+                const query = normalize(input.value);
+                let matchCount = 0;
+
+                items.forEach((item) => {
+                    const haystack = normalize(item.dataset.settingsSearchText ?? item.textContent ?? '');
+                    const isMatch = query.length > 0 && haystack.includes(query);
+                    item.hidden = !isMatch;
+                    if (isMatch) {
+                        matchCount++;
+                    }
+                });
+
+                if (empty) {
+                    empty.hidden = query.length === 0 || matchCount > 0;
+                }
+
+                setOpen(query.length > 0);
+            };
+
+            input.addEventListener('input', update);
+            input.addEventListener('focus', update);
+            input.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    input.value = '';
+                    update();
+                    input.blur();
+                    return;
+                }
+
+                if (event.key === 'Enter') {
+                    const first = visibleItems()[0];
+                    if (first) {
+                        event.preventDefault();
+                        first.click();
+                    }
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!root.contains(event.target)) {
+                    setOpen(false);
+                }
+            });
         })();
     </script>
     @await RenderSectionAsync("Scripts", required: false)

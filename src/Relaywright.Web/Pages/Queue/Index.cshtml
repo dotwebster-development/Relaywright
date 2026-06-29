@@ -13,68 +13,95 @@
         </div>
     </header>
 
-    <div class="tabs">
-        <a asp-page="/Queue/Index" asp-route-status="active" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("active") ? "is-active" : null)">Active</a>
-        <a asp-page="/Queue/Index" asp-route-status="failed" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("failed") ? "is-active" : null)">Failed</a>
-        <a asp-page="/Queue/Index" asp-route-status="delivered" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("delivered") ? "is-active" : null)">Delivered</a>
-        <a asp-page="/Queue/Index" asp-route-status="all" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("all") ? "is-active" : null)">All</a>
-    </div>
+    <div class="surface-toolbar">
+        <div class="toolbar-left">
+            <div class="tabs">
+                <a asp-page="/Queue/Index" asp-route-status="active" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("active") ? "is-active" : null)">Active</a>
+                <a asp-page="/Queue/Index" asp-route-status="failed" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("failed") ? "is-active" : null)">Failed</a>
+                <a asp-page="/Queue/Index" asp-route-status="delivered" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("delivered") ? "is-active" : null)">Delivered</a>
+                <a asp-page="/Queue/Index" asp-route-status="all" asp-route-search="@Model.Search" class="@(Model.IsStatusActive("all") ? "is-active" : null)">All</a>
+            </div>
 
-    <form method="get" class="filter-row">
-        <input type="hidden" name="status" value="@Model.SelectedStatus" />
-        <label>
-            <span>Search</span>
-            <input asp-for="Search" placeholder="Sender, recipient, IP, correlation ID" />
-        </label>
-        <button type="submit">Filter</button>
-        <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus">Clear</a>
-    </form>
+            <form method="get" class="filter-row">
+                <input type="hidden" name="status" value="@Model.SelectedStatus" />
+                <label>
+                    <input asp-for="Search" type="search" placeholder="Sender, recipient, IP, correlation ID" aria-label="Search queue" />
+                </label>
+                <button type="submit">Filter</button>
+                <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus">Clear</a>
+            </form>
+        </div>
+        <div class="toolbar-right">
+            <div class="auto-refresh-controls" data-auto-refresh="relaywright.queue">
+                <label class="switch-control">
+                    <input type="checkbox" data-auto-refresh-toggle />
+                    <span class="switch-control-track" aria-hidden="true"></span>
+                    <span>Auto Refresh</span>
+                </label>
+                <label class="auto-refresh-interval">
+                    <span>Every</span>
+                    <select data-auto-refresh-interval>
+                        <option value="10">10s</option>
+                        <option value="30" selected>30s</option>
+                        <option value="60">60s</option>
+                    </select>
+                </label>
+                <span class="status-badge" data-auto-refresh-status>Off</span>
+            </div>
+        </div>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
     }
 
     <form method="post" class="stack">
         <input type="hidden" name="ReturnStatus" value="@Model.SelectedStatus" />
         <input type="hidden" name="ReturnSearch" value="@Model.Search" />
         <input type="hidden" name="ReturnPageNumber" value="@Model.PageNumber" />
-        <div class="actions compact-actions">
-            <button type="submit" asp-page-handler="BulkRetry" class="secondary-button">Retry Selected</button>
-            <button type="submit" asp-page-handler="BulkPurge" class="secondary-button" onclick="return confirm('Purge selected queued messages and remove their spool files where allowed?');">Purge Selected</button>
+        <div class="surface-toolbar">
+            <div class="toolbar-left">
+                <div class="actions compact-actions">
+                    <button type="submit" asp-page-handler="BulkRetry" class="secondary-button">Retry Selected</button>
+                    <button type="submit" asp-page-handler="BulkPurge" class="secondary-button" onclick="return confirm('Purge selected queued messages and remove their spool files where allowed?');">Purge Selected</button>
+                </div>
+            </div>
         </div>
 
-    <div class="table-wrap">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Select</th>
-                    <th>Accepted</th>
-                    <th>Status</th>
-                    <th>From</th>
-                    <th>Recipients</th>
-                    <th>Attempts</th>
-                    <th>Last Error</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var item in Model.Messages)
-            {
-                <tr>
-                    <td><input type="checkbox" name="SelectedMessageIds" value="@item.Id" /></td>
-                    <td>@item.AcceptedUtc.ToLocalTime()</td>
-                    <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@item.Status</span></td>
-                    <td>@item.EnvelopeFrom</td>
-                    <td>@string.Join(", ", item.Recipients.Select(x => x.RecipientAddress))</td>
-                    <td>@item.AttemptCount</td>
-                    <td>@item.LastError</td>
-                    <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
-                </tr>
-            }
-            </tbody>
-        </table>
-    </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Select</th>
+                        <th>Accepted</th>
+                        <th>Status</th>
+                        <th>From</th>
+                        <th>Recipients</th>
+                        <th>Attempts</th>
+                        <th>Last Error</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.Messages)
+                {
+                    <tr>
+                        <td><input type="checkbox" name="SelectedMessageIds" value="@item.Id" /></td>
+                        <td>@item.AcceptedUtc.ToLocalTime()</td>
+                        <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@item.Status</span></td>
+                        <td>@item.EnvelopeFrom</td>
+                        <td>@string.Join(", ", item.Recipients.Select(x => x.RecipientAddress))</td>
+                        <td>@item.AttemptCount</td>
+                        <td>@item.LastError</td>
+                        <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     </form>
 
     @if (Model.TotalCount > 0)
@@ -94,3 +121,7 @@
         </nav>
     }
 </section>
+
+@section Scripts {
+    <script src="~/js/auto-refresh.js" asp-append-version="true"></script>
+}

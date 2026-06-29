@@ -15,7 +15,24 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <p class="status">@Model.StatusMessage</p>
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    @if (Model.RuntimeStatus.RestartRequired)
+    {
+        <div class="surface-status">
+            <section class="status warning">
+                <strong>Restart required.</strong>
+                <span>@Model.RuntimeStatus.RestartReason</span>
+                @if (Model.RuntimeStatus.RestartRequestedUtc is not null)
+                {
+                    <span>Requested @Model.RuntimeStatus.RestartRequestedUtc.Value.ToLocalTime().ToString("g") by @(Model.RuntimeStatus.RestartRequestedBy ?? "system").</span>
+                }
+                <span>@(Model.RuntimeStatus.RestartSupported ? "A graceful restart has been requested." : "Restart Relaywright from the host service manager to apply the change.")</span>
+            </section>
+        </div>
     }
 
     <div class="stats-grid">
@@ -43,6 +60,42 @@
 
     <div class="surface-grid two-up">
         <section class="panel">
+            <h2>Traffic Metrics</h2>
+            <dl class="kv">
+                <dt>Accepted 24h</dt>
+                <dd>@Model.Metrics.AcceptedLast24Hours</dd>
+                <dt>Delivered 24h</dt>
+                <dd>@Model.Metrics.DeliveredLast24Hours</dd>
+                <dt>Failed Attempts 24h</dt>
+                <dd>@Model.Metrics.FailedLast24Hours</dd>
+                <dt>Oldest Active</dt>
+                <dd>@(Model.Metrics.OldestActiveAgeMinutes is null ? "None" : $"{Model.Metrics.OldestActiveAgeMinutes} minute(s)")</dd>
+                <dt>Last Upstream Failure</dt>
+                <dd>@(Model.Metrics.LastUpstreamFailureUtc is null ? "None" : $"{Model.Metrics.LastUpstreamFailureUtc.Value.ToLocalTime():g} - {Model.Metrics.LastUpstreamFailureMessage}")</dd>
+            </dl>
+        </section>
+
+        <section class="panel">
+            <h2>Storage And Route</h2>
+            <dl class="kv">
+                <dt>Outgoing Source IP</dt>
+                <dd>@(Model.Metrics.OutboundRoute.Succeeded ? Model.Metrics.OutboundRoute.LocalIpAddress : Model.Metrics.OutboundRoute.Message)</dd>
+                <dt>Route Target</dt>
+                <dd>@(Model.Metrics.OutboundRoute.RemoteAddress ?? "Not available")</dd>
+                <dt>Database</dt>
+                <dd>@IndexModel.FormatBytes(Model.Metrics.DatabaseSizeBytes)</dd>
+                <dt>Spool</dt>
+                <dd>@IndexModel.FormatBytes(Model.Metrics.SpoolSizeBytes)</dd>
+                <dt>Backups</dt>
+                <dd>@IndexModel.FormatBytes(Model.Metrics.BackupSizeBytes)</dd>
+                <dt>Backup Readiness</dt>
+                <dd><span class="status-badge @(Model.Metrics.BackupReadiness.IsReady ? "status-enabled" : "severity-warning")">@(Model.Metrics.BackupReadiness.IsReady ? "Ready" : "Needs attention")</span> @Model.Metrics.BackupReadiness.Message</dd>
+            </dl>
+        </section>
+    </div>
+
+    <div class="surface-grid two-up">
+        <section class="panel">
             <h2>Delivery Control</h2>
             <dl class="kv">
                 <dt>Outbound Delivery</dt>
@@ -51,8 +104,6 @@
                 <dd>@Model.RuntimeStatus.DeliveryPausedBy</dd>
                 <dt>Paused At</dt>
                 <dd>@Model.RuntimeStatus.DeliveryPausedUtc?.ToLocalTime()</dd>
-                <dt>Reason</dt>
-                <dd>@Model.RuntimeStatus.DeliveryPauseReason</dd>
             </dl>
             <div class="actions">
                 @if (Model.RuntimeStatus.IsDeliveryPaused)
@@ -63,11 +114,7 @@
                 }
                 else
                 {
-                    <form method="post" asp-page-handler="Pause" class="filter-row">
-                        <label>
-                            <span>Reason</span>
-                            <input asp-for="PauseReason" placeholder="Maintenance, upstream outage, operator hold" />
-                        </label>
+                    <form method="post" asp-page-handler="Pause" class="inline-form">
                         <button type="submit">Pause Delivery</button>
                     </form>
                 }

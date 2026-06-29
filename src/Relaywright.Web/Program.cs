@@ -8,6 +8,7 @@ using Relaywright.Web.Infrastructure;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Alerts;
 using Relaywright.Web.Services.Backups;
+using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Delivery;
 using Relaywright.Web.Services.Diagnostics;
 using Relaywright.Web.Services.Events;
@@ -104,6 +105,9 @@ builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertifica
 builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
 builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
+builder.Services.AddSingleton<IApplicationRestartService, ApplicationRestartService>();
+builder.Services.AddSingleton<IOutboundRouteProbe, OutboundRouteProbe>();
+builder.Services.AddSingleton<IDashboardMetricsService, DashboardMetricsService>();
 builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
 builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
 builder.Services.AddSingleton<IBackupCoordinator, BackupCoordinator>();
@@ -126,6 +130,8 @@ builder.Services.AddSingleton<IUpstreamDeliveryService, UpstreamDeliveryService>
 builder.Services.AddSingleton<IDiagnosticRunRecorder, DiagnosticRunRecorder>();
 builder.Services.AddSingleton<IUpstreamConnectivityTester, UpstreamConnectivityTester>();
 builder.Services.AddSingleton<IUpstreamTestEmailSender, UpstreamTestEmailSender>();
+builder.Services.AddSingleton<ISubmissionFlowChecker, SubmissionFlowChecker>();
+builder.Services.AddSingleton<IConfigurationSnapshotService, ConfigurationSnapshotService>();
 builder.Services.AddSingleton<SmtpOptionsFactory>();
 builder.Services.AddSingleton<RelayMessageStore>();
 builder.Services.AddSingleton<TrustedNetworkMailboxFilter>();
@@ -203,6 +209,8 @@ using (var scope = app.Services.CreateScope())
 {
     var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
     await seeder.InitializeAsync(CancellationToken.None);
+    var restartService = scope.ServiceProvider.GetRequiredService<IApplicationRestartService>();
+    await restartService.ClearAppliedRestartIfNeededAsync(CancellationToken.None);
 }
 
 app.UseStaticFiles();
