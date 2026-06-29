@@ -30,5 +30,15 @@ jobs:
       - name: Test
         run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --no-build
 
-      - name: Vulnerability report
-        run: dotnet list Relaywright.sln package --vulnerable --include-transitive
+      - name: Vulnerability gate
+        shell: pwsh
+        run: |
+          $report = dotnet list Relaywright.sln package --vulnerable --include-transitive 2>&1
+          $report | Write-Output
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          if ($report -match "has the following vulnerable packages") {
+            throw "Vulnerable packages detected."
+          }

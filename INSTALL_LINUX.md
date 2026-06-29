@@ -15,18 +15,18 @@ The script downloads the release tarball, verifies `SHA256SUMS.txt`, installs a 
 
 ```bash
 sudo bash install-relaywright.sh \
-  --version 0.1.0-beta.1 \
+  --version 1.0.0 \
   --install-root /opt/relaywright \
   --data-directory /var/lib/relaywright \
   --service-name relaywright \
   --https-port 5443 \
-  --http-port 5080 \
+  --http-port 0 \
   --smtp-port 25 \
   --configure-firewall \
   --firewall-remote-address 192.168.1.0/24
 ```
 
-Use `--http-port 0` to disable the admin HTTP listener.
+The admin HTTP listener is disabled by default. Use a non-zero `--http-port` only when you intentionally want an HTTP listener.
 
 If the GitHub repository is not `relaywright/relaywright`, pass `--repo OWNER/REPO` or set:
 

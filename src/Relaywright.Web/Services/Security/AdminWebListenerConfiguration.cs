@@ -8,7 +8,7 @@ public sealed class AdminWebListenerConfiguration
 
     public int HttpsPort { get; set; } = DefaultHttpsPort;
 
-    public bool EnableHttp { get; set; } = true;
+    public bool EnableHttp { get; set; }
 
     public int HttpPort { get; set; } = DefaultHttpPort;
 

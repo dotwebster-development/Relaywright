@@ -18,10 +18,10 @@ The installer asks for:
 - Data directory, default `C:\ProgramData\Relaywright`
 - Windows service name and display name
 - Admin HTTPS port
-- Optional admin HTTP port
+- Optional admin HTTP port, disabled by default
 - SMTP firewall port
 - Whether to configure Windows Firewall
-- Firewall remote address scope, such as `Any` or `192.168.1.0/24`
+- Firewall remote address scope, default `LocalSubnet`
 - Whether to generate a self-signed HTTPS certificate
 - Optional bootstrap admin account
 

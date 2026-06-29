@@ -9,7 +9,7 @@ on:
       version:
         description: "Release version without leading v"
         required: true
-        default: "0.1.0-beta.1"
+        default: "1.0.0"
 
 permissions:
   contents: write
@@ -56,8 +56,18 @@ jobs:
           --configuration Release
           --no-build
 
-      - name: Vulnerability report
-        run: dotnet list Relaywright.sln package --vulnerable --include-transitive
+      - name: Vulnerability gate
+        shell: pwsh
+        run: |
+          $report = dotnet list Relaywright.sln package --vulnerable --include-transitive 2>&1
+          $report | Write-Output
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          if ($report -match "has the following vulnerable packages") {
+            throw "Vulnerable packages detected."
+          }
 
       - name: Publish Windows package
         shell: pwsh
@@ -147,8 +157,19 @@ jobs:
           --configuration Release
           --no-build
 
-      - name: Vulnerability report
-        run: dotnet list Relaywright.sln package --vulnerable --include-transitive
+      - name: Vulnerability gate
+        shell: bash
+        run: |
+          if ! report="$(dotnet list Relaywright.sln package --vulnerable --include-transitive 2>&1)"; then
+            printf '%s\n' "$report"
+            exit 1
+          fi
+
+          printf '%s\n' "$report"
+          if grep -q "has the following vulnerable packages" <<< "$report"; then
+            echo "Vulnerable packages detected." >&2
+            exit 1
+          fi
 
       - name: Publish Linux package
         run: >
@@ -224,6 +245,12 @@ jobs:
         run: |
           cat > RELEASE_NOTES.md <<EOF
           Relaywright ${RELAYWRIGHT_VERSION}
+
+          Release notes:
+          - Stable 1.0 release line.
+          - Admin web HTTP listener is disabled by default.
+          - Windows installer firewall scope defaults to LocalSubnet.
+          - See UPGRADE.md before upgrading existing beta installations.
 
           Downloads:
           - Relaywright-${RELAYWRIGHT_VERSION}-windows-x64-installer.exe

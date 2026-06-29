@@ -52,6 +52,12 @@ public sealed class ConfigurationSnapshotService(
             CreatedUtc = DateTimeOffset.UtcNow
         });
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Captured configuration snapshot. Area={Area}; DisplayName={DisplayName}; User={UserName}",
+            area,
+            displayName,
+            userName);
     }
 
     public async Task<IReadOnlyList<ConfigurationSnapshot>> GetRecentAsync(
@@ -132,6 +138,12 @@ public sealed class ConfigurationSnapshotService(
             Message = $"Configuration rollback applied: {snapshot.DisplayName}.",
             Detail = snapshot.Summary
         }, cancellationToken);
+
+        logger.LogInformation(
+            "Configuration rollback applied. SnapshotId={SnapshotId}; Area={Area}; User={UserName}",
+            snapshot.Id,
+            snapshot.Area,
+            userName);
     }
 
     private async Task<(string DisplayName, string Payload)> CreatePayloadAsync(

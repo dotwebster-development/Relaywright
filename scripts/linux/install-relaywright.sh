@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 repo="${RELAYWRIGHT_GITHUB_REPOSITORY:-relaywright/relaywright}"
-version="0.1.0-beta.1"
+version="1.0.0"
 install_root="/opt/relaywright"
 data_directory="/var/lib/relaywright"
 service_name="relaywright"
@@ -10,7 +10,7 @@ display_name="Relaywright"
 environment_name="Production"
 https_port="5443"
 http_port="5080"
-enable_http=true
+enable_http=false
 smtp_port="25"
 configure_firewall=false
 firewall_remote_address="Any"
@@ -36,13 +36,13 @@ Usage:
   install-relaywright.sh [options]
 
 Options:
-  --version VERSION               Release version to install, for example 0.1.0-beta.1 or latest.
+  --version VERSION               Release version to install, for example 1.0.0 or latest.
   --repo OWNER/REPO               GitHub repository that hosts Relaywright releases.
   --install-root PATH             Install root. Default: /opt/relaywright
   --data-directory PATH           Runtime data directory. Default: /var/lib/relaywright
   --service-name NAME             systemd service name. Default: relaywright
   --https-port PORT               Admin HTTPS port. Default: 5443
-  --http-port PORT                Admin HTTP port. Use 0 to disable HTTP. Default: 5080
+  --http-port PORT                Admin HTTP port. Use 0 to disable HTTP. Disabled by default.
   --smtp-port PORT                SMTP listener firewall port. Default: 25
   --configure-firewall            Open admin and SMTP TCP ports in firewalld or ufw when active.
   --firewall-remote-address CIDR  Remote address/scope for firewall rules. Default: Any

@@ -4,7 +4,7 @@ Relaywright handles SMTP traffic, message spool files, admin credentials, OAuth 
 
 ## Supported Versions
 
-Security fixes are provided for the latest published release. Pre-release builds such as `0.1.0-beta.1` are intended for early deployments and should be upgraded promptly.
+Security fixes are provided for the latest published stable release. Pre-release builds are intended for early deployments and should be upgraded promptly.
 
 ## Reporting A Vulnerability
 

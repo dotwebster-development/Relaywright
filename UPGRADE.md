@@ -2,6 +2,8 @@
 
 Relaywright upgrades are designed to preserve runtime data by default.
 
+For the `0.1.0-beta.1` to `1.0.0` upgrade, keep the existing data directory in place and run the newer installer or install script. The startup schema upgrader preserves existing relay configuration, trusted networks, queue metadata, Data Protection keys, certificates, and backups.
+
 ## Before Upgrading
 
 1. Open the admin UI.

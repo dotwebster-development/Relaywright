@@ -1,6 +1,6 @@
 #define AppVersion GetEnv("RELAYWRIGHT_VERSION")
 #if AppVersion == ""
-#define AppVersion "0.1.0-beta.1"
+#define AppVersion "1.0.0"
 #endif
 
 #define SourceDir GetEnv("RELAYWRIGHT_SOURCE_DIR")
@@ -155,7 +155,7 @@ begin
   OptionPage.Add('Enable admin HTTP listener');
   OptionPage.Add('Configure Windows Firewall rules');
   OptionPage.Add('Generate a self-signed HTTPS certificate if needed');
-  OptionPage.Values[0] := True;
+  OptionPage.Values[0] := False;
   OptionPage.Values[1] := True;
   OptionPage.Values[2] := True;
 
@@ -165,7 +165,7 @@ begin
     'Choose which remote addresses may connect to opened ports.',
     'Use Any for all remote addresses or a CIDR such as 192.168.1.0/24.');
   FirewallPage.Add('Remote address:', False);
-  FirewallPage.Values[0] := 'Any';
+  FirewallPage.Values[0] := 'LocalSubnet';
 
   BootstrapPage := CreateInputQueryPage(
     FirewallPage.ID,

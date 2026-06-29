@@ -12,7 +12,7 @@ param(
     [int]$SmtpPort = 25,
     [switch]$ConfigureFirewall,
     [string]$FirewallRulePrefix = "Relaywright",
-    [string]$FirewallRemoteAddress = "Any",
+    [string]$FirewallRemoteAddress = "LocalSubnet",
     [string]$FirewallProfiles = "Any",
     [bool]$GenerateSelfSignedCertificate = $true,
     [string]$CertificateDnsName = "localhost",

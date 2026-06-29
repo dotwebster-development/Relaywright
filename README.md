@@ -9,7 +9,7 @@ Relaywright releases are self-contained. The host does not need the .NET runtime
 - Windows: download `Relaywright-<version>-windows-x64-installer.exe` from GitHub Releases and run it as Administrator.
 - Linux: run `curl -fsSL https://github.com/relaywright/relaywright/releases/latest/download/install-relaywright.sh | sudo bash -s -- --version latest`
 
-See `INSTALL_WINDOWS.md`, `INSTALL_LINUX.md`, and `UPGRADE.md` for production install and update guidance.
+See `INSTALL_WINDOWS.md`, `INSTALL_LINUX.md`, `UPGRADE.md`, and `docs/RELEASE_CHECKLIST.md` for production install, update, and release validation guidance.
 
 ## What it does
 
@@ -28,7 +28,7 @@ This project has been restored, built, and tested with .NET SDK `10.0.300`.
 
 ## Versioning
 
-Relaywright uses SemVer release tags such as `v0.1.0-beta.1`. Release workflows stamp the assembly informational version and publish Windows/Linux artifacts plus `SHA256SUMS.txt`.
+Relaywright uses SemVer release tags such as `v1.0.0`. Release workflows stamp the assembly informational version and publish Windows/Linux artifacts plus `SHA256SUMS.txt`.
 
 ## Default paths
 

@@ -2,6 +2,14 @@
 
 All notable Relaywright release changes are tracked here.
 
+## 1.0.0
+
+- First stable release line.
+- Ships production-safe admin web defaults with HTTPS enabled and HTTP disabled unless explicitly configured.
+- Keeps Windows firewall installer defaults scoped to the local subnet instead of all remote addresses.
+- Adds CI/release vulnerability gates, upgrade-path regression coverage, and release-readiness validation guidance.
+- Includes the ASP.NET Core admin UI, trusted IP/device policy enforcement, durable SMTP spool, queue retry/cleanup, diagnostics, alerts, backups, settings rollback, and Windows/Linux release packaging.
+
 ## 0.1.0-beta.1
 
 - First public beta release line.

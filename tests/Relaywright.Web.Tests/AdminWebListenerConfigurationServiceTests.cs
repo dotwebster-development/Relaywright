@@ -10,6 +10,16 @@ public sealed class AdminWebListenerConfigurationServiceTests
 {
     [Fact]
     [Trait("Category", "Unit")]
+    public void DefaultConfigurationUsesHttpsOnly()
+    {
+        var configuration = new AdminWebListenerConfiguration();
+
+        Assert.False(configuration.EnableHttp);
+        Assert.Equal(["https://*:5443"], configuration.GetUrls());
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task SavePersistsHttpsAndHttpUrls()
     {
         using var fixture = ListenerFixture.Create();
