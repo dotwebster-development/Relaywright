@@ -489,6 +489,11 @@ function Assert-FirewallRules {
     }
 }
 
+function ConvertTo-PowerShellSingleQuotedString {
+    param([string]$Value)
+    return "'$($Value.Replace("'", "''"))'"
+}
+
 function Invoke-InstallerScriptReplay {
     $scriptPath = Join-Path $InstallerInstallRoot "tools\Install-Relaywright.ps1"
     $packagePath = Join-Path $InstallerInstallRoot "package"
@@ -505,22 +510,20 @@ function Invoke-InstallerScriptReplay {
     $stdoutPath = Join-Path $ArtifactsDirectory "installer-script-replay.stdout.log"
     $stderrPath = Join-Path $ArtifactsDirectory "installer-script-replay.stderr.log"
     $exitCodePath = Join-Path $ArtifactsDirectory "installer-script-replay-exit-code.txt"
-    $arguments = @(
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        $scriptPath,
+
+    $command = @(
+        "&",
+        (ConvertTo-PowerShellSingleQuotedString -Value $scriptPath),
         "-PackagePath",
-        $packagePath,
+        (ConvertTo-PowerShellSingleQuotedString -Value $packagePath),
         "-InstallRoot",
-        $InstallerInstallRoot,
+        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerInstallRoot),
         "-DataDirectory",
-        $InstallerDataDirectory,
+        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerDataDirectory),
         "-ServiceName",
-        $InstallerServiceName,
+        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerServiceName),
         "-DisplayName",
-        $InstallerServiceName,
+        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerServiceName),
         "-HttpsPort",
         "$InstallerHttpsPort",
         "-HttpPort",
@@ -528,20 +531,20 @@ function Invoke-InstallerScriptReplay {
         "-SmtpPort",
         "$InstallerSmtpPort",
         "-FirewallRulePrefix",
-        $InstallerFirewallGroup,
+        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerFirewallGroup),
         "-FirewallRemoteAddress",
-        "LocalSubnet",
+        "'LocalSubnet'",
         "-BootstrapUserName",
-        "admin",
+        "'admin'",
         "-BootstrapEmail",
-        "admin@localhost",
+        "'admin@localhost'",
         "-GenerateSelfSignedCertificate:`$true",
         "-NonInteractive",
         "-ConfigureFirewall"
-    )
+    ) -join " "
 
     Write-Step "Replaying embedded install script for diagnostics"
-    & powershell.exe @arguments > $stdoutPath 2> $stderrPath
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $command > $stdoutPath 2> $stderrPath
     Set-Content -LiteralPath $exitCodePath -Value ([string]$LASTEXITCODE) -Encoding ASCII
 }
 

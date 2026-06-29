@@ -14,7 +14,7 @@ param(
     [string]$FirewallRulePrefix = "Relaywright",
     [string]$FirewallRemoteAddress = "LocalSubnet",
     [string]$FirewallProfiles = "Any",
-    [bool]$GenerateSelfSignedCertificate = $true,
+    [object]$GenerateSelfSignedCertificate = $true,
     [string]$CertificateDnsName = "localhost",
     [string]$HttpsCertificatePath = "",
     [string]$HttpsCertificatePassword = "",
@@ -79,6 +79,36 @@ function Read-YesNo {
     }
 
     return $value.Trim().StartsWith("y", [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Convert-BoolArgument {
+    param(
+        [object]$Value,
+        [string]$Name
+    )
+
+    if ($Value -is [bool]) {
+        return [bool]$Value
+    }
+
+    if ($null -eq $Value) {
+        throw "$Name must be true or false."
+    }
+
+    $text = ([string]$Value).Trim()
+    if ($text.StartsWith('$', [StringComparison]::Ordinal)) {
+        $text = $text.Substring(1)
+    }
+
+    if ($text.Equals("true", [StringComparison]::OrdinalIgnoreCase) -or $text -eq "1") {
+        return $true
+    }
+
+    if ($text.Equals("false", [StringComparison]::OrdinalIgnoreCase) -or $text -eq "0") {
+        return $false
+    }
+
+    throw "$Name must be true or false."
 }
 
 function Assert-Port {
@@ -355,6 +385,10 @@ function Uninstall-Relaywright {
         }
     }
 }
+
+$GenerateSelfSignedCertificate = Convert-BoolArgument `
+    -Value $GenerateSelfSignedCertificate `
+    -Name "GenerateSelfSignedCertificate"
 
 if (-not $NonInteractive -and -not $Uninstall) {
     $InstallRoot = Read-Default -Prompt "Install directory" -Default $InstallRoot
