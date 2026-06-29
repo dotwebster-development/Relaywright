@@ -489,6 +489,62 @@ function Assert-FirewallRules {
     }
 }
 
+function Invoke-InstallerScriptReplay {
+    $scriptPath = Join-Path $InstallerInstallRoot "tools\Install-Relaywright.ps1"
+    $packagePath = Join-Path $InstallerInstallRoot "package"
+    if (-not (Test-Path -LiteralPath $scriptPath)) {
+        Write-ArtifactText -Name "installer-script-replay.txt" -Content "Install script was not found at '$scriptPath'."
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $packagePath)) {
+        Write-ArtifactText -Name "installer-script-replay.txt" -Content "Package directory was not found at '$packagePath'."
+        return
+    }
+
+    $stdoutPath = Join-Path $ArtifactsDirectory "installer-script-replay.stdout.log"
+    $stderrPath = Join-Path $ArtifactsDirectory "installer-script-replay.stderr.log"
+    $exitCodePath = Join-Path $ArtifactsDirectory "installer-script-replay-exit-code.txt"
+    $arguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $scriptPath,
+        "-PackagePath",
+        $packagePath,
+        "-InstallRoot",
+        $InstallerInstallRoot,
+        "-DataDirectory",
+        $InstallerDataDirectory,
+        "-ServiceName",
+        $InstallerServiceName,
+        "-DisplayName",
+        $InstallerServiceName,
+        "-HttpsPort",
+        "$InstallerHttpsPort",
+        "-HttpPort",
+        "$InstallerHttpPort",
+        "-SmtpPort",
+        "$InstallerSmtpPort",
+        "-FirewallRulePrefix",
+        $InstallerFirewallGroup,
+        "-FirewallRemoteAddress",
+        "LocalSubnet",
+        "-BootstrapUserName",
+        "admin",
+        "-BootstrapEmail",
+        "admin@localhost",
+        "-GenerateSelfSignedCertificate:`$true",
+        "-NonInteractive",
+        "-ConfigureFirewall"
+    )
+
+    Write-Step "Replaying embedded install script for diagnostics"
+    & powershell.exe @arguments > $stdoutPath 2> $stderrPath
+    Set-Content -LiteralPath $exitCodePath -Value ([string]$LASTEXITCODE) -Encoding ASCII
+}
+
 function Get-FirewallSnapshot {
     param([string]$GroupName)
 
@@ -560,7 +616,14 @@ function Invoke-CleanInstallerValidation {
         throw "Relaywright installer exited with code $($process.ExitCode)."
     }
 
-    Wait-ServiceStatus -Name $InstallerServiceName -Status "Running" -TimeoutSeconds 60
+    try {
+        Wait-ServiceStatus -Name $InstallerServiceName -Status "Running" -TimeoutSeconds 60
+    }
+    catch {
+        Invoke-InstallerScriptReplay
+        throw
+    }
+
     Assert-Health -Url "https://127.0.0.1:$InstallerHttpsPort/health"
     Assert-TcpPortClosed -HostName "127.0.0.1" -Port $InstallerHttpPort
     Assert-SetupPage -Url "https://127.0.0.1:$InstallerHttpsPort/Account/Setup"
