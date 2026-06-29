@@ -340,6 +340,19 @@ function Invoke-InsecureWebRequest {
         [int]$TimeoutSeconds = 15
     )
 
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        $output = & $curl.Source --ssl-no-revoke --insecure --silent --show-error --fail --max-time $TimeoutSeconds $Url 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return [pscustomobject]@{
+                StatusCode = 200
+                Content = ($output -join [Environment]::NewLine)
+            }
+        }
+
+        throw "curl.exe failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+    }
+
     if ($PSVersionTable.PSVersion.Major -ge 6) {
         return Invoke-WebRequest -Uri $Url -UseBasicParsing -SkipCertificateCheck -TimeoutSec $TimeoutSeconds
     }
