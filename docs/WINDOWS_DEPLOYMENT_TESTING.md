@@ -2,6 +2,8 @@
 
 This guide describes the first real-machine deployment lane for the Windows test VM.
 
+For destructive release-installer validation on `DOT-WINDOWS02`, use `.github/workflows/validate-windows-release.yml` and `docs/WINDOWS_RELEASE_VALIDATION.md` instead. This deployment lane is for the active `DOT-WINDOWS01` test service.
+
 ## Recommended Shape
 
 Use a GitHub Actions self-hosted runner on the Windows VM. This is safer and simpler than opening WinRM, SSH, or SMB inbound from GitHub-hosted runners. The VM keeps an outbound HTTPS connection to GitHub, downloads the published artifact, and deploys locally.

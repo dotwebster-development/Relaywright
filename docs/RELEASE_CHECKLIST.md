@@ -20,6 +20,8 @@ The vulnerability report must not contain any project with vulnerable packages.
 
 ## Windows Validation
 
+- Run the `Validate Windows Release` workflow in `clean-installer` mode against the release candidate on `DOT-WINDOWS02`.
+- Run the same workflow in `update-package` mode when a published baseline artifact is available for upgrade testing.
 - Clean install the Windows installer on a disposable VM.
 - Confirm first-run setup works without a bootstrap password.
 - Confirm HTTPS is enabled and the admin HTTP listener is disabled unless explicitly selected.
