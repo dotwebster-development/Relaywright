@@ -140,6 +140,27 @@ install_dependencies() {
     die "Missing required soak tools (${missing[*]}) and no supported package manager was found."
 }
 
+reset_soak_artifacts() {
+    rm -rf \
+        "$artifacts_directory/captured" \
+        "$artifacts_directory/transcripts" \
+        "$artifacts_directory/downloads" \
+        "$artifacts_directory/capture_smtp.py" \
+        "$artifacts_directory/send_smtp.py" \
+        "$artifacts_directory/capture-server.log"
+    rm -f \
+        "$artifacts_directory"/failure.txt \
+        "$artifacts_directory"/health*.json \
+        "$artifacts_directory"/journal-*.txt \
+        "$artifacts_directory"/queue-counts-*.txt \
+        "$artifacts_directory"/queue-status-raw-*.txt \
+        "$artifacts_directory"/service-*.txt \
+        "$artifacts_directory"/traffic-summary.txt \
+        "$artifacts_directory"/validation-input-final.txt \
+        "$artifacts_directory"/validation-input-failure.txt \
+        "$artifacts_directory"/validation-input-cleanup.txt
+}
+
 curl_download() {
     local url="$1"
     local destination="$2"
@@ -336,6 +357,7 @@ write_capture_server() {
     local script_path="$artifacts_directory/capture_smtp.py"
     cat > "$script_path" <<'PY'
 import argparse
+import os
 import pathlib
 import socketserver
 import threading
@@ -351,7 +373,7 @@ class CaptureStore:
     def save(self, data):
         with self.lock:
             self.count += 1
-            path = self.output / f"message-{self.count:08d}.eml"
+            path = self.output / f"message-{time.time_ns()}-{os.getpid()}-{self.count:08d}.eml"
         path.write_bytes(data)
 
 class Handler(socketserver.StreamRequestHandler):
@@ -578,16 +600,36 @@ queue_count_for_status() {
 
 write_queue_counts() {
     local name="$1"
+    local pending
+    local in_progress
+    local retry_scheduled
+    local delivered
+    local failed
+    local expired
+    local delivery_attempts
+    local spool_files
+    local captured
+
+    pending="$(queue_count_for_status 0)"
+    in_progress="$(queue_count_for_status 1)"
+    retry_scheduled="$(queue_count_for_status 2)"
+    delivered="$(queue_count_for_status 3)"
+    failed="$(queue_count_for_status 4)"
+    expired="$(queue_count_for_status 5)"
+    delivery_attempts="$(sqlite_scalar 'SELECT COUNT(*) FROM "DeliveryAttempts";')"
+    spool_files="$("${SUDO[@]}" find "$data_directory/spool" -type f -name '*.eml' 2>/dev/null | wc -l | tr -d ' ')"
+    captured="$(count_captured_messages)"
+
     {
-        echo "pending=$(queue_count_for_status 0)"
-        echo "in_progress=$(queue_count_for_status 1)"
-        echo "retry_scheduled=$(queue_count_for_status 2)"
-        echo "delivered=$(queue_count_for_status 3)"
-        echo "failed=$(queue_count_for_status 4)"
-        echo "expired=$(queue_count_for_status 5)"
-        echo "delivery_attempts=$(sqlite_scalar 'SELECT COUNT(*) FROM \"DeliveryAttempts\";')"
-        echo "spool_files=$("${SUDO[@]}" find "$data_directory/spool" -type f -name '*.eml' 2>/dev/null | wc -l | tr -d ' ')"
-        echo "captured=$(count_captured_messages)"
+        echo "pending=$pending"
+        echo "in_progress=$in_progress"
+        echo "retry_scheduled=$retry_scheduled"
+        echo "delivered=$delivered"
+        echo "failed=$failed"
+        echo "expired=$expired"
+        echo "delivery_attempts=$delivery_attempts"
+        echo "spool_files=$spool_files"
+        echo "captured=$captured"
     } > "$artifacts_directory/$name"
 }
 
@@ -731,6 +773,7 @@ save_diagnostics() {
 
 invoke_soak() {
     install_dependencies
+    reset_soak_artifacts
     invoke_cleanup
     download_installer_script
     run_installer

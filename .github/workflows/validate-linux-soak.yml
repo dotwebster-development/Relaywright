@@ -71,6 +71,12 @@ jobs:
       - name: Checkout validation scripts
         uses: actions/checkout@v7
 
+      - name: Reset soak artifacts
+        shell: bash
+        run: |
+          rm -rf "$PWD/artifacts/linux-soak-validation"
+          mkdir -p "$PWD/artifacts/linux-soak-validation"
+
       - name: Cleanup release validation state before soak
         if: inputs.mode == 'soak'
         shell: bash
