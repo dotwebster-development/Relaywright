@@ -107,6 +107,7 @@ public sealed class BackupService(
             await using var backupLock = await backupCoordinator.AcquireSpoolDeletionLockAsync(cancellationToken);
 
             await CreateDatabaseSnapshotAsync(snapshotPath, cancellationToken);
+            await BackupCredentialSanitizer.SanitizeAsync(snapshotPath, cancellationToken);
             var spoolPaths = await ReadSpoolPathsFromSnapshotAsync(snapshotPath, cancellationToken);
             var manifest = new BackupManifest
             {
@@ -241,11 +242,6 @@ public sealed class BackupService(
             if (missingSpoolEntry is not null)
             {
                 throw new InvalidOperationException($"Spool entry is missing from backup: {missingSpoolEntry}");
-            }
-
-            if (!archive.Entries.Any(x => x.FullName.StartsWith("keys/", StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException("Data Protection key entries are missing.");
             }
 
             run.LastValidatedUtc = DateTimeOffset.UtcNow;
@@ -451,9 +447,7 @@ public sealed class BackupService(
             archive.CreateEntryFromFile(absolutePath, ToZipSpoolEntry(spoolPath), CompressionLevel.Optimal);
         }
 
-        AddDirectoryEntries(archive, appPaths.KeyRingDirectory, "keys");
         AddDirectoryEntries(archive, appPaths.CertificateDirectory, "certs");
-        AddFileIfExists(archive, appPaths.AdminHttpsCertificateConfigurationPath, "admin-https-certificate.json");
         AddFileIfExists(archive, appPaths.AdminWebListenerConfigurationPath, "admin-web-listener.json");
 
         var manifestEntry = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);

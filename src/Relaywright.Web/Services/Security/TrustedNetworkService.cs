@@ -31,17 +31,28 @@ public sealed class TrustedNetworkService(
             .OrderBy(x => x.Cidr)
             .ToListAsync(cancellationToken);
 
+        TrustedNetwork? matchingNetwork = null;
+        var matchingPrefixLength = -1;
         foreach (var network in networks)
         {
             if (CidrRange.TryParse(network.Cidr, out var range) && range!.Contains(remoteAddress))
             {
-                logger.LogDebug(
-                    "Remote address matched trusted network. RemoteIp={RemoteIp}; Cidr={Cidr}; Description={Description}",
-                    remoteAddress,
-                    network.Cidr,
-                    network.Description);
-                return network;
+                if (range.PrefixLength > matchingPrefixLength)
+                {
+                    matchingNetwork = network;
+                    matchingPrefixLength = range.PrefixLength;
+                }
             }
+        }
+
+        if (matchingNetwork is not null)
+        {
+            logger.LogDebug(
+                "Remote address matched trusted network. RemoteIp={RemoteIp}; Cidr={Cidr}; Description={Description}",
+                remoteAddress,
+                matchingNetwork.Cidr,
+                matchingNetwork.Description);
+            return matchingNetwork;
         }
 
         logger.LogWarning(
@@ -68,13 +79,30 @@ public sealed class TrustedNetworkService(
         var owner = NormalizeOptional(network.Owner);
         var location = NormalizeOptional(network.Location);
 
-        if (!CidrRange.TryParse(cidr, out _))
+        if (!CidrRange.TryParse(cidr, out var range))
         {
             logger.LogWarning("Trusted network save rejected because CIDR/IP was invalid. Cidr={Cidr}", cidr);
             throw new InvalidOperationException("The trusted network must be a valid IP address or CIDR range.");
         }
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var otherNetworks = await dbContext.TrustedNetworks
+            .AsNoTracking()
+            .Where(x => x.Id != network.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var otherNetwork in otherNetworks)
+        {
+            if (CidrRange.TryParse(otherNetwork.Cidr, out var otherRange) && range!.Overlaps(otherRange!))
+            {
+                logger.LogWarning(
+                    "Trusted network save rejected because CIDR overlaps an existing trusted network. Cidr={Cidr}; ExistingId={ExistingId}; ExistingCidr={ExistingCidr}",
+                    cidr,
+                    otherNetwork.Id,
+                    otherNetwork.Cidr);
+                throw new InvalidOperationException($"Trusted network overlaps with existing entry '{otherNetwork.Cidr}'.");
+            }
+        }
+
         var existing = network.Id == 0
             ? null
             : await dbContext.TrustedNetworks.SingleOrDefaultAsync(x => x.Id == network.Id, cancellationToken);

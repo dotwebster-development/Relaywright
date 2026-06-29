@@ -103,7 +103,7 @@ public sealed class MicrosoftOAuthTokenProvider(
                     throw new HttpRequestException(message);
                 }
 
-                throw new InvalidOperationException($"{message} {payload}");
+                throw new InvalidOperationException(message);
             }
 
             using var document = JsonDocument.Parse(payload);

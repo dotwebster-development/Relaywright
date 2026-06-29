@@ -1,0 +1,243 @@
+#define AppVersion GetEnv("RELAYWRIGHT_VERSION")
+#if AppVersion == ""
+#define AppVersion "0.1.0-beta.1"
+#endif
+
+#define SourceDir GetEnv("RELAYWRIGHT_SOURCE_DIR")
+#if SourceDir == ""
+#define SourceDir "..\..\artifacts\relaywright-win-x64"
+#endif
+
+#define OutputDir GetEnv("RELAYWRIGHT_OUTPUT_DIR")
+#if OutputDir == ""
+#define OutputDir "..\..\artifacts\installer"
+#endif
+
+[Setup]
+AppId={{24C2F3E8-18CB-49A0-9B35-3F96E0C52B73}
+AppName=Relaywright
+AppVersion={#AppVersion}
+AppPublisher=Relaywright
+AppPublisherURL=https://relaywright.com
+AppSupportURL=https://relaywright.com
+AppUpdatesURL=https://relaywright.com
+DefaultDirName={autopf}\Relaywright
+DefaultGroupName=Relaywright
+DisableProgramGroupPage=yes
+OutputDir={#OutputDir}
+OutputBaseFilename=Relaywright-{#AppVersion}-windows-x64-installer
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+UninstallDisplayIcon={app}\releases
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Files]
+Source: "{#SourceDir}\*"; DestDir: "{app}\package"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\scripts\windows\Install-Relaywright.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\Relaywright Admin"; Filename: "https://localhost:5443"
+Name: "{group}\Uninstall Relaywright"; Filename: "{uninstallexe}"
+
+[UninstallRun]
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\tools\Uninstall-Relaywright.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "RelaywrightServiceUninstall"
+
+[Code]
+var
+  DataDirPage: TInputDirWizardPage;
+  ServicePage: TInputQueryWizardPage;
+  PortPage: TInputQueryWizardPage;
+  OptionPage: TInputOptionWizardPage;
+  FirewallPage: TInputQueryWizardPage;
+  BootstrapPage: TInputQueryWizardPage;
+
+function Quote(Value: String): String;
+begin
+  Result := '"' + Value + '"';
+end;
+
+function PsQuote(Value: String): String;
+begin
+  StringChangeEx(Value, '`', '``', True);
+  StringChangeEx(Value, '"', '`"', True);
+  Result := '"' + Value + '"';
+end;
+
+function IsValidPort(Value: String): Boolean;
+var
+  Port: Integer;
+begin
+  Result := TryStrToInt(Value, Port) and (Port >= 1) and (Port <= 65535);
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = PortPage.ID then
+  begin
+    if not IsValidPort(PortPage.Values[0]) then
+    begin
+      MsgBox('Admin HTTPS port must be between 1 and 65535.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+
+    if OptionPage.Values[0] and not IsValidPort(PortPage.Values[1]) then
+    begin
+      MsgBox('Admin HTTP port must be between 1 and 65535 when HTTP is enabled.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+
+    if OptionPage.Values[0] and (PortPage.Values[0] = PortPage.Values[1]) then
+    begin
+      MsgBox('Admin HTTP and HTTPS ports must be different.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+
+    if not IsValidPort(PortPage.Values[2]) then
+    begin
+      MsgBox('SMTP firewall port must be between 1 and 65535.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+  end;
+end;
+
+procedure InitializeWizard;
+begin
+  DataDirPage := CreateInputDirPage(
+    wpSelectDir,
+    'Relaywright Data',
+    'Choose where Relaywright should store database, spool, certificates, keys, and backups.',
+    'The data directory is preserved by default when Relaywright is uninstalled.',
+    False,
+    '');
+  DataDirPage.Add('Data directory:');
+  DataDirPage.Values[0] := ExpandConstant('{commonappdata}\Relaywright');
+
+  ServicePage := CreateInputQueryPage(
+    DataDirPage.ID,
+    'Windows Service',
+    'Choose the Windows service identity.',
+    'The service is configured to start automatically.');
+  ServicePage.Add('Service name:', False);
+  ServicePage.Add('Display name:', False);
+  ServicePage.Values[0] := 'Relaywright';
+  ServicePage.Values[1] := 'Relaywright';
+
+  PortPage := CreateInputQueryPage(
+    ServicePage.ID,
+    'Ports',
+    'Choose the admin and SMTP ports.',
+    'The SMTP port value is used for firewall rules. The SMTP listener can still be changed later in Relaywright settings.');
+  PortPage.Add('Admin HTTPS port:', False);
+  PortPage.Add('Admin HTTP port:', False);
+  PortPage.Add('SMTP firewall port:', False);
+  PortPage.Values[0] := '5443';
+  PortPage.Values[1] := '5080';
+  PortPage.Values[2] := '25';
+
+  OptionPage := CreateInputOptionPage(
+    PortPage.ID,
+    'Install Options',
+    'Choose optional installation actions.',
+    'These can be changed later by re-running the installer or using the install script.',
+    True,
+    False);
+  OptionPage.Add('Enable admin HTTP listener');
+  OptionPage.Add('Configure Windows Firewall rules');
+  OptionPage.Add('Generate a self-signed HTTPS certificate if needed');
+  OptionPage.Values[0] := True;
+  OptionPage.Values[1] := True;
+  OptionPage.Values[2] := True;
+
+  FirewallPage := CreateInputQueryPage(
+    OptionPage.ID,
+    'Firewall Scope',
+    'Choose which remote addresses may connect to opened ports.',
+    'Use Any for all remote addresses or a CIDR such as 192.168.1.0/24.');
+  FirewallPage.Add('Remote address:', False);
+  FirewallPage.Values[0] := 'Any';
+
+  BootstrapPage := CreateInputQueryPage(
+    FirewallPage.ID,
+    'Optional Bootstrap Admin',
+    'Optionally seed the first admin account.',
+    'Leave the password blank to use the first-run setup page instead.');
+  BootstrapPage.Add('User name:', False);
+  BootstrapPage.Add('Email:', False);
+  BootstrapPage.Add('Password:', True);
+  BootstrapPage.Values[0] := 'admin';
+  BootstrapPage.Values[1] := 'admin@localhost';
+  BootstrapPage.Values[2] := '';
+end;
+
+function BoolParameter(Name: String; Enabled: Boolean): String;
+begin
+  if Enabled then
+    Result := ' -' + Name
+  else
+    Result := '';
+end;
+
+procedure SaveUninstallScript;
+var
+  Script: String;
+begin
+  Script :=
+    '& ' + PsQuote(ExpandConstant('{app}\tools\Install-Relaywright.ps1')) +
+    ' -InstallRoot ' + PsQuote(ExpandConstant('{app}')) +
+    ' -DataDirectory ' + PsQuote(DataDirPage.Values[0]) +
+    ' -ServiceName ' + PsQuote(ServicePage.Values[0]) +
+    ' -FirewallRulePrefix ' + PsQuote(ServicePage.Values[1]) +
+    ' -Uninstall -NonInteractive' + #13#10;
+  SaveStringToFile(ExpandConstant('{app}\tools\Uninstall-Relaywright.ps1'), Script, False);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Params: String;
+  ResultCode: Integer;
+begin
+  if CurStep <> ssPostInstall then
+    exit;
+
+  Params :=
+    '-NoProfile -ExecutionPolicy Bypass -File ' + Quote(ExpandConstant('{app}\tools\Install-Relaywright.ps1')) +
+    ' -PackagePath ' + Quote(ExpandConstant('{app}\package')) +
+    ' -InstallRoot ' + Quote(ExpandConstant('{app}')) +
+    ' -DataDirectory ' + Quote(DataDirPage.Values[0]) +
+    ' -ServiceName ' + Quote(ServicePage.Values[0]) +
+    ' -DisplayName ' + Quote(ServicePage.Values[1]) +
+    ' -HttpsPort ' + PortPage.Values[0] +
+    ' -HttpPort ' + PortPage.Values[1] +
+    ' -SmtpPort ' + PortPage.Values[2] +
+    ' -FirewallRulePrefix ' + Quote(ServicePage.Values[1]) +
+    ' -FirewallRemoteAddress ' + Quote(FirewallPage.Values[0]) +
+    ' -BootstrapUserName ' + Quote(BootstrapPage.Values[0]) +
+    ' -BootstrapEmail ' + Quote(BootstrapPage.Values[1]) +
+    ' -GenerateSelfSignedCertificate:$' + LowerCase(BoolToStr(OptionPage.Values[2], True)) +
+    ' -NonInteractive';
+
+  Params := Params + BoolParameter('EnableHttp', OptionPage.Values[0]);
+  Params := Params + BoolParameter('ConfigureFirewall', OptionPage.Values[1]);
+
+  if BootstrapPage.Values[2] <> '' then
+    Params := Params + ' -BootstrapPassword ' + Quote(BootstrapPage.Values[2]);
+
+  if not Exec('powershell.exe', Params, '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+    RaiseException('PowerShell could not be started.');
+
+  if ResultCode <> 0 then
+    RaiseException('Relaywright service installation failed. PowerShell exit code: ' + IntToStr(ResultCode));
+
+  SaveUninstallScript;
+end;

@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
-using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Security;
 
@@ -18,7 +17,6 @@ public sealed class SetupModel(
     SignInManager<ApplicationUser> signInManager,
     IOperationalEventService eventService,
     IAdminHttpsCertificateService adminHttpsCertificateService,
-    IBackupRestoreService backupRestoreService,
     ILogger<SetupModel> logger) : PageModel
 {
     private static readonly SemaphoreSlim InitialAdminGate = new(1, 1);
@@ -29,9 +27,6 @@ public sealed class SetupModel(
     [BindProperty]
     public CertificateInputModel CertificateInput { get; set; } = new();
 
-    [BindProperty]
-    public RestoreInputModel RestoreInput { get; set; } = new();
-
     public SetupStep CurrentStep { get; private set; } = SetupStep.Welcome;
 
     public string? CreatedUserName { get; private set; }
@@ -40,11 +35,7 @@ public sealed class SetupModel(
 
     public AdminHttpsCertificateConfiguration? ConfiguredCertificate { get; private set; }
 
-    public BackupRestoreResult? RestoreResult { get; private set; }
-
     public bool IsWelcomeStep => CurrentStep == SetupStep.Welcome;
-
-    public bool IsRestoreStep => CurrentStep == SetupStep.Restore;
 
     public bool IsAdminAccountStep => CurrentStep == SetupStep.AdminAccount;
 
@@ -70,7 +61,7 @@ public sealed class SetupModel(
         }
 
         ModelState.Clear();
-        CurrentStep = SetupStep.Restore;
+        CurrentStep = SetupStep.AdminAccount;
         return Page();
     }
 
@@ -83,52 +74,6 @@ public sealed class SetupModel(
 
         ModelState.Clear();
         CurrentStep = SetupStep.Welcome;
-        return Page();
-    }
-
-    public async Task<IActionResult> OnPostSkipRestoreAsync(CancellationToken cancellationToken)
-    {
-        if (await HasAnyUserAsync(cancellationToken))
-        {
-            return RedirectToPage("/Account/Login");
-        }
-
-        ModelState.Clear();
-        CurrentStep = SetupStep.AdminAccount;
-        return Page();
-    }
-
-    public async Task<IActionResult> OnPostStageRestoreAsync(CancellationToken cancellationToken)
-    {
-        if (await HasAnyUserAsync(cancellationToken))
-        {
-            return RedirectToPage("/Account/Login");
-        }
-
-        CurrentStep = SetupStep.Restore;
-        RemoveModelStateEntries(nameof(Input));
-        RemoveModelStateEntries(nameof(CertificateInput));
-
-        try
-        {
-            RestoreResult = await backupRestoreService.StageRestoreAsync(
-                RequireFile(RestoreInput.BackupFile, "Select a Relaywright backup file."),
-                RestoreInput.EncryptionPassword,
-                cancellationToken);
-            if (!RestoreResult.Succeeded)
-            {
-                ModelState.AddModelError(string.Empty, RestoreResult.Message);
-            }
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(
-                exception,
-                "First-run restore staging failed. RemoteIp={RemoteIp}",
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            ModelState.AddModelError(string.Empty, exception.Message);
-        }
-
         return Page();
     }
 
@@ -316,7 +261,6 @@ public sealed class SetupModel(
     public enum SetupStep
     {
         Welcome,
-        Restore,
         AdminAccount,
         HttpsCertificate,
         Complete
@@ -354,12 +298,5 @@ public sealed class SetupModel(
 
         [Range(1, 10)]
         public int SelfSignedValidYears { get; set; } = 2;
-    }
-
-    public sealed class RestoreInputModel
-    {
-        public IFormFile? BackupFile { get; set; }
-
-        public string? EncryptionPassword { get; set; }
     }
 }

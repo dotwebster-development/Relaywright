@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.ConfigurationHistory;
+using Relaywright.Web.Services.Runtime;
 
 namespace Relaywright.Web.Pages.Operations;
 
 public sealed class BackupsModel(
     IBackupService backupService,
     IConfigurationSnapshotService configurationSnapshotService,
+    IBackupRestoreService backupRestoreService,
+    IApplicationRestartService applicationRestartService,
     ILogger<BackupsModel> logger) : PageModel
 {
     public IReadOnlyList<BackupRun> Runs { get; private set; } = Array.Empty<BackupRun>();
@@ -23,6 +26,12 @@ public sealed class BackupsModel(
 
     [BindProperty]
     public string? ValidationPassword { get; set; }
+
+    [BindProperty]
+    public IFormFile? RestoreBackupFile { get; set; }
+
+    [BindProperty]
+    public string? RestoreEncryptionPassword { get; set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -66,6 +75,44 @@ public sealed class BackupsModel(
     {
         var result = await backupService.ValidateAsync(id, cancellationToken, ValidationPassword);
         StatusMessage = result.Message;
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostStageRestoreAsync(CancellationToken cancellationToken)
+    {
+        if (RestoreBackupFile is null || RestoreBackupFile.Length <= 0)
+        {
+            StatusMessage = "Select a Relaywright backup file.";
+            return RedirectToPage();
+        }
+
+        var restore = await backupRestoreService.StageRestoreAsync(
+            RestoreBackupFile,
+            RestoreEncryptionPassword,
+            cancellationToken);
+
+        if (!restore.Succeeded)
+        {
+            StatusMessage = restore.Message;
+            logger.LogWarning(
+                "Backup restore staging failed from admin page. FileName={FileName}; User={UserName}; Message={Message}",
+                RestoreBackupFile.FileName,
+                User.Identity?.Name,
+                restore.Message);
+            return RedirectToPage();
+        }
+
+        var restart = await applicationRestartService.RequestRestartAsync(
+            "Backup restore staged.",
+            User.Identity?.Name,
+            cancellationToken);
+
+        StatusMessage = $"{restore.Message} {restart.Message}";
+        logger.LogWarning(
+            "Backup restore staged from admin page. FileName={FileName}; User={UserName}; RestartScheduled={RestartScheduled}",
+            RestoreBackupFile.FileName,
+            User.Identity?.Name,
+            restart.RestartScheduled);
         return RedirectToPage();
     }
 

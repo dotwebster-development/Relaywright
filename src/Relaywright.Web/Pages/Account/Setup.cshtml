@@ -17,24 +17,20 @@
         </div>
 
         <ol class="setup-progress" aria-label="Setup progress">
-            <li class="@(Model.IsWelcomeStep ? "is-active" : Model.IsRestoreStep || Model.IsAdminAccountStep || Model.IsCertificateStep || Model.IsCompleteStep ? "is-complete" : null)">
+            <li class="@(Model.IsWelcomeStep ? "is-active" : Model.IsAdminAccountStep || Model.IsCertificateStep || Model.IsCompleteStep ? "is-complete" : null)">
                 <span>1</span>
                 <strong>Welcome</strong>
             </li>
-            <li class="@(Model.IsRestoreStep ? "is-active" : Model.IsAdminAccountStep || Model.IsCertificateStep || Model.IsCompleteStep ? "is-complete" : null)">
-                <span>2</span>
-                <strong>Restore</strong>
-            </li>
             <li class="@(Model.IsAdminAccountStep ? "is-active" : Model.IsCertificateStep || Model.IsCompleteStep ? "is-complete" : null)">
-                <span>3</span>
+                <span>2</span>
                 <strong>Admin</strong>
             </li>
             <li class="@(Model.IsCertificateStep ? "is-active" : Model.IsCompleteStep ? "is-complete" : null)">
-                <span>4</span>
+                <span>3</span>
                 <strong>HTTPS</strong>
             </li>
             <li class="@(Model.IsCompleteStep ? "is-active" : null)">
-                <span>5</span>
+                <span>4</span>
                 <strong>Overview</strong>
             </li>
         </ol>
@@ -56,49 +52,6 @@
                     <button type="submit">Start Setup</button>
                 </form>
             </div>
-        }
-        else if (Model.IsRestoreStep)
-        {
-            <div class="setup-step">
-                <div class="setup-copy">
-                    <h2>Restore an existing instance</h2>
-                    <p>Upload a Relaywright backup if this machine should take over an existing relay. Restores are staged and applied on the next service restart before setup continues.</p>
-                </div>
-
-                <div asp-validation-summary="ModelOnly" class="status error"></div>
-
-                @if (Model.RestoreResult?.Succeeded == true)
-                {
-                    <div class="setup-callout">
-                        <strong>Restart required</strong>
-                        <p>@Model.RestoreResult.Message</p>
-                    </div>
-                }
-                else
-                {
-                    <form method="post" asp-page-handler="StageRestore" enctype="multipart/form-data" class="form-grid">
-                        <label>
-                            <span>Backup File</span>
-                            <input asp-for="RestoreInput.BackupFile" type="file" accept=".zip,.rwbak,application/zip,application/octet-stream" />
-                        </label>
-                        <label>
-                            <span>Encryption Password</span>
-                            <input asp-for="RestoreInput.EncryptionPassword" type="password" autocomplete="new-password" placeholder="Only needed for encrypted backups" />
-                        </label>
-                        <div class="setup-callout">
-                            <strong>What restore replaces</strong>
-                            <p>The restored bundle will replace the database, spool, Data Protection keys, certificates, and saved listener settings on restart. Current local setup data is moved aside as a safety copy.</p>
-                        </div>
-                        <div class="actions split-actions">
-                            <button type="submit">Stage Restore</button>
-                            <button type="submit" class="secondary-button" form="setup-skip-restore-form">Skip Restore</button>
-                        </div>
-                    </form>
-                }
-
-            </div>
-
-            <form id="setup-skip-restore-form" method="post" asp-page-handler="SkipRestore"></form>
         }
         else if (Model.IsAdminAccountStep)
         {
@@ -245,7 +198,7 @@
                     </div>
                     <div>
                         <dt>Completed steps</dt>
-                        <dd>Welcome, restore choice, administrator account, HTTPS certificate, setup overview</dd>
+                        <dd>Welcome, administrator account, HTTPS certificate, setup overview</dd>
                     </div>
                     <div>
                         <dt>Next recommended step</dt>
@@ -259,13 +212,6 @@
                         <div>
                             <strong>Welcome</strong>
                             <p>Confirmed this is a new Relaywright instance.</p>
-                        </div>
-                    </li>
-                    <li class="is-complete">
-                        <span></span>
-                        <div>
-                            <strong>Restore</strong>
-                            <p>Continued with a new setup rather than applying a backup.</p>
                         </div>
                     </li>
                     <li class="is-complete">

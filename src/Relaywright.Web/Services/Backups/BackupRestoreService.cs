@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Relaywright.Web.Infrastructure;
+using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Services.Backups;
 
@@ -9,6 +10,10 @@ public sealed class BackupRestoreService(
     AppPaths appPaths,
     ILogger<BackupRestoreService> logger) : IBackupRestoreService
 {
+    private const long MaxRestoreUploadBytes = 5L * 1024 * 1024 * 1024;
+    private const long MaxExtractedArchiveBytes = 50L * 1024 * 1024 * 1024;
+    private const int MaxArchiveEntryCount = 200_000;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -25,6 +30,15 @@ public sealed class BackupRestoreService(
             {
                 Succeeded = false,
                 Message = "Select a Relaywright backup file."
+            };
+        }
+
+        if (backupFile.Length > MaxRestoreUploadBytes)
+        {
+            return new BackupRestoreResult
+            {
+                Succeeded = false,
+                Message = $"Backup file is too large. The restore upload limit is {MaxRestoreUploadBytes / 1024 / 1024 / 1024} GB."
             };
         }
 
@@ -63,7 +77,7 @@ public sealed class BackupRestoreService(
             Directory.Move(stagingDirectory, appPaths.RestorePendingDirectory);
 
             logger.LogWarning(
-                "Restore staged from first-run setup. FileName={FileName}; Encrypted={Encrypted}",
+                "Restore staged from authenticated backup restore. FileName={FileName}; Encrypted={Encrypted}",
                 backupFile.FileName,
                 BackupEncryption.LooksEncrypted(uploadPath));
 
@@ -71,12 +85,12 @@ public sealed class BackupRestoreService(
             {
                 Succeeded = true,
                 RestartRequired = true,
-                Message = "Restore staged. Restart Relaywright to apply the restored database, spool, keys, certificates, and listener settings."
+                Message = "Restore staged. Restart Relaywright to apply the restored database, spool, certificates, and listener settings. Admin accounts, protected relay secrets, Data Protection keys, and admin HTTPS certificate passwords are not restored."
             };
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Restore staging failed from first-run setup.");
+            logger.LogWarning(exception, "Restore staging failed.");
             return new BackupRestoreResult
             {
                 Succeeded = false,
@@ -117,9 +131,7 @@ public sealed class BackupRestoreService(
 
         CopyFileIfExists(Path.Combine(paths.RestorePendingDirectory, "relay.db"), paths.DatabasePath);
         CopyDirectoryIfExists(Path.Combine(paths.RestorePendingDirectory, "spool"), paths.SpoolRootDirectory);
-        CopyDirectoryIfExists(Path.Combine(paths.RestorePendingDirectory, "keys"), paths.KeyRingDirectory);
         CopyDirectoryIfExists(Path.Combine(paths.RestorePendingDirectory, "certs"), paths.CertificateDirectory);
-        CopyFileIfExists(Path.Combine(paths.RestorePendingDirectory, "admin-https-certificate.json"), paths.AdminHttpsCertificateConfigurationPath);
         CopyFileIfExists(Path.Combine(paths.RestorePendingDirectory, "admin-web-listener.json"), paths.AdminWebListenerConfigurationPath);
 
         Directory.CreateDirectory(paths.SpoolRootDirectory);
@@ -142,9 +154,15 @@ public sealed class BackupRestoreService(
 
         await using (var manifestStream = manifestEntry.Open())
         {
-            _ = await JsonSerializer.DeserializeAsync<RestoreManifest>(manifestStream, JsonOptions, cancellationToken)
+            var manifest = await JsonSerializer.DeserializeAsync<RestoreManifest>(manifestStream, JsonOptions, cancellationToken)
                 ?? throw new InvalidOperationException("Backup manifest could not be read.");
+            if (!string.Equals(manifest.Application, "Relaywright", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Backup manifest is not for Relaywright.");
+            }
         }
+
+        ValidateArchiveShape(archive);
 
         ExtractRequiredEntry(databaseEntry, stagingDirectory, "relay.db");
         foreach (var entry in archive.Entries)
@@ -154,22 +172,17 @@ public sealed class BackupRestoreService(
                 continue;
             }
 
-            if (entry.FullName.StartsWith("spool/", StringComparison.OrdinalIgnoreCase)
-                || entry.FullName.StartsWith("keys/", StringComparison.OrdinalIgnoreCase)
-                || entry.FullName.StartsWith("certs/", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(entry.FullName, "admin-https-certificate.json", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(entry.FullName, "admin-web-listener.json", StringComparison.OrdinalIgnoreCase))
+            var restorePath = GetAllowedRestorePath(entry.FullName);
+            if (restorePath is not null)
             {
-                ExtractEntry(entry, stagingDirectory, entry.FullName);
+                ExtractEntry(entry, stagingDirectory, restorePath);
             }
         }
 
-        if (!Directory.Exists(Path.Combine(stagingDirectory, "keys")))
-        {
-            throw new InvalidOperationException("Data Protection key entries are missing.");
-        }
-
-        await ValidateDatabaseAsync(Path.Combine(stagingDirectory, "relay.db"), cancellationToken);
+        var stagedDatabasePath = Path.Combine(stagingDirectory, "relay.db");
+        await ValidateDatabaseAsync(stagedDatabasePath, cancellationToken);
+        await BackupCredentialSanitizer.SanitizeAsync(stagedDatabasePath, cancellationToken);
+        await ValidateRestoredTrustedNetworksAsync(stagedDatabasePath, cancellationToken);
 
         await File.WriteAllTextAsync(
             Path.Combine(stagingDirectory, "restore.json"),
@@ -187,6 +200,11 @@ public sealed class BackupRestoreService(
 
     private static void ExtractEntry(ZipArchiveEntry entry, string root, string relativePath)
     {
+        if (entry.Length < 0 || entry.Length > MaxExtractedArchiveBytes)
+        {
+            throw new InvalidOperationException($"Backup entry is too large: {entry.FullName}");
+        }
+
         var destination = ResolveUnder(root, relativePath);
         var directory = Path.GetDirectoryName(destination);
         if (!string.IsNullOrWhiteSpace(directory))
@@ -195,6 +213,91 @@ public sealed class BackupRestoreService(
         }
 
         entry.ExtractToFile(destination, overwrite: true);
+    }
+
+    private static void ValidateArchiveShape(ZipArchive archive)
+    {
+        if (archive.Entries.Count > MaxArchiveEntryCount)
+        {
+            throw new InvalidOperationException("Backup archive contains too many entries.");
+        }
+
+        long totalSize = 0;
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Name))
+            {
+                continue;
+            }
+
+            var normalizedName = NormalizeArchivePath(entry.FullName);
+            if (!names.Add(normalizedName))
+            {
+                throw new InvalidOperationException($"Backup archive contains a duplicate entry: {entry.FullName}");
+            }
+
+            if (entry.Length < 0)
+            {
+                throw new InvalidOperationException($"Backup entry has an invalid length: {entry.FullName}");
+            }
+
+            totalSize += entry.Length;
+            if (totalSize > MaxExtractedArchiveBytes)
+            {
+                throw new InvalidOperationException($"Backup archive expands beyond the restore limit of {MaxExtractedArchiveBytes / 1024 / 1024 / 1024} GB.");
+            }
+
+            _ = GetAllowedRestorePath(entry.FullName);
+        }
+    }
+
+    private static string? GetAllowedRestorePath(string entryName)
+    {
+        var normalized = NormalizeArchivePath(entryName);
+        if (string.IsNullOrWhiteSpace(normalized)
+            || string.Equals(normalized, "manifest.json", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "relay.db", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (normalized.StartsWith("spool/", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("certs/", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "admin-web-listener.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized;
+        }
+
+        if (normalized.StartsWith("keys/", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "admin-https-certificate.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        throw new InvalidOperationException($"Backup archive contains an unsupported entry: {entryName}");
+    }
+
+    private static string NormalizeArchivePath(string entryName)
+    {
+        var normalized = entryName.Replace('\\', '/').Trim();
+        if (Path.IsPathRooted(normalized) || normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Backup entry uses an absolute path: {entryName}");
+        }
+
+        var invalidFileNameCharacters = Path.GetInvalidFileNameChars();
+        var segments = normalized.Split('/', StringSplitOptions.None);
+        if (segments.Any(segment =>
+                string.IsNullOrWhiteSpace(segment)
+                || segment is "." or ".."
+                || segment.Contains(':', StringComparison.Ordinal)
+                || segment.IndexOfAny(invalidFileNameCharacters) >= 0))
+        {
+            throw new InvalidOperationException($"Backup entry contains an invalid path segment: {entryName}");
+        }
+
+        return string.Join('/', segments);
     }
 
     private static string ResolveUnder(string root, string relativePath)
@@ -223,6 +326,59 @@ public sealed class BackupRestoreService(
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM \"AspNetUsers\";";
         _ = await command.ExecuteScalarAsync(cancellationToken);
+    }
+
+    private static async Task ValidateRestoredTrustedNetworksAsync(
+        string databasePath,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False");
+        await connection.OpenAsync(cancellationToken);
+        if (!await TableExistsAsync(connection, "TrustedNetworks", cancellationToken))
+        {
+            return;
+        }
+
+        var networks = new List<TrustedNetworkCidr>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT \"Id\", \"Cidr\" FROM \"TrustedNetworks\";";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var id = reader.GetInt32(0);
+                var cidr = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                if (!CidrRange.TryParse(cidr, out var range))
+                {
+                    throw new InvalidOperationException($"Restored backup contains an invalid trusted network CIDR: {cidr}");
+                }
+
+                networks.Add(new TrustedNetworkCidr(id, cidr, range!));
+            }
+        }
+
+        for (var i = 0; i < networks.Count; i++)
+        {
+            for (var j = i + 1; j < networks.Count; j++)
+            {
+                if (networks[i].Range.Overlaps(networks[j].Range))
+                {
+                    throw new InvalidOperationException(
+                        $"Restored backup contains overlapping trusted networks: {networks[i].Cidr} and {networks[j].Cidr}.");
+                }
+            }
+        }
+    }
+
+    private static async Task<bool> TableExistsAsync(
+        SqliteConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name LIMIT 1;";
+        command.Parameters.AddWithValue("$name", tableName);
+        return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
     private static void MoveFileIfExists(string source, string destination)
@@ -298,4 +454,6 @@ public sealed class BackupRestoreService(
 
         public string Application { get; set; } = string.Empty;
     }
+
+    private sealed record TrustedNetworkCidr(int Id, string Cidr, CidrRange Range);
 }

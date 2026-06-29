@@ -9,7 +9,7 @@
         <div class="page-header-copy">
             <p class="page-eyebrow">Operations</p>
             <h1>Backups</h1>
-            <p class="page-summary">Create and validate backup bundles for the database, spool, Data Protection keys, certificates, and listener configuration.</p>
+            <p class="page-summary">Create, validate, and restore backup bundles for the database, spool, certificates, and listener configuration.</p>
         </div>
     </header>
 
@@ -72,6 +72,24 @@
             </div>
         </form>
         <p class="field-hint">Manual backups can be encrypted with a one-time password. The password is not stored, so scheduled backups remain unencrypted.</p>
+    </section>
+
+    <section class="settings-block">
+        <div class="settings-block-title">Restore</div>
+        <form method="post" asp-page-handler="StageRestore" enctype="multipart/form-data" class="compact-grid">
+            <label>
+                <span>Backup File</span>
+                <input asp-for="RestoreBackupFile" type="file" accept=".zip,.rwbak,application/zip,application/octet-stream" />
+            </label>
+            <label>
+                <span>Encryption Password</span>
+                <input asp-for="RestoreEncryptionPassword" type="password" autocomplete="new-password" placeholder="Required for encrypted backups" />
+            </label>
+            <div class="actions compact-actions">
+                <button type="submit">Stage Restore</button>
+            </div>
+        </form>
+        <p class="status warning">Restore replaces the database, spool, certificates, and listener settings after restart. Admin accounts, admin passwords, protected relay secrets, Data Protection keys, and admin HTTPS certificate passwords are not restored.</p>
     </section>
 
     <section class="panel">

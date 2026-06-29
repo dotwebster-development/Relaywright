@@ -1,0 +1,251 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without leading v"
+        required: true
+        default: "0.1.0-beta.1"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}" -replace '^v', ''
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+
+          "RELAYWRIGHT_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        shell: pwsh
+        run: >
+          dotnet build Relaywright.sln
+          --configuration Release
+          --no-restore
+          /p:Version=$env:RELAYWRIGHT_VERSION
+          /p:InformationalVersion=$env:RELAYWRIGHT_VERSION+${{ github.sha }}
+
+      - name: Test
+        run: >
+          dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj
+          --configuration Release
+          --no-build
+
+      - name: Vulnerability report
+        run: dotnet list Relaywright.sln package --vulnerable --include-transitive
+
+      - name: Publish Windows package
+        shell: pwsh
+        run: >
+          dotnet publish src/Relaywright.Web/Relaywright.Web.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifacts/relaywright-win-x64
+          /p:Version=$env:RELAYWRIGHT_VERSION
+          /p:InformationalVersion=$env:RELAYWRIGHT_VERSION+${{ github.sha }}
+          /p:PublishSingleFile=false
+          /p:PublishTrimmed=false
+          /p:DebugType=None
+          /p:DebugSymbols=false
+
+      - name: Package Windows zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts/release -Force | Out-Null
+          Compress-Archive `
+            -Path artifacts/relaywright-win-x64/* `
+            -DestinationPath "artifacts/release/relaywright-$env:RELAYWRIGHT_VERSION-windows-x64.zip" `
+            -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          RELAYWRIGHT_SOURCE_DIR: ${{ github.workspace }}\artifacts\relaywright-win-x64
+          RELAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}\artifacts\release
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found at $iscc"
+          }
+
+          & $iscc installer\windows\Relaywright.iss
+
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: artifacts/release/*
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            version="${{ github.ref_name }}"
+            version="${version#v}"
+          else
+            version="${{ inputs.version }}"
+          fi
+          echo "RELAYWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        run: >
+          dotnet build Relaywright.sln
+          --configuration Release
+          --no-restore
+          /p:Version=${RELAYWRIGHT_VERSION}
+          /p:InformationalVersion=${RELAYWRIGHT_VERSION}+${{ github.sha }}
+
+      - name: Test
+        run: >
+          dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj
+          --configuration Release
+          --no-build
+
+      - name: Vulnerability report
+        run: dotnet list Relaywright.sln package --vulnerable --include-transitive
+
+      - name: Publish Linux package
+        run: >
+          dotnet publish src/Relaywright.Web/Relaywright.Web.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained true
+          --output artifacts/relaywright-linux-x64
+          /p:Version=${RELAYWRIGHT_VERSION}
+          /p:InformationalVersion=${RELAYWRIGHT_VERSION}+${{ github.sha }}
+          /p:PublishSingleFile=false
+          /p:PublishTrimmed=false
+          /p:DebugType=None
+          /p:DebugSymbols=false
+
+      - name: Package Linux tarball
+        shell: bash
+        run: |
+          mkdir -p artifacts/release
+          tar -czf "artifacts/release/relaywright-${RELAYWRIGHT_VERSION}-linux-x64.tar.gz" -C artifacts/relaywright-linux-x64 .
+          cp scripts/linux/install-relaywright.sh artifacts/release/install-relaywright.sh
+          chmod +x artifacts/release/install-relaywright.sh
+
+      - name: Upload Linux release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-linux
+          path: artifacts/release/*
+          if-no-files-found: error
+
+  publish-release:
+    needs:
+      - windows
+      - linux
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            version="${{ github.ref_name }}"
+            version="${version#v}"
+          else
+            version="${{ inputs.version }}"
+          fi
+          echo "RELAYWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELAYWRIGHT_TAG=v$version" >> "$GITHUB_ENV"
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: downloaded
+
+      - name: Prepare checksums
+        shell: bash
+        run: |
+          mkdir -p dist
+          find downloaded -maxdepth 3 -type f -print0 | xargs -0 -I{} cp "{}" dist/
+          (
+            cd dist
+            sha256sum * | sort -k2 > SHA256SUMS.txt
+          )
+
+      - name: Create release notes
+        shell: bash
+        run: |
+          cat > RELEASE_NOTES.md <<EOF
+          Relaywright ${RELAYWRIGHT_VERSION}
+
+          Downloads:
+          - Relaywright-${RELAYWRIGHT_VERSION}-windows-x64-installer.exe
+          - relaywright-${RELAYWRIGHT_VERSION}-windows-x64.zip
+          - relaywright-${RELAYWRIGHT_VERSION}-linux-x64.tar.gz
+          - install-relaywright.sh
+          - SHA256SUMS.txt
+
+          See CHANGELOG.md, INSTALL_WINDOWS.md, INSTALL_LINUX.md, UPGRADE.md, and SECURITY.md for details.
+          EOF
+
+      - name: Create or update GitHub Release
+        shell: bash
+        run: |
+          prerelease_args=()
+          if [[ "$RELAYWRIGHT_VERSION" == *-* ]]; then
+            prerelease_args+=(--prerelease)
+          fi
+
+          if gh release view "$RELAYWRIGHT_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELAYWRIGHT_TAG" dist/* --clobber
+            gh release edit "$RELAYWRIGHT_TAG" --title "Relaywright ${RELAYWRIGHT_VERSION}" --notes-file RELEASE_NOTES.md "${prerelease_args[@]}"
+          else
+            gh release create "$RELAYWRIGHT_TAG" dist/* --title "Relaywright ${RELAYWRIGHT_VERSION}" --notes-file RELEASE_NOTES.md --target "${{ github.sha }}" "${prerelease_args[@]}"
+          fi

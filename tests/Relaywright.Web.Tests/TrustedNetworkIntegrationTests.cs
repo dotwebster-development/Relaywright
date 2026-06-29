@@ -191,14 +191,67 @@ public sealed class TrustedNetworkIntegrationTests
         Assert.Contains(events.Events, x => x.Message == "Device profile rate limit exceeded (1 message(s) per hour).");
     }
 
+    [Fact]
+    public async Task AddOrUpdateRejectsOverlappingTrustedNetworks()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var trustedNetworkService = CreateTrustedNetworkService(database, new RecordingOperationalEventService());
+        await trustedNetworkService.AddOrUpdateAsync(
+            new TrustedNetwork
+            {
+                Cidr = "10.0.0.0/8",
+                Description = "broad",
+                IsEnabled = false
+            },
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => trustedNetworkService.AddOrUpdateAsync(
+            new TrustedNetwork
+            {
+                Cidr = "10.10.0.0/16",
+                Description = "specific",
+                IsEnabled = true
+            },
+            CancellationToken.None));
+
+        Assert.Contains("overlaps", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FindMatchingUsesMostSpecificRangeWhenLegacyDataOverlaps()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.TrustedNetworks.AddRange(
+                new TrustedNetwork
+                {
+                    Cidr = "10.0.0.0/8",
+                    Description = "broad",
+                    IsEnabled = true
+                },
+                new TrustedNetwork
+                {
+                    Cidr = "10.10.0.0/16",
+                    Description = "specific",
+                    IsEnabled = true
+                });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var trustedNetworkService = CreateTrustedNetworkService(database, new RecordingOperationalEventService());
+
+        var match = await trustedNetworkService.FindMatchingAsync(IPAddress.Parse("10.10.1.2"), CancellationToken.None);
+
+        Assert.NotNull(match);
+        Assert.Equal("specific", match!.Description);
+    }
+
     private static TrustedNetworkMailboxFilter CreateFilter(
         SqliteTestStore database,
         RecordingOperationalEventService events)
     {
-        var trustedNetworkService = new TrustedNetworkService(
-            database.DbContextFactory,
-            events,
-            NullLogger<TrustedNetworkService>.Instance);
+        var trustedNetworkService = CreateTrustedNetworkService(database, events);
         var policyService = new TrustedDevicePolicyService(
             database.DbContextFactory,
             events,
@@ -210,5 +263,15 @@ public sealed class TrustedNetworkIntegrationTests
             new TrustedDeviceRateLimiter(),
             events,
             NullLogger<TrustedNetworkMailboxFilter>.Instance);
+    }
+
+    private static TrustedNetworkService CreateTrustedNetworkService(
+        SqliteTestStore database,
+        RecordingOperationalEventService events)
+    {
+        return new TrustedNetworkService(
+            database.DbContextFactory,
+            events,
+            NullLogger<TrustedNetworkService>.Instance);
     }
 }

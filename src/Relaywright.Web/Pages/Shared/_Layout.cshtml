@@ -2,6 +2,7 @@
 @{
     var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
     var navState = isAuthenticated ? AppNavigation.Resolve(Context.Request.Path) : null;
+    var appVersion = Relaywright.Web.Infrastructure.ApplicationVersion.DisplayVersion;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -41,6 +42,7 @@
                 </nav>
 
                 <div class="rail-footer">
+                    <p class="rail-version">Relaywright v@appVersion</p>
                     <div class="rail-account">
                         <p class="rail-account-label">Signed in</p>
                         <p class="rail-account-user">@User.Identity?.Name</p>

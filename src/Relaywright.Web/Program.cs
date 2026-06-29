@@ -287,7 +287,13 @@ app.MapGet("/health/details", async (
     }
 
     return Results.Json(
-        new { status = healthy ? "ok" : "degraded", checks },
+        new
+        {
+            status = healthy ? "ok" : "degraded",
+            version = ApplicationVersion.DisplayVersion,
+            informationalVersion = ApplicationVersion.InformationalVersion,
+            checks
+        },
         statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 }).RequireAuthorization();
 

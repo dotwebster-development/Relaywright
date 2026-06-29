@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relaywright</title>
+  <meta name="description" content="Relaywright is a free, self-hosted SMTP relay gateway for trusted local devices.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="assets/relaywright-logo.svg" type="image/svg+xml">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <img src="assets/relaywright-logo.svg" alt="Relaywright">
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="#download">Download</a>
+      <a href="#features">Features</a>
+      <a href="https://github.com/relaywright/relaywright/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/relaywright/relaywright">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Free self-hosted SMTP relay gateway</p>
+        <h1>Relaywright</h1>
+        <p>Run a quiet local relay for printers, scanners, apps, and internal systems. Restrict submission by trusted IPs, apply sender and recipient policy, spool mail durably, and hand delivery to your upstream smart host.</p>
+        <div class="actions">
+          <a class="button" href="https://github.com/relaywright/relaywright/releases/latest">Download latest</a>
+          <a class="button-secondary" href="#download">Install commands</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="section-inner">
+        <h2>Built For Small Infrastructure</h2>
+        <div class="grid">
+          <article class="feature">
+            <h3>Trusted Device Intake</h3>
+            <p>Accept SMTP only from configured IPs and CIDRs, then apply device-level sender, recipient, size, and rate policy.</p>
+          </article>
+          <article class="feature">
+            <h3>Durable Queue</h3>
+            <p>Accepted DATA is written to disk before SMTP success, with retry, expiry, cleanup, and delivery history in the admin UI.</p>
+          </article>
+          <article class="feature">
+            <h3>Operational Console</h3>
+            <p>Manage relay settings, trusted networks, alerts, backups, diagnostics, web certificates, and rollback snapshots from one UI.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="section">
+      <div class="section-inner">
+        <h2>Install Relaywright</h2>
+        <div class="install-grid">
+          <article class="install">
+            <h3>Windows</h3>
+            <p>Download the Windows x64 installer and run it as Administrator.</p>
+            <p><a href="https://github.com/relaywright/relaywright/releases/latest">Relaywright Windows releases</a></p>
+          </article>
+          <article class="install">
+            <h3>Linux</h3>
+            <pre><code>curl -fsSL https://github.com/relaywright/relaywright/releases/latest/download/install-relaywright.sh \
+  | sudo bash -s -- --version latest</code></pre>
+          </article>
+        </div>
+        <div class="notes">
+          <span>Release artifacts include checksums in <code>SHA256SUMS.txt</code>.</span>
+          <span>Windows and Linux packages are self-contained and do not require installing the .NET runtime.</span>
+          <span>Use the first-run setup page to create the initial admin account, or provide a bootstrap password during installation.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-inner">
+        <h2>Docs</h2>
+        <div class="grid">
+          <article class="feature">
+            <h3>Windows Install</h3>
+            <p><a href="https://github.com/relaywright/relaywright/blob/main/INSTALL_WINDOWS.md">Installer options and service setup</a></p>
+          </article>
+          <article class="feature">
+            <h3>Linux Install</h3>
+            <p><a href="https://github.com/relaywright/relaywright/blob/main/INSTALL_LINUX.md">systemd install, update, and uninstall</a></p>
+          </article>
+          <article class="feature">
+            <h3>Upgrade Notes</h3>
+            <p><a href="https://github.com/relaywright/relaywright/blob/main/UPGRADE.md">Backup, update, and rollback guidance</a></p>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>Relaywright is free software under the MIT License.</span>
+    </div>
+  </footer>
+</body>
+</html>

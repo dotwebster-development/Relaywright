@@ -2,6 +2,15 @@
 
 Windows-first SMTP relay gateway built on ASP.NET Core 10, SQLite, SmtpServer, and MailKit.
 
+## Install
+
+Relaywright releases are self-contained. The host does not need the .NET runtime.
+
+- Windows: download `Relaywright-<version>-windows-x64-installer.exe` from GitHub Releases and run it as Administrator.
+- Linux: run `curl -fsSL https://github.com/relaywright/relaywright/releases/latest/download/install-relaywright.sh | sudo bash -s -- --version latest`
+
+See `INSTALL_WINDOWS.md`, `INSTALL_LINUX.md`, and `UPGRADE.md` for production install and update guidance.
+
 ## What it does
 
 - Accepts SMTP submissions from trusted device IPs/CIDRs
@@ -16,6 +25,10 @@ Windows-first SMTP relay gateway built on ASP.NET Core 10, SQLite, SmtpServer, a
 ## Verified toolchain
 
 This project has been restored, built, and tested with .NET SDK `10.0.300`.
+
+## Versioning
+
+Relaywright uses SemVer release tags such as `v0.1.0-beta.1`. Release workflows stamp the assembly informational version and publish Windows/Linux artifacts plus `SHA256SUMS.txt`.
 
 ## Default paths
 

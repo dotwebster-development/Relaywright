@@ -86,7 +86,7 @@ Use these guidelines when changing Relaywright. They are intentionally conservat
 - Keep alert evaluation deterministic and avoid live network dependencies in tests.
 - Alert notifications must send directly through the configured upstream relay path rather than through the queued message pipeline.
 - Backup creation must hold the backup coordinator lock while collecting spool files referenced by the database snapshot.
-- Backup validation should prove restore readiness without performing destructive restore work from the admin UI.
+- Backup validation should prove restore readiness without performing destructive restore work from the admin UI. Restore staging belongs behind authenticated admin pages and must not restore admin passwords, protected relay secrets, Data Protection keys, or admin HTTPS certificate passwords.
 - Diagnostics should store staged results and sanitized details, not full SMTP transcripts.
 - Submission flow diagnostics must reuse trusted-network and submission-policy services, and must not consume device rate-limit quota.
 - Settings pages that support rollback should capture a configuration snapshot before saving or deleting operator-managed settings.
