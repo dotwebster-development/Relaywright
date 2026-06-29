@@ -1,0 +1,67 @@
+name: Validate Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to validate, without leading v"
+        required: true
+        default: "1.0.0-rc.3"
+      mode:
+        description: "Validation mode"
+        required: true
+        default: "clean-installer"
+        type: choice
+        options:
+          - clean-installer
+          - update-package
+          - cleanup-only
+      from_version:
+        description: "Baseline version for update-package mode, without leading v"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-windows-release:
+    runs-on:
+      - self-hosted
+      - Windows
+      - relaywright-install-windows
+    environment: windows-installer-test
+
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RELAYWRIGHT_VALIDATION_MODE: ${{ inputs.mode }}
+      RELAYWRIGHT_VALIDATION_VERSION: ${{ inputs.version }}
+      RELAYWRIGHT_VALIDATION_FROM_VERSION: ${{ inputs.from_version }}
+      RELAYWRIGHT_VALIDATION_REPOSITORY: ${{ github.repository }}
+
+    steps:
+      - name: Checkout validation scripts
+        uses: actions/checkout@v7
+
+      - name: Validate Windows release
+        shell: powershell
+        run: |
+          .\scripts\windows\Invoke-RelaywrightWindowsReleaseValidation.ps1 `
+            -Mode $env:RELAYWRIGHT_VALIDATION_MODE `
+            -Version $env:RELAYWRIGHT_VALIDATION_VERSION `
+            -FromVersion $env:RELAYWRIGHT_VALIDATION_FROM_VERSION `
+            -Repository $env:RELAYWRIGHT_VALIDATION_REPOSITORY `
+            -ArtifactsDirectory "$PWD\artifacts\windows-release-validation"
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-release-validation-${{ inputs.mode }}-${{ inputs.version }}
+          path: artifacts/windows-release-validation
+          if-no-files-found: warn
+          retention-days: 14
