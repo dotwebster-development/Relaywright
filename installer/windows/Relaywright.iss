@@ -72,8 +72,22 @@ end;
 function IsValidPort(Value: String): Boolean;
 var
   Port: Integer;
+  Index: Integer;
+  Character: String;
 begin
-  Result := TryStrToInt(Value, Port) and (Port >= 1) and (Port <= 65535);
+  Result := False;
+  if (Value = '') or (Length(Value) > 5) then
+    exit;
+
+  for Index := 1 to Length(Value) do
+  begin
+    Character := Copy(Value, Index, 1);
+    if Pos(Character, '0123456789') = 0 then
+      exit;
+  end;
+
+  Port := StrToInt(Value);
+  Result := (Port >= 1) and (Port <= 65535);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
