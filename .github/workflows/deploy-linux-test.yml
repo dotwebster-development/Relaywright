@@ -56,7 +56,10 @@ jobs:
 
   deploy-linux-test:
     needs: build-publish
-    runs-on: ${{ fromJson(vars.RELAYWRIGHT_LINUX_TEST_RUNS_ON || '["self-hosted","Linux","X64"]') }}
+    runs-on:
+      - self-hosted
+      - Linux
+      - relaywright-test-linux
     environment: linux-test
 
     env:
