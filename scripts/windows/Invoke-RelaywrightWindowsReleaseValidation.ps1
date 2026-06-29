@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("clean-installer", "update-package", "cleanup-only")]
+    [ValidateSet("clean-installer", "update-package", "full-release", "cleanup-only")]
     [string]$Mode = "clean-installer",
-    [string]$Version = "1.0.0-rc.3",
+    [string]$Version = "1.0.0-rc.5",
     [string]$FromVersion = "",
     [string]$Repository = $env:GITHUB_REPOSITORY,
     [string]$GitHubToken = $env:GITHUB_TOKEN,
@@ -781,7 +781,7 @@ function Assert-UpdatePreservedData {
 
 function Invoke-UpdatePackageValidation {
     if ([string]::IsNullOrWhiteSpace($FromVersion)) {
-        throw "from_version is required when mode is update-package."
+        throw "from_version is required when mode is update-package or full-release."
     }
 
     $fromVersionName = Normalize-Version -Value $FromVersion
@@ -818,6 +818,13 @@ function Invoke-UpdatePackageValidation {
     Assert-UpdatePreservedData -Before $before -After $after
 }
 
+function Invoke-FullReleaseValidation {
+    Write-Step "Running full Windows release validation: update, cleanup, clean installer"
+    Invoke-UpdatePackageValidation
+    Invoke-ReleaseValidationCleanup
+    Invoke-CleanInstallerValidation
+}
+
 Initialize-ArtifactsDirectory
 Write-ArtifactJson -Name "validation-input.json" -Value ([pscustomobject]@{
     Mode = $Mode
@@ -837,6 +844,7 @@ try {
     switch ($Mode) {
         "clean-installer" { Invoke-CleanInstallerValidation }
         "update-package" { Invoke-UpdatePackageValidation }
+        "full-release" { Invoke-FullReleaseValidation }
         "cleanup-only" { Invoke-ReleaseValidationCleanup }
     }
 
