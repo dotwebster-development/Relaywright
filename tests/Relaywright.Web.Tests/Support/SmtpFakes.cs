@@ -97,11 +97,6 @@ internal sealed class FakeMailbox(string address) : IMailbox
     public string User => _parts[0];
 
     public string Host => _parts.Length == 2 ? _parts[1] : "localhost";
-
-    public override string ToString()
-    {
-        return $"{User}@{Host}";
-    }
 }
 
 internal sealed class FakeSecurableDuplexPipe : ISecurableDuplexPipe
