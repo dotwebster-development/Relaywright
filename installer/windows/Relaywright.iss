@@ -210,6 +210,110 @@ begin
     Result := 'false';
 end;
 
+function GetDataDirectoryValue: String;
+begin
+  if WizardSilent then
+    Result := ExpandConstant('{commonappdata}\Relaywright')
+  else
+    Result := DataDirPage.Values[0];
+end;
+
+function GetServiceNameValue: String;
+begin
+  if WizardSilent then
+    Result := 'Relaywright'
+  else
+    Result := ServicePage.Values[0];
+end;
+
+function GetDisplayNameValue: String;
+begin
+  if WizardSilent then
+    Result := 'Relaywright'
+  else
+    Result := ServicePage.Values[1];
+end;
+
+function GetHttpsPortValue: String;
+begin
+  if WizardSilent then
+    Result := '5443'
+  else
+    Result := PortPage.Values[0];
+end;
+
+function GetHttpPortValue: String;
+begin
+  if WizardSilent then
+    Result := '5080'
+  else
+    Result := PortPage.Values[1];
+end;
+
+function GetSmtpPortValue: String;
+begin
+  if WizardSilent then
+    Result := '25'
+  else
+    Result := PortPage.Values[2];
+end;
+
+function GetEnableHttpValue: Boolean;
+begin
+  if WizardSilent then
+    Result := False
+  else
+    Result := OptionPage.Values[0];
+end;
+
+function GetConfigureFirewallValue: Boolean;
+begin
+  if WizardSilent then
+    Result := True
+  else
+    Result := OptionPage.Values[1];
+end;
+
+function GetGenerateSelfSignedCertificateValue: Boolean;
+begin
+  if WizardSilent then
+    Result := True
+  else
+    Result := OptionPage.Values[2];
+end;
+
+function GetFirewallRemoteAddressValue: String;
+begin
+  if WizardSilent then
+    Result := 'LocalSubnet'
+  else
+    Result := FirewallPage.Values[0];
+end;
+
+function GetBootstrapUserNameValue: String;
+begin
+  if WizardSilent then
+    Result := 'admin'
+  else
+    Result := BootstrapPage.Values[0];
+end;
+
+function GetBootstrapEmailValue: String;
+begin
+  if WizardSilent then
+    Result := 'admin@localhost'
+  else
+    Result := BootstrapPage.Values[1];
+end;
+
+function GetBootstrapPasswordValue: String;
+begin
+  if WizardSilent then
+    Result := ''
+  else
+    Result := BootstrapPage.Values[2];
+end;
+
 procedure SaveUninstallScript;
 var
   Script: String;
@@ -217,9 +321,9 @@ begin
   Script :=
     '& ' + PsQuote(ExpandConstant('{app}\tools\Install-Relaywright.ps1')) +
     ' -InstallRoot ' + PsQuote(ExpandConstant('{app}')) +
-    ' -DataDirectory ' + PsQuote(DataDirPage.Values[0]) +
-    ' -ServiceName ' + PsQuote(ServicePage.Values[0]) +
-    ' -FirewallRulePrefix ' + PsQuote(ServicePage.Values[1]) +
+    ' -DataDirectory ' + PsQuote(GetDataDirectoryValue) +
+    ' -ServiceName ' + PsQuote(GetServiceNameValue) +
+    ' -FirewallRulePrefix ' + PsQuote(GetDisplayNameValue) +
     ' -Uninstall -NonInteractive' + #13#10;
   SaveStringToFile(ExpandConstant('{app}\tools\Uninstall-Relaywright.ps1'), Script, False);
 end;
@@ -236,24 +340,24 @@ begin
     '-NoProfile -ExecutionPolicy Bypass -File ' + Quote(ExpandConstant('{app}\tools\Install-Relaywright.ps1')) +
     ' -PackagePath ' + Quote(ExpandConstant('{app}\package')) +
     ' -InstallRoot ' + Quote(ExpandConstant('{app}')) +
-    ' -DataDirectory ' + Quote(DataDirPage.Values[0]) +
-    ' -ServiceName ' + Quote(ServicePage.Values[0]) +
-    ' -DisplayName ' + Quote(ServicePage.Values[1]) +
-    ' -HttpsPort ' + PortPage.Values[0] +
-    ' -HttpPort ' + PortPage.Values[1] +
-    ' -SmtpPort ' + PortPage.Values[2] +
-    ' -FirewallRulePrefix ' + Quote(ServicePage.Values[1]) +
-    ' -FirewallRemoteAddress ' + Quote(FirewallPage.Values[0]) +
-    ' -BootstrapUserName ' + Quote(BootstrapPage.Values[0]) +
-    ' -BootstrapEmail ' + Quote(BootstrapPage.Values[1]) +
-    ' -GenerateSelfSignedCertificate:$' + PsBool(OptionPage.Values[2]) +
+    ' -DataDirectory ' + Quote(GetDataDirectoryValue) +
+    ' -ServiceName ' + Quote(GetServiceNameValue) +
+    ' -DisplayName ' + Quote(GetDisplayNameValue) +
+    ' -HttpsPort ' + GetHttpsPortValue +
+    ' -HttpPort ' + GetHttpPortValue +
+    ' -SmtpPort ' + GetSmtpPortValue +
+    ' -FirewallRulePrefix ' + Quote(GetDisplayNameValue) +
+    ' -FirewallRemoteAddress ' + Quote(GetFirewallRemoteAddressValue) +
+    ' -BootstrapUserName ' + Quote(GetBootstrapUserNameValue) +
+    ' -BootstrapEmail ' + Quote(GetBootstrapEmailValue) +
+    ' -GenerateSelfSignedCertificate:$' + PsBool(GetGenerateSelfSignedCertificateValue) +
     ' -NonInteractive';
 
-  Params := Params + BoolParameter('EnableHttp', OptionPage.Values[0]);
-  Params := Params + BoolParameter('ConfigureFirewall', OptionPage.Values[1]);
+  Params := Params + BoolParameter('EnableHttp', GetEnableHttpValue);
+  Params := Params + BoolParameter('ConfigureFirewall', GetConfigureFirewallValue);
 
-  if BootstrapPage.Values[2] <> '' then
-    Params := Params + ' -BootstrapPassword ' + Quote(BootstrapPage.Values[2]);
+  if GetBootstrapPasswordValue <> '' then
+    Params := Params + ' -BootstrapPassword ' + Quote(GetBootstrapPasswordValue);
 
   if not Exec('powershell.exe', Params, '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
     RaiseException('PowerShell could not be started.');
