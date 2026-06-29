@@ -73,6 +73,7 @@ jobs:
       RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME: ${{ vars.RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME }}
       RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS: ${{ vars.RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS }}
       RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS: ${{ vars.RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS }}
+      RELAYWRIGHT_LINUX_TEST_CONFIGURE_FIREWALL: ${{ vars.RELAYWRIGHT_LINUX_TEST_CONFIGURE_FIREWALL }}
       RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD }}
       RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD }}
       RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD }}
@@ -104,17 +105,35 @@ jobs:
             --service-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_SERVICE_NAME" "relaywright-test")"
             --display-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_DISPLAY_NAME" "Relaywright Test")"
             --environment-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_ENVIRONMENT" "Production")"
-            --urls "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_URLS" "https://*:5443;http://*:5080")"
+            --urls "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_URLS" "https://*:5443")"
             --health-url "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_HEALTH_URL" "https://127.0.0.1:5443/health")"
             --data-directory "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_DATA_DIRECTORY" "/var/lib/relaywright-test")"
             --bootstrap-user-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_USERNAME" "admin")"
             --bootstrap-email "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_EMAIL" "admin@localhost")"
             --certificate-dns-name "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME" "localhost")"
-            --firewall-remote-address "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS" "Any")"
+            --firewall-remote-address "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS" "local-subnet")"
             --firewall-smtp-ports "$(value_or_default "$RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS" "2525")"
             --generate-self-signed-certificate
-            --configure-firewall
           )
+
+          is_enabled() {
+            local value="${1,,}"
+            local default="$2"
+            if [[ -z "$value" ]]; then
+              [[ "$default" == "true" ]]
+              return
+            fi
+
+            case "$value" in
+              1|true|yes|y|on) return 0 ;;
+              0|false|no|n|off) return 1 ;;
+              *) echo "Invalid boolean value: $1" >&2; exit 2 ;;
+            esac
+          }
+
+          if is_enabled "$RELAYWRIGHT_LINUX_TEST_CONFIGURE_FIREWALL" true; then
+            args+=(--configure-firewall)
+          fi
 
           if [[ -n "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD" ]]; then
             args+=(--bootstrap-password "$RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD")

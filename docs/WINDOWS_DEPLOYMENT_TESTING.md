@@ -37,9 +37,9 @@ The deployment script defaults to:
 - data root: `C:\Relaywright\Test\App_Data`
 - service name: `RelaywrightTest`
 - ASP.NET Core environment: `Production`
-- URLs: `https://*:5443;http://*:5080`
+- URLs: `https://*:5443`
 - health URL: `https://127.0.0.1:5443/health`
-- Windows Firewall admin ports: derived from `RELAYWRIGHT_TEST_URLS`, normally `5443` and `5080`
+- Windows Firewall admin ports: derived from `RELAYWRIGHT_TEST_URLS`, normally `5443`
 - Windows Firewall SMTP ports: `2525`
 
 For test VMs, the script can generate a self-signed HTTPS certificate automatically if no certificate variable is configured.
@@ -71,6 +71,7 @@ Optional Actions variables:
 - `RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS`
 - `RELAYWRIGHT_TEST_FIREWALL_PROFILES`
 - `RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS`
+- `RELAYWRIGHT_TEST_CONFIGURE_FIREWALL`
 
 Optional Actions secret:
 
@@ -81,11 +82,15 @@ If you provide a real or pre-created PFX certificate, set both `RELAYWRIGHT_TEST
 Firewall defaults:
 
 - Rule group/name prefix: `Relaywright Test`
-- Remote address: `Any`
+- Remote address: `LocalSubnet`
 - Profiles: `Any`
 - SMTP ports: `2525`
 
-To restrict access to your LAN or test client, set `RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS` to a CIDR or address accepted by Windows Firewall, for example `192.168.1.0/24`.
+The admin HTTP listener is disabled by default. Set `RELAYWRIGHT_TEST_URLS` only when you intentionally need to test HTTP, for example `https://*:5443;http://*:5080`.
+
+Firewall changes are enabled for this disposable Windows test lane by default. Set `RELAYWRIGHT_TEST_CONFIGURE_FIREWALL=false` if the VM firewall is managed outside the deploy workflow.
+
+To restrict access to a specific test client, set `RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS` to a CIDR or address accepted by Windows Firewall, for example `192.168.1.0/24`.
 
 To test SMTP on port `25`, set:
 

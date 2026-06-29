@@ -40,7 +40,7 @@ Use this for every release candidate.
 Inputs:
 
 ```text
-version=1.0.0-rc.3
+version=1.0.0-rc.5
 mode=clean-installer
 from_version=
 ```
@@ -56,14 +56,28 @@ Use this when testing upgrade behavior from one published release artifact to an
 Inputs:
 
 ```text
-version=1.0.0-rc.4
+version=1.0.0-rc.6
 mode=update-package
-from_version=1.0.0-rc.3
+from_version=1.0.0-rc.5
 ```
 
 The workflow installs the `from_version` Windows ZIP through `scripts/windows/Install-Relaywright.ps1`, creates preservation markers in the data directory, updates to `version`, verifies health/firewall/data preservation, uploads artifacts, and then cleans the VM after success.
 
 This validates the package update path. Keep a separate manual/browser pass for full admin-login, trusted-network, and SMTP traffic behavior until those flows are automated end to end.
+
+### `full-release`
+
+Use this before promoting a release candidate.
+
+Inputs:
+
+```text
+version=1.0.0-rc.6
+mode=full-release
+from_version=1.0.0-rc.5
+```
+
+The workflow cleans `DOT-WINDOWS02`, installs `from_version`, writes preservation markers for listener config, spool, backups, and Data Protection keys, updates to `version`, validates service/health/HTTPS/HTTP-disabled/firewall/data preservation, cleans again, then performs a fresh silent installer validation for `version`.
 
 ### `cleanup-only`
 
@@ -72,7 +86,7 @@ Use this to reset `DOT-WINDOWS02`.
 Inputs:
 
 ```text
-version=1.0.0-rc.3
+version=1.0.0-rc.5
 mode=cleanup-only
 from_version=
 ```

@@ -20,8 +20,8 @@ The vulnerability report must not contain any project with vulnerable packages.
 
 ## Windows Validation
 
-- Run the `Validate Windows Release` workflow in `clean-installer` mode against the release candidate on `DOT-WINDOWS02`.
-- Run the same workflow in `update-package` mode when a published baseline artifact is available for upgrade testing.
+- Run the `Validate Windows Release` workflow in `full-release` mode against the release candidate on `DOT-WINDOWS02`.
+- If diagnosing separately, run `clean-installer` and `update-package` modes against the same release candidate artifacts.
 - Clean install the Windows installer on a disposable VM.
 - Confirm first-run setup works without a bootstrap password.
 - Confirm HTTPS is enabled and the admin HTTP listener is disabled unless explicitly selected.
@@ -31,16 +31,30 @@ The vulnerability report must not contain any project with vulnerable packages.
 
 ## Linux Validation
 
+- Run the `Validate Linux Release` workflow in `full-release` mode on the Linux install VM.
+- If diagnosing separately, run `clean-installer` and `update-package` modes against the same release candidate artifacts.
 - Clean install with `install-relaywright.sh --version <version>`.
 - Confirm the systemd service starts and `/health` returns `ok`.
 - Confirm HTTPS is enabled and HTTP is disabled unless a non-zero `--http-port` is supplied.
 - Upgrade an existing `0.1.0-beta.1` data directory with `--update`.
-- Verify firewall behavior on active `firewalld` and `ufw` hosts when `--configure-firewall` is used.
+- Verify firewall behavior on active `firewalld` or `ufw` hosts when `--configure-firewall` is used.
+- Confirm Linux firewall configuration remains optional and defaults to scoped `local-subnet` rules when enabled.
+
+## Release Promotion
+
+Do not tag stable `v1.0.0` until all of these are true:
+
+- Windows clean install validation passed.
+- Windows update validation passed.
+- Linux clean install validation passed.
+- Linux update validation passed.
+- At least one trusted/untrusted SMTP smoke passed against a local capture relay.
+- Local tests and vulnerability gates passed.
+
+Record the tested commit/tag, artifact version, VM names, workflow run URLs, deviations, deterministic SMTP smoke result, and optional public/manual smoke result.
 
 ## Soak And Failure Checks
 
 - Run 24 to 72 hours of synthetic SMTP traffic through a local capture relay.
 - Include accepted, denied, retried, expired, delivered, paused, resumed, and restarted flows.
 - Test disk-full or spool-unwritable behavior, DB lock contention, upstream outage, bad certificate password, app restart during active delivery, and backup/restore validation.
-
-Record the tested commit, artifacts, OS versions, installer options, and any deviations before publishing the GitHub release.

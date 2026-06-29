@@ -6,7 +6,7 @@ install_root="/opt/relaywright-test"
 service_name="relaywright-test"
 display_name="Relaywright Test"
 environment_name="Production"
-urls="https://*:5443;http://*:5080"
+urls="https://*:5443"
 health_url="https://127.0.0.1:5443/health"
 data_directory="/var/lib/relaywright-test"
 bootstrap_user_name="admin"
@@ -17,7 +17,7 @@ https_certificate_password=""
 generate_self_signed_certificate=false
 certificate_dns_name="localhost"
 configure_firewall=false
-firewall_remote_address="Any"
+firewall_remote_address="local-subnet"
 firewall_smtp_ports="2525"
 health_timeout_seconds=90
 sudo_password="${RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD:-${RELAYWRIGHT_SUDO_PASSWORD:-}}"
@@ -144,6 +144,36 @@ get_tcp_ports_from_list() {
         done | sort -n -u
 }
 
+is_any_scope() {
+    [[ "${1,,}" == "any" ]]
+}
+
+is_local_subnet_scope() {
+    local scope="${1,,}"
+    [[ "$scope" == "local-subnet" || "$scope" == "localsubnet" ]]
+}
+
+get_local_ipv4_cidrs() {
+    command -v ip >/dev/null 2>&1 || return 0
+    ip -o -4 addr show scope global up 2>/dev/null |
+        awk '{print $4}' |
+        sort -u
+}
+
+get_firewall_remote_addresses() {
+    if is_any_scope "$firewall_remote_address"; then
+        printf '%s\n' "Any"
+        return
+    fi
+
+    if is_local_subnet_scope "$firewall_remote_address"; then
+        get_local_ipv4_cidrs
+        return
+    fi
+
+    printf '%s\n' "$firewall_remote_address"
+}
+
 load_admin_web_listener_settings() {
     local listener_path="$data_directory/admin-web-listener.json"
     [[ -f "$listener_path" ]] || return 0
@@ -160,7 +190,7 @@ with open(sys.argv[1], "r", encoding="utf-8") as handle:
 
 https_port = int(settings.get("httpsPort", 5443))
 http_port = int(settings.get("httpPort", 5080))
-enable_http = bool(settings.get("enableHttp", True))
+enable_http = bool(settings.get("enableHttp", False))
 
 if https_port < 1 or https_port > 65535:
     raise SystemExit(f"Configured admin HTTPS port '{https_port}' is not valid.")
@@ -288,16 +318,25 @@ configure_firewall_rules() {
     ports=("${admin_ports[@]}" "${smtp_ports[@]}")
     [[ "${#ports[@]}" -gt 0 ]] || return 0
 
+    mapfile -t remote_addresses < <(get_firewall_remote_addresses)
+    if is_local_subnet_scope "$firewall_remote_address" && [[ "${#remote_addresses[@]}" -eq 0 ]]; then
+        die "Firewall remote address 'local-subnet' was requested, but no active global IPv4 interface CIDRs could be resolved."
+    fi
+    [[ "${#remote_addresses[@]}" -gt 0 ]] || die "Firewall remote address scope resolved to no addresses."
+
     write_step "Configuring Linux firewall rules"
 
     if command -v firewall-cmd >/dev/null 2>&1 && "${SUDO[@]}" firewall-cmd --state >/dev/null 2>&1; then
         for port in "${ports[@]}"; do
-            if [[ "$firewall_remote_address" == "Any" || "$firewall_remote_address" == "any" ]]; then
+            if is_any_scope "${remote_addresses[0]}"; then
                 "${SUDO[@]}" firewall-cmd --permanent --add-port="${port}/tcp" >/dev/null
             else
-                "${SUDO[@]}" firewall-cmd --permanent --add-rich-rule="rule family=\"ipv4\" source address=\"$firewall_remote_address\" port protocol=\"tcp\" port=\"$port\" accept" >/dev/null
+                "${SUDO[@]}" firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || true
+                for remote_address in "${remote_addresses[@]}"; do
+                    "${SUDO[@]}" firewall-cmd --permanent --add-rich-rule="rule family=\"ipv4\" source address=\"$remote_address\" port protocol=\"tcp\" port=\"$port\" accept" >/dev/null
+                done
             fi
-            echo "Opened TCP port $port."
+            echo "Opened TCP port $port for $firewall_remote_address."
         done
         "${SUDO[@]}" firewall-cmd --reload >/dev/null
         return 0
@@ -305,17 +344,20 @@ configure_firewall_rules() {
 
     if command -v ufw >/dev/null 2>&1 && "${SUDO[@]}" ufw status | grep -qi "^Status: active"; then
         for port in "${ports[@]}"; do
-            if [[ "$firewall_remote_address" == "Any" || "$firewall_remote_address" == "any" ]]; then
+            if is_any_scope "${remote_addresses[0]}"; then
                 "${SUDO[@]}" ufw allow "${port}/tcp" comment "Relaywright Test" >/dev/null
             else
-                "${SUDO[@]}" ufw allow from "$firewall_remote_address" to any port "$port" proto tcp comment "Relaywright Test" >/dev/null
+                "${SUDO[@]}" ufw --force delete allow "${port}/tcp" >/dev/null 2>&1 || true
+                for remote_address in "${remote_addresses[@]}"; do
+                    "${SUDO[@]}" ufw allow from "$remote_address" to any port "$port" proto tcp comment "Relaywright Test" >/dev/null
+                done
             fi
-            echo "Opened TCP port $port."
+            echo "Opened TCP port $port for $firewall_remote_address."
         done
         return 0
     fi
 
-    echo "No active firewalld or ufw firewall detected; skipping firewall configuration."
+    echo "WARNING: --configure-firewall was requested, but no active firewalld or ufw firewall was detected. Firewall configuration was skipped."
 }
 
 invoke_health_check() {

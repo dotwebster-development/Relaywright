@@ -35,7 +35,7 @@ Default deployment values:
 - data root: `/var/lib/relaywright-test`
 - service name: `relaywright-test`
 - ASP.NET Core environment: `Production`
-- URLs: `https://*:5443;http://*:5080`
+- URLs: `https://*:5443`
 - health URL: `https://127.0.0.1:5443/health`
 - SMTP firewall ports: `2525`
 
@@ -66,6 +66,7 @@ Optional Actions variables:
 - `RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_DNS_NAME`
 - `RELAYWRIGHT_LINUX_TEST_FIREWALL_REMOTE_ADDRESS`
 - `RELAYWRIGHT_LINUX_TEST_FIREWALL_SMTP_PORTS`
+- `RELAYWRIGHT_LINUX_TEST_CONFIGURE_FIREWALL`
 
 Optional Actions secrets:
 
@@ -74,6 +75,10 @@ Optional Actions secrets:
 - `RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD`
 
 If you provide a real or pre-created PFX certificate, set both `RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PATH` and `RELAYWRIGHT_LINUX_TEST_HTTPS_CERTIFICATE_PASSWORD`. Otherwise the deploy script creates a self-signed test certificate under the install root.
+
+The admin HTTP listener is disabled by default. Set `RELAYWRIGHT_LINUX_TEST_URLS` only when you intentionally need to test HTTP, for example `https://*:5443;http://*:5080`.
+
+Firewall changes are enabled for this disposable Linux test lane by default and use `local-subnet` scope unless overridden. Set `RELAYWRIGHT_LINUX_TEST_CONFIGURE_FIREWALL=false` if the VM firewall is managed outside the deploy workflow. When firewall configuration is enabled, the script supports active `ufw` and `firewalld`; `ufw` is common on Ubuntu, `firewalld` is common on RHEL/Fedora, and some hosts intentionally use unmanaged firewalling.
 
 ## Linux VM Checks
 

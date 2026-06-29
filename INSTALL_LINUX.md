@@ -23,10 +23,14 @@ sudo bash install-relaywright.sh \
   --http-port 0 \
   --smtp-port 25 \
   --configure-firewall \
-  --firewall-remote-address 192.168.1.0/24
+  --firewall-remote-address local-subnet
 ```
 
 The admin HTTP listener is disabled by default. Use a non-zero `--http-port` only when you intentionally want an HTTP listener.
+
+Firewall changes are optional on Linux. Pass `--configure-firewall` only when you want the installer to manage host firewall rules. With `--configure-firewall`, the default remote scope is `local-subnet`, which resolves the host's active IPv4 interface CIDRs and creates scoped rules. You can also pass an explicit CIDR such as `192.168.1.0/24`, or `Any` if you intentionally want broad exposure.
+
+The installer supports active `ufw` and `firewalld`. `ufw` is common on Ubuntu, `firewalld` is common on RHEL/Fedora, and some hosts intentionally use unmanaged firewalling. If `--configure-firewall` is requested but neither supported firewall is active, the installer prints a warning and continues.
 
 If the GitHub repository is not `relaywright/relaywright`, pass `--repo OWNER/REPO` or set:
 

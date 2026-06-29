@@ -1,4 +1,4 @@
-name: Validate Windows Release
+name: Validate Linux Release
 
 on:
   workflow_dispatch:
@@ -26,16 +26,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-release-validation
+  group: linux-release-validation
   cancel-in-progress: false
 
 jobs:
-  validate-windows-release:
+  validate-linux-release:
     runs-on:
       - self-hosted
-      - Windows
-      - relaywright-install-windows
-    environment: windows-installer-test
+      - Linux
+      - relaywright-install-linux
+    environment: linux-installer-test
 
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -43,26 +43,27 @@ jobs:
       RELAYWRIGHT_VALIDATION_VERSION: ${{ inputs.version }}
       RELAYWRIGHT_VALIDATION_FROM_VERSION: ${{ inputs.from_version }}
       RELAYWRIGHT_VALIDATION_REPOSITORY: ${{ github.repository }}
+      RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
 
     steps:
       - name: Checkout validation scripts
         uses: actions/checkout@v7
 
-      - name: Validate Windows release
-        shell: powershell
+      - name: Validate Linux release
+        shell: bash
         run: |
-          .\scripts\windows\Invoke-RelaywrightWindowsReleaseValidation.ps1 `
-            -Mode $env:RELAYWRIGHT_VALIDATION_MODE `
-            -Version $env:RELAYWRIGHT_VALIDATION_VERSION `
-            -FromVersion $env:RELAYWRIGHT_VALIDATION_FROM_VERSION `
-            -Repository $env:RELAYWRIGHT_VALIDATION_REPOSITORY `
-            -ArtifactsDirectory "$PWD\artifacts\windows-release-validation"
+          bash scripts/linux/Invoke-RelaywrightLinuxReleaseValidation.sh \
+            --mode "$RELAYWRIGHT_VALIDATION_MODE" \
+            --version "$RELAYWRIGHT_VALIDATION_VERSION" \
+            --from-version "$RELAYWRIGHT_VALIDATION_FROM_VERSION" \
+            --repository "$RELAYWRIGHT_VALIDATION_REPOSITORY" \
+            --artifacts-directory "$PWD/artifacts/linux-release-validation"
 
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: windows-release-validation-${{ inputs.mode }}-${{ inputs.version }}
-          path: artifacts/windows-release-validation
+          name: linux-release-validation-${{ inputs.mode }}-${{ inputs.version }}
+          path: artifacts/linux-release-validation
           if-no-files-found: warn
           retention-days: 14

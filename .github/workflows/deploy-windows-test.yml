@@ -78,6 +78,7 @@ jobs:
       RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS }}
       RELAYWRIGHT_TEST_FIREWALL_PROFILES: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_PROFILES }}
       RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS }}
+      RELAYWRIGHT_TEST_CONFIGURE_FIREWALL: ${{ vars.RELAYWRIGHT_TEST_CONFIGURE_FIREWALL }}
       RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD: ${{ secrets.RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD }}
       RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD: ${{ secrets.RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD }}
 
@@ -102,13 +103,25 @@ jobs:
             return $Value
           }
 
+          function IsEnabled([string]$Value, [bool]$Default) {
+            if ([string]::IsNullOrWhiteSpace($Value)) {
+              return $Default
+            }
+
+            switch -Regex ($Value.Trim().ToLowerInvariant()) {
+              '^(1|true|yes|y|on)$' { return $true }
+              '^(0|false|no|n|off)$' { return $false }
+              default { throw "Invalid boolean value '$Value'." }
+            }
+          }
+
           $arguments = @{
             PackagePath = Join-Path $PWD 'artifact\relaywright-win-x64'
             InstallRoot = ValueOrDefault $env:RELAYWRIGHT_TEST_INSTALL_ROOT 'C:\Relaywright\Test'
             ServiceName = ValueOrDefault $env:RELAYWRIGHT_TEST_SERVICE_NAME 'RelaywrightTest'
             DisplayName = ValueOrDefault $env:RELAYWRIGHT_TEST_DISPLAY_NAME 'Relaywright Test'
             EnvironmentName = ValueOrDefault $env:RELAYWRIGHT_TEST_ENVIRONMENT 'Production'
-            Urls = ValueOrDefault $env:RELAYWRIGHT_TEST_URLS 'https://*:5443;http://*:5080'
+            Urls = ValueOrDefault $env:RELAYWRIGHT_TEST_URLS 'https://*:5443'
             HealthUrl = ValueOrDefault $env:RELAYWRIGHT_TEST_HEALTH_URL 'https://127.0.0.1:5443/health'
             DataDirectory = ValueOrDefault $env:RELAYWRIGHT_TEST_DATA_DIRECTORY 'C:\Relaywright\Test\App_Data'
             BootstrapUserName = ValueOrDefault $env:RELAYWRIGHT_TEST_BOOTSTRAP_USERNAME 'admin'
@@ -118,9 +131,14 @@ jobs:
             HttpsCertificatePassword = $env:RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD
             CertificateDnsName = ValueOrDefault $env:RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_DNS_NAME 'localhost'
             FirewallRulePrefix = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_RULE_PREFIX 'Relaywright Test'
-            FirewallRemoteAddress = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS 'Any'
+            FirewallRemoteAddress = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS 'LocalSubnet'
             FirewallProfiles = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_PROFILES 'Any'
             FirewallSmtpPorts = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS '2525'
           }
 
-          .\scripts\windows\Deploy-RelaywrightTest.ps1 @arguments -GenerateSelfSignedCertificate -ConfigureFirewall
+          if (IsEnabled $env:RELAYWRIGHT_TEST_CONFIGURE_FIREWALL $true) {
+            .\scripts\windows\Deploy-RelaywrightTest.ps1 @arguments -GenerateSelfSignedCertificate -ConfigureFirewall
+          }
+          else {
+            .\scripts\windows\Deploy-RelaywrightTest.ps1 @arguments -GenerateSelfSignedCertificate
+          }

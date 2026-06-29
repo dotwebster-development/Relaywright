@@ -11,7 +11,7 @@ param(
 
     [string]$EnvironmentName = "Production",
 
-    [string]$Urls = "https://*:5443;http://*:5080",
+    [string]$Urls = "https://*:5443",
 
     [string]$HealthUrl = "https://127.0.0.1:5443/health",
 
@@ -35,7 +35,7 @@ param(
 
     [string]$FirewallRulePrefix = "Relaywright Test",
 
-    [string]$FirewallRemoteAddress = "Any",
+    [string]$FirewallRemoteAddress = "LocalSubnet",
 
     [string]$FirewallProfiles = "Any",
 

@@ -250,6 +250,7 @@ jobs:
           - Stable 1.0 release line.
           - Admin web HTTP listener is disabled by default.
           - Windows installer firewall scope defaults to LocalSubnet.
+          - Linux firewall configuration is optional; when enabled, local-subnet scope is the default.
           - See UPGRADE.md before upgrading existing beta installations.
 
           Downloads:
