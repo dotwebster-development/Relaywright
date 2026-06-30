@@ -899,14 +899,19 @@ test_restart_during_active_delivery() {
     start_capture_server "captured-restart" 0
 
     local stale_utc
-    stale_utc="$(date -u -d '20 minutes ago' +"%Y-%m-%dT%H:%M:%S+00:00")"
+    stale_utc="2000-01-01T00:00:00+00:00"
+    "${SUDO[@]}" systemctl stop "$service_name"
     "${SUDO[@]}" sqlite3 "$data_directory/relay.db" <<SQL
 UPDATE "QueuedMessages"
 SET
+    "Status" = 1,
     "LastAttemptStartedUtc" = '$stale_utc',
     "NextAttemptAtUtc" = '$stale_utc'
-WHERE "Status" IN (1, 2);
+WHERE "Status" <> 3;
 SQL
+    "${SUDO[@]}" systemctl start "$service_name"
+    wait_service_running
+    assert_health_ok "restart-stale-started"
 
     wait_for_sql_count_at_least "restart-delivered" 'SELECT COUNT(*) FROM "QueuedMessages" WHERE "Status" = 3;' 2 120
     wait_for_captured_count_at_least "captured-restart" 1 60
@@ -976,6 +981,9 @@ save_diagnostics() {
     "${SUDO[@]}" timeout 5 sqlite3 "$data_directory/relay.db" \
         'SELECT "Status", COUNT(*) FROM "QueuedMessages" GROUP BY "Status" ORDER BY "Status";' \
         > "$artifacts_directory/queue-status-raw-${suffix}.txt" 2>&1 || true
+    "${SUDO[@]}" timeout 5 sqlite3 "$data_directory/relay.db" \
+        'SELECT "Id", "Status", "AttemptCount", "LastAttemptStartedUtc", "NextAttemptAtUtc", "LastError" FROM "QueuedMessages" ORDER BY "CreatedUtc";' \
+        > "$artifacts_directory/queue-rows-${suffix}.txt" 2>&1 || true
 }
 
 on_error() {
