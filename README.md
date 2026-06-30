@@ -1,41 +1,124 @@
 # Relaywright
 
-Windows-first SMTP relay gateway built on ASP.NET Core 10, SQLite, SmtpServer, and MailKit.
+Relaywright is a self-hosted SMTP relay gateway for trusted devices, apps, and internal systems that need a controlled path to an upstream smart host.
 
-## What it does
+It is built with ASP.NET Core, SQLite, SmtpServer, and MailKit. Release builds are self-contained for Windows and Linux, so the target machine does not need a separate .NET runtime.
 
-- Accepts SMTP submissions from trusted device IPs/CIDRs
-- Durably spools accepted messages to disk before returning `250 OK`
-- Retries outbound delivery to one configured upstream smart host
-- Provides a built-in Razor Pages admin UI
-- Stores configuration, queue metadata, auth, and operational events in SQLite
+## Status
 
-## Verified toolchain
+Relaywright is preparing for a stable `v1.0.0` release. Until that tag exists, treat published release candidates as test/validation builds rather than a production support promise.
 
-This project has been restored, built, and tested with .NET SDK `10.0.300`.
+## Why It Exists
 
-## Default paths
+Many environments still have printers, scanners, line-of-business apps, or appliances that can send SMTP but should not be trusted as open relays. Relaywright gives those systems a narrow, auditable relay point:
 
-- Data root: `App_Data`
-- SQLite database: `App_Data/relay.db`
-- Spool files: `App_Data/spool`
-- Data Protection keys: `App_Data/keys`
+- accept SMTP only from trusted IPs/CIDRs;
+- apply sender, recipient, size, recipient-count, and rate policy before message DATA is accepted;
+- write accepted messages to disk and queue metadata before returning `250 OK`;
+- retry delivery to one configured upstream SMTP smart host;
+- provide an admin UI for configuration, queue operations, diagnostics, backups, alerts, and operational history.
 
-## Bootstrap admin
+## What It Is Not
 
-The app seeds an admin user on first startup from `BootstrapAdmin` in `appsettings.json`.
-Change that password immediately after first login.
+Relaywright is not a general-purpose mail server, public MX, spam filter, mailing-list manager, or open relay. It is designed for controlled internal submission from known devices to a configured upstream relay.
 
-## Intended startup flow
+## Safety Model
 
-1. Restore packages with `dotnet restore Relaywright.sln`
-2. Run the web app
-3. Sign in with the bootstrap admin account
-4. Configure the upstream relay and trusted device networks
-5. Point printers/devices at the configured SMTP listener port
+Relaywright's most important rule is simple: accepted SMTP DATA must be durable before the client gets success.
 
-## Local verification
+The relay uses:
 
-- Build: `dotnet build Relaywright.sln`
-- Tests: `dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj`
-- Local UI: `dotnet run --project src/Relaywright.Web/Relaywright.Web.csproj --urls http://127.0.0.1:5010`
+- trusted-network checks for SMTP submissions;
+- submission policy before DATA is accepted;
+- SQLite for configuration and queue metadata;
+- a disk spool for raw message content;
+- ASP.NET Core Data Protection for persisted secrets;
+- operational events for visible configuration, queue, delivery, diagnostics, and system activity.
+
+Rejected submissions are rejected before message content is spooled.
+
+## Platforms
+
+Relaywright supports:
+
+- Windows service hosting;
+- Linux systemd hosting;
+- self-contained `win-x64` and `linux-x64` release artifacts.
+
+The admin UI is HTTPS-first for production installs. The admin HTTP listener is disabled by default unless explicitly enabled. Firewall handling is scoped by default on Windows and opt-in on Linux.
+
+## Install
+
+Download release artifacts from GitHub Releases.
+
+Windows:
+
+```powershell
+Relaywright-<version>-windows-x64-installer.exe
+```
+
+Run the installer as Administrator.
+
+Linux:
+
+```bash
+curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/download/v<version>/install-relaywright.sh \
+  | sudo bash -s -- --repo dotwebster-development/Relaywright --version <version>
+```
+
+Replace `<version>` with a published version such as `1.0.0-rc.7`.
+
+## Runtime Data
+
+Default runtime data locations depend on how Relaywright is started:
+
+- Local development/source run: `src/Relaywright.Web/App_Data`
+- Windows installer: `C:\ProgramData\Relaywright`
+- Linux installer: `/var/lib/relaywright`
+
+Runtime data includes:
+
+- `relay.db` for SQLite data;
+- `spool` for accepted message files;
+- `keys` for Data Protection keys;
+- `backups` for backup bundles;
+- `certs` for generated/admin certificate material.
+
+Do not commit runtime data, Data Protection keys, certificates, or backups to source control.
+
+## Local Development
+
+Requirements:
+
+- .NET SDK `10.0.300` or a compatible later feature band.
+
+Useful commands:
+
+```powershell
+dotnet restore Relaywright.sln
+dotnet build Relaywright.sln
+dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj
+dotnet run --project src/Relaywright.Web/Relaywright.Web.csproj --urls http://127.0.0.1:5010
+```
+
+Development configuration may seed a local bootstrap admin. Production deployments must not use the development default password.
+
+## Release Validation
+
+Relaywright uses release-candidate artifacts for validation. The current release process requires:
+
+- Windows clean install and upgrade validation;
+- Linux clean install and upgrade validation;
+- deterministic trusted/untrusted SMTP smoke testing;
+- Linux soak and ugly-path validation;
+- local Debug/Release tests;
+- vulnerable package gate.
+
+See:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development guidelines](docs/DEVELOPMENT_GUIDELINES.md)
+- [Release process](docs/RELEASE_PROCESS.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Windows release validation](docs/WINDOWS_RELEASE_VALIDATION.md)
+- [Linux release validation](docs/LINUX_RELEASE_VALIDATION.md)
