@@ -9,10 +9,12 @@ Use a disposable Linux install VM with a GitHub Actions self-hosted runner label
 ```text
 self-hosted
 Linux
-relaywright-install-linux
+X64
+relaywright
+test
 ```
 
-Do not use the active Linux deployment VM for this lane. The validation workflow removes services, firewall rules, install directories, and data directories.
+For the current shared-runner naming model, this is `test-linux01`. Do not use the active Linux deployment VM for this lane. The validation workflow removes services, firewall rules, install directories, and data directories.
 
 Create the GitHub environment:
 
@@ -81,12 +83,14 @@ The validation VM should have either active `ufw` or active `firewalld`; `ufw` i
 
 Run `Validate Linux Ugly Paths` from GitHub Actions after the release install/update gates pass.
 
-Use a disposable Linux install VM with the same runner label as the release validation lane:
+Use a disposable Linux install VM with the same runner labels as the release validation lane:
 
 ```text
 self-hosted
 Linux
-relaywright-install-linux
+X64
+relaywright
+test
 ```
 
 The workflow installs the selected release into an isolated service and data root:
@@ -115,3 +119,17 @@ The current Linux ugly-path gate covers:
 - cold data-directory backup/restore: marker files and service health survive a stopped-service tar/restore cycle.
 
 The workflow does not upload the restored data backup because it may contain Data Protection keys or certificates. It records fingerprints, counts, health output, queue counts, service status, and journal excerpts instead.
+
+## Soak Validation Runner
+
+Long-running soak validation uses the same project label but a different role label so it can run on `soak-linux01` without occupying the destructive installer VM:
+
+```text
+self-hosted
+Linux
+X64
+relaywright
+soak
+```
+
+The role labels are intentionally generic. A future project can reuse the same machines by adding that project's label and routing its workflows with `project-name` plus `deploy`, `test`, or `soak`.
