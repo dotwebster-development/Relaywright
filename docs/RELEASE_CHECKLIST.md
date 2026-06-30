@@ -32,6 +32,7 @@ The vulnerability report must not contain any project with vulnerable packages.
 ## Linux Validation
 
 - Run the `Validate Linux Release` workflow in `full-release` mode on the Linux install VM.
+- Run the `Validate Linux Ugly Paths` workflow in `ugly-paths` mode on the Linux install VM.
 - If diagnosing separately, run `clean-installer` and `update-package` modes against the same release candidate artifacts.
 - Clean install with `install-relaywright.sh --version <version>`.
 - Confirm the systemd service starts and `/health` returns `ok`.
@@ -58,3 +59,4 @@ Record the tested commit/tag, artifact version, VM names, workflow run URLs, dev
 - Run 24 to 72 hours of synthetic SMTP traffic through a local capture relay.
 - Include accepted, denied, retried, expired, delivered, paused, resumed, and restarted flows.
 - Test disk-full or spool-unwritable behavior, DB lock contention, upstream outage, bad certificate password, app restart during active delivery, and backup/restore validation.
+- Treat the Linux ugly-path workflow as the repeatable baseline for these failure checks; add Windows/manual evidence separately when a failure mode cannot be represented by the Linux lane.

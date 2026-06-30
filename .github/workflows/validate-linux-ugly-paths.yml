@@ -1,0 +1,87 @@
+name: Validate Linux Ugly Paths
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to validate, without leading v"
+        required: true
+        default: "1.0.0-rc.7"
+      mode:
+        description: "Validation mode"
+        required: true
+        default: "ugly-paths"
+        type: choice
+        options:
+          - ugly-paths
+          - cleanup-only
+      cleanup_after:
+        description: "Clean the Linux install-validation VM after successful validation"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-ugly-path-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-linux-ugly-paths:
+    runs-on:
+      - self-hosted
+      - Linux
+      - relaywright-install-linux
+    environment: linux-installer-test
+
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RELAYWRIGHT_UGLY_MODE: ${{ inputs.mode }}
+      RELAYWRIGHT_UGLY_VERSION: ${{ inputs.version }}
+      RELAYWRIGHT_UGLY_REPOSITORY: ${{ github.repository }}
+      RELAYWRIGHT_UGLY_CLEANUP_AFTER: ${{ inputs.cleanup_after }}
+      RELAYWRIGHT_LINUX_UGLY_VALIDATION_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
+
+    steps:
+      - name: Checkout validation scripts
+        uses: actions/checkout@v7
+
+      - name: Reset ugly-path artifacts
+        shell: bash
+        run: |
+          rm -rf "$PWD/artifacts/linux-ugly-path-validation"
+          mkdir -p "$PWD/artifacts/linux-ugly-path-validation"
+
+      - name: Cleanup release validation state before ugly-paths
+        if: inputs.mode == 'ugly-paths'
+        shell: bash
+        run: |
+          bash scripts/linux/Invoke-RelaywrightLinuxReleaseValidation.sh \
+            --mode cleanup-only \
+            --version "$RELAYWRIGHT_UGLY_VERSION" \
+            --repository "$RELAYWRIGHT_UGLY_REPOSITORY" \
+            --artifacts-directory "$PWD/artifacts/linux-ugly-path-validation/pre-cleanup-release"
+
+      - name: Validate Linux ugly paths
+        shell: bash
+        run: |
+          bash scripts/linux/Invoke-RelaywrightLinuxUglyPathValidation.sh \
+            --mode "$RELAYWRIGHT_UGLY_MODE" \
+            --version "$RELAYWRIGHT_UGLY_VERSION" \
+            --repository "$RELAYWRIGHT_UGLY_REPOSITORY" \
+            --cleanup-after "$RELAYWRIGHT_UGLY_CLEANUP_AFTER" \
+            --artifacts-directory "$PWD/artifacts/linux-ugly-path-validation"
+
+      - name: Upload ugly-path artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-ugly-path-validation-${{ inputs.mode }}-${{ inputs.version }}
+          path: artifacts/linux-ugly-path-validation
+          if-no-files-found: warn
+          retention-days: 14
