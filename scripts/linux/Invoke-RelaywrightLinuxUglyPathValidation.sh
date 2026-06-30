@@ -60,9 +60,9 @@ die() {
     write_artifact failure.txt "ERROR: $1"
     if declare -F save_diagnostics >/dev/null 2>&1; then
         set +e
+        save_diagnostics failure
         stop_capture_server
         stop_db_lock
-        save_diagnostics failure
     fi
     exit 1
 }
@@ -599,8 +599,15 @@ import sys
 host = sys.argv[1]
 port = int(sys.argv[2])
 try:
-    with socket.create_connection((host, port), timeout=2):
-        pass
+    with socket.create_connection((host, port), timeout=2) as sock:
+        file = sock.makefile("rwb", buffering=0)
+        greeting = file.readline(4096)
+        if not greeting.startswith(b"220"):
+            sys.exit(1)
+        file.write(b"QUIT\r\n")
+        response = file.readline(4096)
+        if not response.startswith(b"221"):
+            sys.exit(1)
 except OSError:
     sys.exit(1)
 PY
@@ -611,6 +618,12 @@ PY
     done
 
     die "Capture SMTP server did not start."
+}
+
+assert_capture_server_running() {
+    if [[ -z "${capture_pid:-}" ]] || ! kill -0 "$capture_pid" >/dev/null 2>&1; then
+        die "Capture SMTP server is not running."
+    fi
 }
 
 start_capture_server() {
@@ -630,6 +643,7 @@ start_capture_server() {
         > "$artifacts_directory/capture-server-${output_name}.log" 2>&1 &
     capture_pid="$!"
     wait_capture_server
+    assert_capture_server_running
 }
 
 send_message() {
@@ -896,7 +910,6 @@ test_restart_during_active_delivery() {
     assert_health_ok "restart-after-active-delivery"
 
     stop_capture_server
-    start_capture_server "captured-restart" 0
 
     local stale_utc
     stale_utc="2000-01-01T00:00:00+00:00"
@@ -909,9 +922,12 @@ SET
     "NextAttemptAtUtc" = '$stale_utc'
 WHERE "Status" <> 3;
 SQL
+    start_capture_server "captured-restart" 0
+    assert_capture_server_running
     "${SUDO[@]}" systemctl start "$service_name"
     wait_service_running
     assert_health_ok "restart-stale-started"
+    assert_capture_server_running
 
     wait_for_sql_count_at_least "restart-delivered" 'SELECT COUNT(*) FROM "QueuedMessages" WHERE "Status" = 3;' 2 120
     wait_for_captured_count_at_least "captured-restart" 1 60
@@ -975,6 +991,21 @@ save_diagnostics() {
         echo "cleanup_after=$cleanup_after"
     } > "$artifacts_directory/validation-input-${suffix}.txt"
 
+    {
+        echo "capture_pid=${capture_pid:-}"
+        if [[ -n "${capture_pid:-}" ]] && kill -0 "$capture_pid" >/dev/null 2>&1; then
+            echo "capture_alive=true"
+            ps -p "$capture_pid" -o pid,ppid,stat,etime,cmd || true
+        else
+            echo "capture_alive=false"
+        fi
+        if command_available ss; then
+            "${SUDO[@]}" ss -ltnp "sport = :$capture_port" || true
+        elif command_available netstat; then
+            "${SUDO[@]}" netstat -ltnp | grep ":$capture_port" || true
+        fi
+    } > "$artifacts_directory/capture-status-${suffix}.txt" 2>&1 || true
+
     "${SUDO[@]}" systemctl status "$service_name" --no-pager > "$artifacts_directory/service-${suffix}.txt" 2>&1 || true
     "${SUDO[@]}" journalctl -u "$service_name" -n 180 --no-pager > "$artifacts_directory/journal-${suffix}.txt" 2>&1 || true
     write_queue_counts "queue-counts-${suffix}.txt" || true
@@ -990,9 +1021,9 @@ on_error() {
     local line="$1"
     set +e
     write_artifact failure.txt "Ugly-path validation failed at line $line."
+    save_diagnostics failure
     stop_capture_server
     stop_db_lock
-    save_diagnostics failure
 }
 
 trap 'on_error $LINENO' ERR
