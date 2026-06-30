@@ -305,14 +305,25 @@ health_request() {
 
 assert_health_ok() {
     local suffix="$1"
-    local result
-    result="$(health_request "$suffix")"
-    local curl_status="${result%%:*}"
-    local http_status="${result##*:}"
+    local deadline=$((SECONDS + 120))
+    local result=""
+    local curl_status=""
+    local http_status=""
 
-    [[ "$curl_status" == "0" ]] || die "Health check $suffix failed with curl status $curl_status."
-    [[ "$http_status" == "200" ]] || die "Health check $suffix returned HTTP $http_status, expected 200."
-    grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "$artifacts_directory/health-${suffix}.json" || die "Health check $suffix did not return ok."
+    while (( SECONDS < deadline )); do
+        result="$(health_request "$suffix")"
+        curl_status="${result%%:*}"
+        http_status="${result##*:}"
+
+        if [[ "$curl_status" == "0" && "$http_status" == "200" ]] &&
+            grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "$artifacts_directory/health-${suffix}.json"; then
+            return
+        fi
+
+        sleep 2
+    done
+
+    die "Health check $suffix did not return ok before timeout. Last curl status=$curl_status; HTTP status=$http_status."
 }
 
 assert_health_not_ok() {
