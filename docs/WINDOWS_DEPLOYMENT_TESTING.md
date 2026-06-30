@@ -2,7 +2,7 @@
 
 This guide describes the first real-machine deployment lane for the Windows test VM.
 
-For destructive release-installer validation on `DOT-WINDOWS02`, use `.github/workflows/validate-windows-release.yml` and `docs/WINDOWS_RELEASE_VALIDATION.md` instead. This deployment lane is for the active `DOT-WINDOWS01` test service.
+For destructive release-installer validation on `test-windows01`, use `.github/workflows/validate-windows-release.yml` and `docs/WINDOWS_RELEASE_VALIDATION.md` instead. This deployment lane is for the active `deploy-windows01` test service.
 
 ## Recommended Shape
 
@@ -14,7 +14,7 @@ The workflow in `.github/workflows/deploy-windows-test.yml` does this:
 2. Builds and tests on a GitHub-hosted Windows runner.
 3. Publishes `src/Relaywright.Web` as self-contained `win-x64`.
 4. Uploads the package as an artifact.
-5. Runs a deploy job on the Windows VM self-hosted runner with label `relaywright-test-windows`.
+5. Runs a deploy job on the Windows VM self-hosted runner with labels `relaywright` and `deploy`.
 6. Installs or updates the `RelaywrightTest` Windows service.
 7. Starts the service and checks `/health`.
 
@@ -25,11 +25,13 @@ Self-contained publish means the VM does not need the .NET runtime to run Relayw
 On the Windows VM:
 
 1. Install the GitHub Actions self-hosted runner for this repository.
-2. Add the runner labels `Windows` and `relaywright-test-windows`.
+2. Add the runner labels `Windows`, `X64`, `relaywright`, and `deploy`.
 3. Install the runner as a Windows service.
 4. Run the runner service with administrator rights, preferably the default service setup for a disposable test VM.
 5. Allow outbound HTTPS to GitHub.
 6. Make sure any VM host/network firewall allows the ports you want to test. The deployment script configures Windows Firewall rules on the guest OS.
+
+The current active deployment VM is `deploy-windows01`. Runner names are for humans; workflow routing uses the project label `relaywright` plus the role label `deploy`.
 
 The deployment script defaults to:
 
