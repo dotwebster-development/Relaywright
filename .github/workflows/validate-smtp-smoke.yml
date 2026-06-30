@@ -1,0 +1,447 @@
+name: Validate SMTP Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to smoke test, without leading v"
+        required: true
+        default: "1.0.0-rc.7"
+      target_host:
+        description: "Optional test-linux01 IPv4 address or DNS name for the untrusted smoke"
+        required: false
+        default: ""
+      cleanup_after:
+        description: "Clean test-linux01 after the smoke"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smtp-smoke-validation
+  cancel-in-progress: false
+
+jobs:
+  install-and-trusted-smoke:
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - test
+    environment: linux-installer-test
+    outputs:
+      target_ip: ${{ steps.target.outputs.target_ip }}
+
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RELAYWRIGHT_SMOKE_VERSION: ${{ inputs.version }}
+      RELAYWRIGHT_SMOKE_REPOSITORY: ${{ github.repository }}
+      RELAYWRIGHT_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
+
+    steps:
+      - name: Checkout validation scripts
+        uses: actions/checkout@v7
+
+      - name: Reset smoke artifacts
+        shell: bash
+        run: |
+          rm -rf "$PWD/artifacts/smtp-smoke"
+          mkdir -p "$PWD/artifacts/smtp-smoke"
+
+      - name: Cleanup before smoke
+        shell: bash
+        run: |
+          bash scripts/linux/Invoke-RelaywrightLinuxReleaseValidation.sh \
+            --mode cleanup-only \
+            --version "$RELAYWRIGHT_SMOKE_VERSION" \
+            --repository "$RELAYWRIGHT_SMOKE_REPOSITORY" \
+            --artifacts-directory "$PWD/artifacts/smtp-smoke/pre-cleanup"
+
+      - name: Download and verify Linux installer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version="${RELAYWRIGHT_SMOKE_VERSION#v}"
+          download_dir="$PWD/artifacts/smtp-smoke/downloads/$version"
+          mkdir -p "$download_dir"
+          base_url="https://github.com/${RELAYWRIGHT_SMOKE_REPOSITORY}/releases/download/v${version}"
+          curl_args=(--fail --location --show-error --silent --header "Authorization: Bearer $GITHUB_TOKEN")
+
+          curl "${curl_args[@]}" --output "$download_dir/SHA256SUMS.txt" "$base_url/SHA256SUMS.txt"
+          curl "${curl_args[@]}" --output "$download_dir/install-relaywright.sh" "$base_url/install-relaywright.sh"
+          (
+            cd "$download_dir"
+            awk '$2 == "install-relaywright.sh" || $2 == "*install-relaywright.sh" {print}' SHA256SUMS.txt > SHA256SUMS.selected
+            test -s SHA256SUMS.selected
+            sha256sum -c SHA256SUMS.selected
+          )
+          chmod +x "$download_dir/install-relaywright.sh"
+
+      - name: Install release on test-linux01
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version="${RELAYWRIGHT_SMOKE_VERSION#v}"
+          bash "$PWD/artifacts/smtp-smoke/downloads/$version/install-relaywright.sh" \
+            --repo "$RELAYWRIGHT_SMOKE_REPOSITORY" \
+            --version "$version" \
+            --install-root /opt/relaywright \
+            --data-directory /var/lib/relaywright \
+            --service-name relaywright \
+            --https-port 5443 \
+            --http-port 0 \
+            --smtp-port 25 \
+            --configure-firewall \
+            --firewall-remote-address local-subnet \
+            --non-interactive
+
+      - name: Resolve test-linux01 target IP
+        id: target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          target_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
+          if [[ -z "$target_ip" ]]; then
+            target_ip="$(ip -o -4 addr show scope global up | awk 'NR == 1 {split($4, a, "/"); print a[1]}')"
+          fi
+          test -n "$target_ip"
+          echo "target_ip=$target_ip" >> "$GITHUB_OUTPUT"
+          echo "$target_ip" > "$PWD/artifacts/smtp-smoke/test-linux01-target-ip.txt"
+
+      - name: Trusted localhost SMTP smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          transcript="$PWD/artifacts/smtp-smoke/trusted-localhost-smtp.txt"
+          mkdir -p "$(dirname "$transcript")"
+
+          read_response() {
+            local line
+            while IFS= read -r -t 10 line <&3; do
+              printf 'S: %s\n' "$line" | tee -a "$transcript"
+              if [[ "$line" =~ ^[0-9]{3}[[:space:]] ]]; then
+                SMTP_CODE="${line:0:3}"
+                return 0
+              fi
+            done
+            echo "Timed out waiting for SMTP response." | tee -a "$transcript"
+            return 1
+          }
+
+          send_command() {
+            local command="$1"
+            printf 'C: %s\n' "$command" | tee -a "$transcript"
+            printf '%s\r\n' "$command" >&3
+            read_response
+          }
+
+          exec 3<>/dev/tcp/127.0.0.1/25
+          read_response
+          [[ "$SMTP_CODE" == "220" ]]
+          send_command "EHLO relaywright-smoke.local"
+          [[ "$SMTP_CODE" == "250" ]]
+          send_command "MAIL FROM:<trusted-smoke@example.test>"
+          [[ "$SMTP_CODE" == "250" ]]
+          send_command "RCPT TO:<recipient@example.test>"
+          [[ "$SMTP_CODE" == "250" ]]
+          send_command "DATA"
+          [[ "$SMTP_CODE" == "354" ]]
+          {
+            printf 'Subject: Relaywright trusted SMTP smoke\r\n'
+            printf 'From: trusted-smoke@example.test\r\n'
+            printf 'To: recipient@example.test\r\n'
+            printf '\r\n'
+            printf 'Trusted SMTP smoke for %s\r\n' "$RELAYWRIGHT_SMOKE_VERSION"
+            printf '.\r\n'
+          } >&3
+          read_response
+          [[ "$SMTP_CODE" == "250" ]]
+          send_command "QUIT" || true
+
+      - name: Verify trusted message reached spool
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          run_sudo() {
+            if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+              "$@"
+            elif sudo -n true >/dev/null 2>&1; then
+              sudo "$@"
+            else
+              printf '%s\n' "$RELAYWRIGHT_SUDO_PASSWORD" | sudo -S -p '' "$@"
+            fi
+          }
+
+          spool_count="$(run_sudo find /var/lib/relaywright/spool -type f -name '*.eml' | wc -l)"
+          echo "$spool_count" > "$PWD/artifacts/smtp-smoke/spool-count.txt"
+          test "$spool_count" -ge 1
+
+      - name: Upload test-linux01 smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smtp-smoke-test-linux01-${{ inputs.version }}
+          path: artifacts/smtp-smoke
+          if-no-files-found: warn
+          retention-days: 14
+
+  resolve-untrusted-source:
+    needs: install-and-trusted-smoke
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - deploy
+    environment: linux-test
+    outputs:
+      source_ip: ${{ steps.source.outputs.source_ip }}
+
+    env:
+      RELAYWRIGHT_SMOKE_TARGET_HOST: ${{ inputs.target_host }}
+      RELAYWRIGHT_SMOKE_TARGET_IP: ${{ needs.install-and-trusted-smoke.outputs.target_ip }}
+
+    steps:
+      - name: Resolve deploy-linux01 source IP
+        id: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$PWD/artifacts/smtp-smoke"
+          mkdir -p "$PWD/artifacts/smtp-smoke"
+          target_host="${RELAYWRIGHT_SMOKE_TARGET_HOST:-$RELAYWRIGHT_SMOKE_TARGET_IP}"
+          test -n "$target_host"
+          source_ip="$(ip -4 route get "$target_host" 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
+          if [[ -z "$source_ip" ]]; then
+            source_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
+          fi
+          if [[ -z "$source_ip" ]]; then
+            source_ip="$(ip -o -4 addr show scope global up | awk 'NR == 1 {split($4, a, "/"); print a[1]}')"
+          fi
+          test -n "$source_ip"
+          echo "source_ip=$source_ip" >> "$GITHUB_OUTPUT"
+          echo "$source_ip" > "$PWD/artifacts/smtp-smoke/deploy-linux01-source-ip.txt"
+          echo "$target_host" > "$PWD/artifacts/smtp-smoke/target-host.txt"
+
+      - name: Upload deploy-linux01 source artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smtp-smoke-deploy-linux01-source-${{ inputs.version }}
+          path: artifacts/smtp-smoke
+          if-no-files-found: warn
+          retention-days: 14
+
+  allow-untrusted-source:
+    needs:
+      - install-and-trusted-smoke
+      - resolve-untrusted-source
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - test
+    environment: linux-installer-test
+
+    env:
+      RELAYWRIGHT_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
+      RELAYWRIGHT_SMOKE_UNTRUSTED_SOURCE_IP: ${{ needs.resolve-untrusted-source.outputs.source_ip }}
+
+    steps:
+      - name: Allow exact untrusted smoke source through firewall
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$PWD/artifacts/smtp-smoke"
+          mkdir -p "$PWD/artifacts/smtp-smoke"
+          source_ip="$RELAYWRIGHT_SMOKE_UNTRUSTED_SOURCE_IP"
+          test -n "$source_ip"
+
+          run_sudo() {
+            if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+              "$@"
+            elif sudo -n true >/dev/null 2>&1; then
+              sudo "$@"
+            else
+              printf '%s\n' "$RELAYWRIGHT_SUDO_PASSWORD" | sudo -S -p '' "$@"
+            fi
+          }
+
+          if run_sudo firewall-cmd --state >/dev/null 2>&1; then
+            rule="rule family=\"ipv4\" source address=\"$source_ip\" port protocol=\"tcp\" port=\"25\" accept"
+            run_sudo firewall-cmd --add-rich-rule="$rule"
+            echo "firewalld:$rule" > "$PWD/artifacts/smtp-smoke/untrusted-source-firewall-rule.txt"
+          elif run_sudo ufw status | grep -qi "^Status: active"; then
+            run_sudo ufw allow from "$source_ip" to any port 25 proto tcp comment "Relaywright SMTP smoke"
+            echo "ufw:allow from $source_ip to any port 25 proto tcp" > "$PWD/artifacts/smtp-smoke/untrusted-source-firewall-rule.txt"
+          else
+            echo "No active firewalld or ufw firewall found for exact-source SMTP smoke rule." >&2
+            exit 1
+          fi
+
+      - name: Upload exact-source firewall artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smtp-smoke-exact-source-firewall-${{ inputs.version }}
+          path: artifacts/smtp-smoke
+          if-no-files-found: warn
+          retention-days: 14
+
+  untrusted-smoke:
+    needs:
+      - install-and-trusted-smoke
+      - allow-untrusted-source
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - deploy
+    environment: linux-test
+
+    env:
+      RELAYWRIGHT_SMOKE_VERSION: ${{ inputs.version }}
+      RELAYWRIGHT_SMOKE_TARGET_HOST: ${{ inputs.target_host }}
+      RELAYWRIGHT_SMOKE_TARGET_IP: ${{ needs.install-and-trusted-smoke.outputs.target_ip }}
+
+    steps:
+      - name: Untrusted SMTP smoke from deploy-linux01
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$PWD/artifacts/smtp-smoke"
+          mkdir -p "$PWD/artifacts/smtp-smoke"
+          transcript="$PWD/artifacts/smtp-smoke/untrusted-remote-smtp.txt"
+          target_host="${RELAYWRIGHT_SMOKE_TARGET_HOST:-$RELAYWRIGHT_SMOKE_TARGET_IP}"
+          test -n "$target_host"
+          echo "$target_host" > "$PWD/artifacts/smtp-smoke/target-host.txt"
+
+          if ! exec 3<>"/dev/tcp/$target_host/25"; then
+            echo "TCP connection to $target_host:25 failed; app-level untrusted rejection was not exercised." | tee -a "$transcript"
+            exit 1
+          fi
+
+          read_response() {
+            local line
+            while IFS= read -r -t 10 line <&3; do
+              printf 'S: %s\n' "$line" | tee -a "$transcript"
+              if [[ "$line" =~ ^[0-9]{3}[[:space:]] ]]; then
+                SMTP_CODE="${line:0:3}"
+                return 0
+              fi
+            done
+            echo "Timed out waiting for SMTP response." | tee -a "$transcript"
+            return 1
+          }
+
+          send_command() {
+            local command="$1"
+            printf 'C: %s\n' "$command" | tee -a "$transcript"
+            printf '%s\r\n' "$command" >&3
+            read_response
+          }
+
+          read_response
+          send_command "EHLO relaywright-untrusted-smoke.local"
+          send_command "MAIL FROM:<untrusted-smoke@example.test>"
+          if [[ "$SMTP_CODE" == "250" ]]; then
+            echo "Untrusted MAIL FROM was accepted; this would be an open relay risk." | tee -a "$transcript"
+            exit 1
+          fi
+
+          echo "Untrusted MAIL FROM rejected with SMTP $SMTP_CODE." | tee -a "$transcript"
+          send_command "QUIT" || true
+
+      - name: Upload deploy-linux01 smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smtp-smoke-deploy-linux01-${{ inputs.version }}
+          path: artifacts/smtp-smoke
+          if-no-files-found: warn
+          retention-days: 14
+
+  cleanup-test-linux01:
+    needs:
+      - resolve-untrusted-source
+      - allow-untrusted-source
+      - install-and-trusted-smoke
+      - untrusted-smoke
+    if: always() && inputs.cleanup_after == 'true'
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - test
+    environment: linux-installer-test
+
+    env:
+      RELAYWRIGHT_SMOKE_VERSION: ${{ inputs.version }}
+      RELAYWRIGHT_SMOKE_REPOSITORY: ${{ github.repository }}
+      RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
+      RELAYWRIGHT_SMOKE_UNTRUSTED_SOURCE_IP: ${{ needs.resolve-untrusted-source.outputs.source_ip }}
+
+    steps:
+      - name: Checkout validation scripts
+        uses: actions/checkout@v7
+
+      - name: Reset cleanup artifacts
+        shell: bash
+        run: |
+          rm -rf "$PWD/artifacts/smtp-smoke"
+          mkdir -p "$PWD/artifacts/smtp-smoke"
+
+      - name: Remove exact untrusted smoke firewall rule
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source_ip="${RELAYWRIGHT_SMOKE_UNTRUSTED_SOURCE_IP:-}"
+          if [[ -z "$source_ip" ]]; then
+            exit 0
+          fi
+
+          run_sudo() {
+            if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+              "$@"
+            elif sudo -n true >/dev/null 2>&1; then
+              sudo "$@"
+            else
+              printf '%s\n' "$RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD" | sudo -S -p '' "$@"
+            fi
+          }
+
+          if run_sudo firewall-cmd --state >/dev/null 2>&1; then
+            rule="rule family=\"ipv4\" source address=\"$source_ip\" port protocol=\"tcp\" port=\"25\" accept"
+            run_sudo firewall-cmd --remove-rich-rule="$rule" || true
+          elif run_sudo ufw status | grep -qi "^Status: active"; then
+            run_sudo ufw --force delete allow from "$source_ip" to any port 25 proto tcp || true
+          fi
+
+      - name: Cleanup test-linux01
+        shell: bash
+        run: |
+          bash scripts/linux/Invoke-RelaywrightLinuxReleaseValidation.sh \
+            --mode cleanup-only \
+            --version "$RELAYWRIGHT_SMOKE_VERSION" \
+            --repository "$RELAYWRIGHT_SMOKE_REPOSITORY" \
+            --artifacts-directory "$PWD/artifacts/smtp-smoke/cleanup"
+
+      - name: Upload cleanup artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smtp-smoke-cleanup-${{ inputs.version }}
+          path: artifacts/smtp-smoke
+          if-no-files-found: warn
+          retention-days: 14

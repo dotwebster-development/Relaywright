@@ -1,0 +1,114 @@
+name: Prepare Linux Install VM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-install-vm-prep
+  cancel-in-progress: false
+
+jobs:
+  prepare-linux-install-vm:
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - test
+    environment: linux-installer-test
+
+    env:
+      RELAYWRIGHT_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
+
+    steps:
+      - name: Configure managed firewall
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p artifacts/linux-install-vm-prep
+
+          run_sudo() {
+            if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+              "$@"
+            elif sudo -n true >/dev/null 2>&1; then
+              sudo "$@"
+            else
+              printf '%s\n' "$RELAYWRIGHT_SUDO_PASSWORD" | sudo -S -p '' "$@"
+            fi
+          }
+
+          is_firewalld_active() {
+            command -v firewall-cmd >/dev/null 2>&1 && run_sudo firewall-cmd --state >/dev/null 2>&1
+          }
+
+          is_ufw_active() {
+            command -v ufw >/dev/null 2>&1 && run_sudo ufw status | grep -qi '^Status: active'
+          }
+
+          if is_firewalld_active; then
+            echo "firewalld is already active." | tee artifacts/linux-install-vm-prep/result.txt
+            run_sudo firewall-cmd --list-all > artifacts/linux-install-vm-prep/firewall.txt
+            exit 0
+          fi
+
+          if is_ufw_active; then
+            echo "ufw is already active." | tee artifacts/linux-install-vm-prep/result.txt
+            run_sudo ufw status verbose > artifacts/linux-install-vm-prep/firewall.txt
+            exit 0
+          fi
+
+          if command -v ufw >/dev/null 2>&1; then
+            run_sudo ufw allow 22/tcp comment "SSH" >/dev/null || true
+            run_sudo ufw --force enable
+            run_sudo ufw status verbose > artifacts/linux-install-vm-prep/firewall.txt
+            echo "Enabled existing ufw." | tee artifacts/linux-install-vm-prep/result.txt
+            exit 0
+          fi
+
+          if command -v firewall-cmd >/dev/null 2>&1 || command -v systemctl >/dev/null 2>&1 && run_sudo systemctl list-unit-files firewalld.service >/dev/null 2>&1; then
+            run_sudo systemctl enable --now firewalld
+            run_sudo firewall-cmd --list-all > artifacts/linux-install-vm-prep/firewall.txt
+            echo "Enabled existing firewalld." | tee artifacts/linux-install-vm-prep/result.txt
+            exit 0
+          fi
+
+          if command -v apt-get >/dev/null 2>&1; then
+            run_sudo apt-get update
+            run_sudo apt-get install -y ufw
+            run_sudo ufw allow 22/tcp comment "SSH" >/dev/null || true
+            run_sudo ufw --force enable
+            run_sudo ufw status verbose > artifacts/linux-install-vm-prep/firewall.txt
+            echo "Installed and enabled ufw." | tee artifacts/linux-install-vm-prep/result.txt
+            exit 0
+          fi
+
+          if command -v dnf >/dev/null 2>&1; then
+            run_sudo dnf install -y firewalld
+            run_sudo systemctl enable --now firewalld
+            run_sudo firewall-cmd --list-all > artifacts/linux-install-vm-prep/firewall.txt
+            echo "Installed and enabled firewalld." | tee artifacts/linux-install-vm-prep/result.txt
+            exit 0
+          fi
+
+          if command -v yum >/dev/null 2>&1; then
+            run_sudo yum install -y firewalld
+            run_sudo systemctl enable --now firewalld
+            run_sudo firewall-cmd --list-all > artifacts/linux-install-vm-prep/firewall.txt
+            echo "Installed and enabled firewalld." | tee artifacts/linux-install-vm-prep/result.txt
+            exit 0
+          fi
+
+          echo "No supported firewall or package manager was found." | tee artifacts/linux-install-vm-prep/result.txt
+          exit 1
+
+      - name: Upload preparation artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-install-vm-prep
+          path: artifacts/linux-install-vm-prep
+          if-no-files-found: warn
+          retention-days: 14

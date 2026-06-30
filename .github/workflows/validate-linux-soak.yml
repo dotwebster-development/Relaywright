@@ -1,0 +1,113 @@
+name: Validate Linux Soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to soak test, without leading v"
+        required: true
+        default: "1.0.0-rc.7"
+      mode:
+        description: "Validation mode"
+        required: true
+        default: "soak"
+        type: choice
+        options:
+          - soak
+          - cleanup-only
+      duration_minutes:
+        description: "Soak duration in minutes"
+        required: true
+        default: "10"
+      message_rate_per_minute:
+        description: "Accepted SMTP messages to submit per minute"
+        required: true
+        default: "10"
+      restart_interval_minutes:
+        description: "Restart Relaywright every N minutes; use 0 to disable"
+        required: true
+        default: "5"
+      upstream_outage_seconds:
+        description: "Stop capture upstream once for N seconds; use 0 to disable"
+        required: true
+        default: "15"
+      cleanup_after:
+        description: "Clean soak-linux01 after a successful soak"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-soak-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-linux-soak:
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - soak
+    environment: linux-installer-test
+
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RELAYWRIGHT_SOAK_MODE: ${{ inputs.mode }}
+      RELAYWRIGHT_SOAK_VERSION: ${{ inputs.version }}
+      RELAYWRIGHT_SOAK_REPOSITORY: ${{ github.repository }}
+      RELAYWRIGHT_SOAK_DURATION_MINUTES: ${{ inputs.duration_minutes }}
+      RELAYWRIGHT_SOAK_MESSAGE_RATE_PER_MINUTE: ${{ inputs.message_rate_per_minute }}
+      RELAYWRIGHT_SOAK_RESTART_INTERVAL_MINUTES: ${{ inputs.restart_interval_minutes }}
+      RELAYWRIGHT_SOAK_UPSTREAM_OUTAGE_SECONDS: ${{ inputs.upstream_outage_seconds }}
+      RELAYWRIGHT_SOAK_CLEANUP_AFTER: ${{ inputs.cleanup_after }}
+      RELAYWRIGHT_LINUX_SOAK_VALIDATION_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
+
+    steps:
+      - name: Checkout validation scripts
+        uses: actions/checkout@v7
+
+      - name: Reset soak artifacts
+        shell: bash
+        run: |
+          rm -rf "$PWD/artifacts/linux-soak-validation"
+          mkdir -p "$PWD/artifacts/linux-soak-validation"
+
+      - name: Cleanup release validation state before soak
+        if: inputs.mode == 'soak'
+        shell: bash
+        run: |
+          bash scripts/linux/Invoke-RelaywrightLinuxReleaseValidation.sh \
+            --mode cleanup-only \
+            --version "$RELAYWRIGHT_SOAK_VERSION" \
+            --repository "$RELAYWRIGHT_SOAK_REPOSITORY" \
+            --artifacts-directory "$PWD/artifacts/linux-soak-validation/pre-cleanup-release"
+
+      - name: Validate Linux soak
+        shell: bash
+        run: |
+          bash scripts/linux/Invoke-RelaywrightLinuxSoakValidation.sh \
+            --mode "$RELAYWRIGHT_SOAK_MODE" \
+            --version "$RELAYWRIGHT_SOAK_VERSION" \
+            --repository "$RELAYWRIGHT_SOAK_REPOSITORY" \
+            --duration-minutes "$RELAYWRIGHT_SOAK_DURATION_MINUTES" \
+            --message-rate-per-minute "$RELAYWRIGHT_SOAK_MESSAGE_RATE_PER_MINUTE" \
+            --restart-interval-minutes "$RELAYWRIGHT_SOAK_RESTART_INTERVAL_MINUTES" \
+            --upstream-outage-seconds "$RELAYWRIGHT_SOAK_UPSTREAM_OUTAGE_SECONDS" \
+            --cleanup-after "$RELAYWRIGHT_SOAK_CLEANUP_AFTER" \
+            --artifacts-directory "$PWD/artifacts/linux-soak-validation"
+
+      - name: Upload soak artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-soak-validation-${{ inputs.mode }}-${{ inputs.version }}-${{ inputs.duration_minutes }}m
+          path: artifacts/linux-soak-validation
+          if-no-files-found: warn
+          retention-days: 14
