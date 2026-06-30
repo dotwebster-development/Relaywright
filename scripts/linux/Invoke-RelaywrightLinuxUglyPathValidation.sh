@@ -19,6 +19,7 @@ capture_host="127.0.0.1"
 capture_port="2530"
 
 capture_pid=""
+capture_systemd_unit=""
 db_lock_pid=""
 
 while [[ $# -gt 0 ]]; do
@@ -215,6 +216,15 @@ remove_known_directory() {
 }
 
 stop_capture_server() {
+    if [[ -n "${capture_systemd_unit:-}" ]]; then
+        "${SUDO[@]}" systemctl stop "${capture_systemd_unit}.service" >/dev/null 2>&1 || true
+        "${SUDO[@]}" systemctl reset-failed "${capture_systemd_unit}.service" >/dev/null 2>&1 || true
+        capture_systemd_unit=""
+    fi
+
+    "${SUDO[@]}" systemctl stop "${service_name}-capture.service" >/dev/null 2>&1 || true
+    "${SUDO[@]}" systemctl reset-failed "${service_name}-capture.service" >/dev/null 2>&1 || true
+
     if [[ -n "${capture_pid:-}" ]] && kill -0 "$capture_pid" >/dev/null 2>&1; then
         kill "$capture_pid" >/dev/null 2>&1 || true
         wait "$capture_pid" >/dev/null 2>&1 || true
@@ -639,9 +649,40 @@ PY
 }
 
 assert_capture_server_running() {
+    if [[ -n "${capture_systemd_unit:-}" ]]; then
+        if "${SUDO[@]}" systemctl is-active --quiet "${capture_systemd_unit}.service"; then
+            capture_pid="$("${SUDO[@]}" systemctl show "${capture_systemd_unit}.service" --property MainPID --value 2>/dev/null || true)"
+            return
+        fi
+
+        die "Capture SMTP systemd unit is not running."
+    fi
+
     if [[ -z "${capture_pid:-}" ]] || ! kill -0 "$capture_pid" >/dev/null 2>&1; then
         die "Capture SMTP server is not running."
     fi
+}
+
+write_capture_launcher() {
+    local output_name="$1"
+    local delay_seconds="$2"
+    local output_directory="$3"
+    local log_path="$4"
+    local launcher_path="$artifacts_directory/capture-server-${output_name}.launcher.sh"
+
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf 'set -Eeuo pipefail\n'
+        printf 'exec env PYTHONUNBUFFERED=1 python3 %q --host %q --port %q --output %q --delay-data-seconds %q > %q 2>&1\n' \
+            "$artifacts_directory/capture_smtp.py" \
+            "$capture_host" \
+            "$capture_port" \
+            "$output_directory" \
+            "$delay_seconds" \
+            "$log_path"
+    } > "$launcher_path"
+    chmod +x "$launcher_path"
+    printf '%s' "$launcher_path"
 }
 
 start_capture_server() {
@@ -650,23 +691,35 @@ start_capture_server() {
     stop_capture_server
     write_capture_server
     local output_directory="$artifacts_directory/$output_name"
+    local log_path="$artifacts_directory/capture-server-${output_name}.log"
     mkdir -p "$output_directory"
     rm -f "$output_directory"/*.eml
     write_step "Starting local capture SMTP server on $capture_host:$capture_port with ${delay_seconds}s DATA delay"
-    local command=(
-        env PYTHONUNBUFFERED=1
-        python3 "$artifacts_directory/capture_smtp.py"
-        --host "$capture_host" \
-        --port "$capture_port" \
-        --output "$output_directory" \
-        --delay-data-seconds "$delay_seconds"
-    )
-    if command_available setsid; then
-        setsid "${command[@]}" > "$artifacts_directory/capture-server-${output_name}.log" 2>&1 &
+    local launcher_path
+    launcher_path="$(write_capture_launcher "$output_name" "$delay_seconds" "$output_directory" "$log_path")"
+
+    if command_available systemd-run && "${SUDO[@]}" systemctl --version >/dev/null 2>&1; then
+        capture_systemd_unit="${service_name}-capture"
+        "${SUDO[@]}" systemd-run \
+            --unit "$capture_systemd_unit" \
+            --collect \
+            --quiet \
+            --property "User=$(id -un)" \
+            --property "Group=$(id -gn)" \
+            --property "WorkingDirectory=$PWD" \
+            "$launcher_path"
+        capture_pid="$("${SUDO[@]}" systemctl show "${capture_systemd_unit}.service" --property MainPID --value 2>/dev/null || true)"
     else
-        "${command[@]}" > "$artifacts_directory/capture-server-${output_name}.log" 2>&1 &
+        local command=("$launcher_path")
+        if command_available setsid; then
+            setsid "${command[@]}" &
+        else
+            "${command[@]}" &
+        fi
+        capture_pid="$!"
+        capture_systemd_unit=""
     fi
-    capture_pid="$!"
+
     wait_capture_server
     assert_capture_server_running
 }
@@ -1013,11 +1066,17 @@ save_diagnostics() {
         echo "https_port=$https_port"
         echo "relay_smtp_port=$relay_smtp_port"
         echo "capture_port=$capture_port"
+        echo "capture_systemd_unit=${capture_systemd_unit:-}"
         echo "cleanup_after=$cleanup_after"
     } > "$artifacts_directory/validation-input-${suffix}.txt"
 
     {
         echo "capture_pid=${capture_pid:-}"
+        echo "capture_systemd_unit=${capture_systemd_unit:-}"
+        if [[ -n "${capture_systemd_unit:-}" ]]; then
+            "${SUDO[@]}" systemctl status "${capture_systemd_unit}.service" --no-pager || true
+            "${SUDO[@]}" journalctl -u "${capture_systemd_unit}.service" -n 80 --no-pager || true
+        fi
         if [[ -n "${capture_pid:-}" ]] && kill -0 "$capture_pid" >/dev/null 2>&1; then
             echo "capture_alive=true"
             ps -p "$capture_pid" -o pid,ppid,stat,etime,cmd || true
