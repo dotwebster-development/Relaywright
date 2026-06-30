@@ -1000,12 +1000,19 @@ SET
     "NextAttemptAtUtc" = '$stale_utc'
 WHERE "Status" <> 3;
 SQL
-    start_capture_server "captured-restart" 0
-    assert_capture_server_running
     "${SUDO[@]}" systemctl start "$service_name"
     wait_service_running
     assert_health_ok "restart-stale-started"
+
+    wait_for_sql_count_at_least "restart-retry-scheduled" 'SELECT COUNT(*) FROM "QueuedMessages" WHERE "Status" = 2;' 1 60
+
+    start_capture_server "captured-restart" 0
     assert_capture_server_running
+    "${SUDO[@]}" sqlite3 "$data_directory/relay.db" <<SQL
+UPDATE "QueuedMessages"
+SET "NextAttemptAtUtc" = '$stale_utc'
+WHERE "Status" = 2;
+SQL
 
     wait_for_sql_count_at_least "restart-delivered" 'SELECT COUNT(*) FROM "QueuedMessages" WHERE "Status" = 3;' 2 120
     wait_for_captured_count_at_least "captured-restart" 1 60
