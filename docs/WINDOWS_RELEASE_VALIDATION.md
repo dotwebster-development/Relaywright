@@ -4,19 +4,21 @@ This guide covers the destructive Windows release validation lane.
 
 ## VM Roles
 
-- `DOT-WINDOWS01` stays on `.github/workflows/deploy-windows-test.yml` with runner label `relaywright-test-windows`.
-- `DOT-WINDOWS02` runs `.github/workflows/validate-windows-release.yml` with runner label `relaywright-install-windows`.
+- `deploy-windows01` stays on `.github/workflows/deploy-windows-test.yml` with labels `relaywright` and `deploy`.
+- `test-windows01` runs `.github/workflows/validate-windows-release.yml` with labels `relaywright` and `test`.
 
-Do not put `relaywright-install-windows` on `DOT-WINDOWS01`. The release validation workflow removes services, firewall rules, install directories, and data directories.
+Do not put the `test` role label on `deploy-windows01`. The release validation workflow removes services, firewall rules, install directories, and data directories.
 
-## DOT-WINDOWS02 Runner Setup
+## test-windows01 Runner Setup
 
-Install a GitHub Actions self-hosted runner on `DOT-WINDOWS02` and add these labels:
+Install a GitHub Actions self-hosted runner on `test-windows01` and add these labels:
 
 ```text
 self-hosted
 Windows
-relaywright-install-windows
+X64
+relaywright
+test
 ```
 
 Install the runner as a Windows service that can perform administrator tasks. The workflow needs to install Windows services, create certificates, and manage Windows Firewall rules.
@@ -77,11 +79,11 @@ mode=full-release
 from_version=1.0.0-rc.5
 ```
 
-The workflow cleans `DOT-WINDOWS02`, installs `from_version`, writes preservation markers for listener config, spool, backups, and Data Protection keys, updates to `version`, validates service/health/HTTPS/HTTP-disabled/firewall/data preservation, cleans again, then performs a fresh silent installer validation for `version`.
+The workflow cleans `test-windows01`, installs `from_version`, writes preservation markers for listener config, spool, backups, and Data Protection keys, updates to `version`, validates service/health/HTTPS/HTTP-disabled/firewall/data preservation, cleans again, then performs a fresh silent installer validation for `version`.
 
 ### `cleanup-only`
 
-Use this to reset `DOT-WINDOWS02`.
+Use this to reset `test-windows01`.
 
 Inputs:
 
