@@ -27,6 +27,7 @@ remove_data=false
 update=false
 health_timeout_seconds=90
 sudo_password="${RELAYWRIGHT_SUDO_PASSWORD:-}"
+runtime_identifier="${RELAYWRIGHT_LINUX_RUNTIME:-}"
 
 usage() {
     cat <<'USAGE'
@@ -38,6 +39,7 @@ Usage:
 Options:
   --version VERSION               Release version to install, for example 1.0.0 or latest.
   --repo OWNER/REPO               GitHub repository that hosts Relaywright releases.
+  --runtime RID                   Linux runtime package: auto, linux-x64, linux-arm64, or linux-arm.
   --install-root PATH             Install root. Default: /opt/relaywright
   --data-directory PATH           Runtime data directory. Default: /var/lib/relaywright
   --service-name NAME             systemd service name. Default: relaywright
@@ -59,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --version) version="$2"; shift 2 ;;
         --repo) repo="$2"; shift 2 ;;
+        --runtime) runtime_identifier="$2"; shift 2 ;;
         --install-root) install_root="$2"; shift 2 ;;
         --data-directory) data_directory="$2"; shift 2 ;;
         --service-name) service_name="$2"; shift 2 ;;
@@ -202,6 +205,32 @@ resolve_version() {
     version="${effective_url##*/}"
     version="${version#v}"
     [[ -n "$version" && "$version" != "latest" ]] || die "Could not resolve the latest Relaywright release."
+}
+
+normalize_runtime_identifier() {
+    local value="${1,,}"
+    case "$value" in
+        ""|auto) detect_runtime_identifier ;;
+        linux-x64|x64|amd64|x86_64) printf '%s' "linux-x64" ;;
+        linux-arm64|arm64|aarch64) printf '%s' "linux-arm64" ;;
+        linux-arm|arm|armhf|armv7|armv7l|armv6l) printf '%s' "linux-arm" ;;
+        *) die "Unsupported Linux runtime '$1'. Use linux-x64, linux-arm64, or linux-arm." ;;
+    esac
+}
+
+detect_runtime_identifier() {
+    local os_name
+    local machine
+    os_name="$(uname -s 2>/dev/null || true)"
+    machine="$(uname -m 2>/dev/null || true)"
+    [[ "${os_name,,}" == "linux" ]] || die "The Linux installer can only auto-detect runtime packages on Linux hosts."
+
+    case "${machine,,}" in
+        x86_64|amd64) printf '%s' "linux-x64" ;;
+        aarch64|arm64) printf '%s' "linux-arm64" ;;
+        armv7l|armv6l|armhf|arm) printf '%s' "linux-arm" ;;
+        *) die "Unsupported Linux machine architecture '$machine'. Use --runtime linux-x64, linux-arm64, or linux-arm if you know the correct package." ;;
+    esac
 }
 
 write_env_line() {
@@ -436,15 +465,16 @@ if "$uninstall"; then
 fi
 
 resolve_version
+runtime_identifier="$(normalize_runtime_identifier "$runtime_identifier")"
 urls="$(get_urls)"
 health_url="https://127.0.0.1:${https_port}/health"
 tag="v${version}"
-artifact_name="relaywright-${version}-linux-x64.tar.gz"
+artifact_name="relaywright-${version}-${runtime_identifier}.tar.gz"
 base_url="https://github.com/${repo}/releases/download/${tag}"
 temp_directory="$(mktemp -d)"
 trap 'rm -rf "$temp_directory"' EXIT
 
-write_step "Downloading Relaywright $version from $repo"
+write_step "Downloading Relaywright $version $runtime_identifier from $repo"
 curl --fail --location --show-error --output "$temp_directory/$artifact_name" "$base_url/$artifact_name"
 curl --fail --location --show-error --output "$temp_directory/SHA256SUMS.txt" "$base_url/SHA256SUMS.txt"
 
@@ -562,6 +592,7 @@ done
 write_step "Relaywright installation complete"
 echo "Service: $service_name"
 echo "Version: $version"
+echo "Runtime: $runtime_identifier"
 echo "Install root: $install_root"
 echo "Data: $data_directory"
 echo "Urls: $urls"

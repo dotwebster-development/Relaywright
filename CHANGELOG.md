@@ -2,6 +2,11 @@
 
 All notable Relaywright release changes are tracked here.
 
+## Unreleased
+
+- Adds a Linux ARM64 release package for Raspberry Pi class and other small-office ARM devices, plus a best-effort ARMv7 package until 32-bit ARM validation hardware is available.
+- Updates the Linux installer to auto-detect x64, ARM64, and ARMv7 hosts, with `--runtime` available for explicit overrides.
+
 ## 1.0.0
 
 - First stable release line.
