@@ -8,11 +8,11 @@ on:
         required: true
         default: "1.0.0-rc.7"
       target_host:
-        description: "Optional dot-linux02 IPv4 address or DNS name for the untrusted smoke"
+        description: "Optional test-linux01 IPv4 address or DNS name for the untrusted smoke"
         required: false
         default: ""
       cleanup_after:
-        description: "Clean dot-linux02 after the smoke"
+        description: "Clean test-linux01 after the smoke"
         required: true
         default: "true"
         type: choice
@@ -32,7 +32,9 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - relaywright-install-linux
+      - X64
+      - relaywright
+      - test
     environment: linux-installer-test
     outputs:
       target_ip: ${{ steps.target.outputs.target_ip }}
@@ -82,7 +84,7 @@ jobs:
           )
           chmod +x "$download_dir/install-relaywright.sh"
 
-      - name: Install release on dot-linux02
+      - name: Install release on test-linux01
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -100,7 +102,7 @@ jobs:
             --firewall-remote-address local-subnet \
             --non-interactive
 
-      - name: Resolve dot-linux02 target IP
+      - name: Resolve test-linux01 target IP
         id: target
         shell: bash
         run: |
@@ -111,7 +113,7 @@ jobs:
           fi
           test -n "$target_ip"
           echo "target_ip=$target_ip" >> "$GITHUB_OUTPUT"
-          echo "$target_ip" > "$PWD/artifacts/smtp-smoke/dot-linux02-target-ip.txt"
+          echo "$target_ip" > "$PWD/artifacts/smtp-smoke/test-linux01-target-ip.txt"
 
       - name: Trusted localhost SMTP smoke
         shell: bash
@@ -181,11 +183,11 @@ jobs:
           echo "$spool_count" > "$PWD/artifacts/smtp-smoke/spool-count.txt"
           test "$spool_count" -ge 1
 
-      - name: Upload dot-linux02 smoke artifacts
+      - name: Upload test-linux01 smoke artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: smtp-smoke-dot-linux02-${{ inputs.version }}
+          name: smtp-smoke-test-linux01-${{ inputs.version }}
           path: artifacts/smtp-smoke
           if-no-files-found: warn
           retention-days: 14
@@ -195,7 +197,9 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - relaywright-test-linux
+      - X64
+      - relaywright
+      - deploy
     environment: linux-test
     outputs:
       source_ip: ${{ steps.source.outputs.source_ip }}
@@ -205,7 +209,7 @@ jobs:
       RELAYWRIGHT_SMOKE_TARGET_IP: ${{ needs.install-and-trusted-smoke.outputs.target_ip }}
 
     steps:
-      - name: Resolve dot-linux01 source IP
+      - name: Resolve deploy-linux01 source IP
         id: source
         shell: bash
         run: |
@@ -223,14 +227,14 @@ jobs:
           fi
           test -n "$source_ip"
           echo "source_ip=$source_ip" >> "$GITHUB_OUTPUT"
-          echo "$source_ip" > "$PWD/artifacts/smtp-smoke/dot-linux01-source-ip.txt"
+          echo "$source_ip" > "$PWD/artifacts/smtp-smoke/deploy-linux01-source-ip.txt"
           echo "$target_host" > "$PWD/artifacts/smtp-smoke/target-host.txt"
 
-      - name: Upload dot-linux01 source artifact
+      - name: Upload deploy-linux01 source artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: smtp-smoke-dot-linux01-source-${{ inputs.version }}
+          name: smtp-smoke-deploy-linux01-source-${{ inputs.version }}
           path: artifacts/smtp-smoke
           if-no-files-found: warn
           retention-days: 14
@@ -242,7 +246,9 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - relaywright-install-linux
+      - X64
+      - relaywright
+      - test
     environment: linux-installer-test
 
     env:
@@ -297,7 +303,9 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - relaywright-test-linux
+      - X64
+      - relaywright
+      - deploy
     environment: linux-test
 
     env:
@@ -306,7 +314,7 @@ jobs:
       RELAYWRIGHT_SMOKE_TARGET_IP: ${{ needs.install-and-trusted-smoke.outputs.target_ip }}
 
     steps:
-      - name: Untrusted SMTP smoke from dot-linux01
+      - name: Untrusted SMTP smoke from deploy-linux01
         timeout-minutes: 2
         shell: bash
         run: |
@@ -354,16 +362,16 @@ jobs:
           echo "Untrusted MAIL FROM rejected with SMTP $SMTP_CODE." | tee -a "$transcript"
           send_command "QUIT" || true
 
-      - name: Upload dot-linux01 smoke artifacts
+      - name: Upload deploy-linux01 smoke artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: smtp-smoke-dot-linux01-${{ inputs.version }}
+          name: smtp-smoke-deploy-linux01-${{ inputs.version }}
           path: artifacts/smtp-smoke
           if-no-files-found: warn
           retention-days: 14
 
-  cleanup-dot-linux02:
+  cleanup-test-linux01:
     needs:
       - resolve-untrusted-source
       - allow-untrusted-source
@@ -373,7 +381,9 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - relaywright-install-linux
+      - X64
+      - relaywright
+      - test
     environment: linux-installer-test
 
     env:
@@ -418,7 +428,7 @@ jobs:
             run_sudo ufw --force delete allow from "$source_ip" to any port 25 proto tcp || true
           fi
 
-      - name: Cleanup dot-linux02
+      - name: Cleanup test-linux01
         shell: bash
         run: |
           bash scripts/linux/Invoke-RelaywrightLinuxReleaseValidation.sh \
