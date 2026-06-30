@@ -411,8 +411,14 @@ import argparse
 import os
 import pathlib
 import socketserver
+import sys
 import threading
 import time
+import traceback
+
+def log(message):
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    print(f"{timestamp} {message}", flush=True)
 
 class CaptureStore:
     def __init__(self, output):
@@ -433,49 +439,55 @@ class Handler(socketserver.StreamRequestHandler):
         self.wfile.flush()
 
     def handle(self):
-        self.write_line("220 relaywright-ugly-capture ESMTP ready")
-        data_mode = False
-        data = []
-        while True:
-            line = self.rfile.readline(65536)
-            if not line:
-                return
-            stripped = line.rstrip(b"\r\n")
-            if data_mode:
-                if stripped == b".":
-                    self.server.store.save(b"".join(data))
-                    if self.server.delay_data_seconds > 0:
-                        time.sleep(self.server.delay_data_seconds)
+        log(f"connection from {self.client_address[0]}:{self.client_address[1]}")
+        try:
+            self.write_line("220 relaywright-ugly-capture ESMTP ready")
+            data_mode = False
+            data = []
+            while True:
+                line = self.rfile.readline(65536)
+                if not line:
+                    return
+                stripped = line.rstrip(b"\r\n")
+                if data_mode:
+                    if stripped == b".":
+                        self.server.store.save(b"".join(data))
+                        if self.server.delay_data_seconds > 0:
+                            time.sleep(self.server.delay_data_seconds)
+                        data.clear()
+                        data_mode = False
+                        self.write_line("250 Ok")
+                    else:
+                        data.append(line)
+                    continue
+
+                command = stripped.decode("utf-8", "replace")
+                verb = command.split(" ", 1)[0].upper()
+                if verb in ("EHLO", "HELO"):
+                    self.write_line("250-relaywright-ugly-capture")
+                    self.write_line("250 SIZE 10485760")
+                elif verb == "MAIL":
+                    self.write_line("250 Ok")
+                elif verb == "RCPT":
+                    self.write_line("250 Ok")
+                elif verb == "DATA":
+                    data_mode = True
+                    self.write_line("354 End data with <CRLF>.<CRLF>")
+                elif verb == "RSET":
                     data.clear()
                     data_mode = False
                     self.write_line("250 Ok")
+                elif verb == "NOOP":
+                    self.write_line("250 Ok")
+                elif verb == "QUIT":
+                    self.write_line("221 Bye")
+                    return
                 else:
-                    data.append(line)
-                continue
-
-            command = stripped.decode("utf-8", "replace")
-            verb = command.split(" ", 1)[0].upper()
-            if verb in ("EHLO", "HELO"):
-                self.write_line("250-relaywright-ugly-capture")
-                self.write_line("250 SIZE 10485760")
-            elif verb == "MAIL":
-                self.write_line("250 Ok")
-            elif verb == "RCPT":
-                self.write_line("250 Ok")
-            elif verb == "DATA":
-                data_mode = True
-                self.write_line("354 End data with <CRLF>.<CRLF>")
-            elif verb == "RSET":
-                data.clear()
-                data_mode = False
-                self.write_line("250 Ok")
-            elif verb == "NOOP":
-                self.write_line("250 Ok")
-            elif verb == "QUIT":
-                self.write_line("221 Bye")
-                return
-            else:
-                self.write_line("250 Ok")
+                    self.write_line("250 Ok")
+        except Exception as exc:
+            log(f"handler exception: {exc!r}")
+            traceback.print_exc()
+            raise
 
 class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
@@ -488,10 +500,16 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--delay-data-seconds", type=float, default=0)
     args = parser.parse_args()
-    with Server((args.host, args.port), Handler) as server:
-        server.store = CaptureStore(args.output)
-        server.delay_data_seconds = args.delay_data_seconds
-        server.serve_forever(poll_interval=0.5)
+    try:
+        with Server((args.host, args.port), Handler) as server:
+            server.store = CaptureStore(args.output)
+            server.delay_data_seconds = args.delay_data_seconds
+            log(f"listening on {args.host}:{args.port} with {args.delay_data_seconds}s DATA delay")
+            server.serve_forever(poll_interval=0.5)
+    except Exception as exc:
+        log(f"server exception: {exc!r}")
+        traceback.print_exc()
+        raise
 
 if __name__ == "__main__":
     main()
@@ -635,12 +653,19 @@ start_capture_server() {
     mkdir -p "$output_directory"
     rm -f "$output_directory"/*.eml
     write_step "Starting local capture SMTP server on $capture_host:$capture_port with ${delay_seconds}s DATA delay"
-    python3 "$artifacts_directory/capture_smtp.py" \
+    local command=(
+        env PYTHONUNBUFFERED=1
+        python3 "$artifacts_directory/capture_smtp.py"
         --host "$capture_host" \
         --port "$capture_port" \
         --output "$output_directory" \
-        --delay-data-seconds "$delay_seconds" \
-        > "$artifacts_directory/capture-server-${output_name}.log" 2>&1 &
+        --delay-data-seconds "$delay_seconds"
+    )
+    if command_available setsid; then
+        setsid "${command[@]}" > "$artifacts_directory/capture-server-${output_name}.log" 2>&1 &
+    else
+        "${command[@]}" > "$artifacts_directory/capture-server-${output_name}.log" 2>&1 &
+    fi
     capture_pid="$!"
     wait_capture_server
     assert_capture_server_running
