@@ -23,11 +23,13 @@ Self-contained publish means the VM does not need the .NET runtime to run Relayw
 On the Linux VM:
 
 1. Install the GitHub Actions self-hosted runner.
-2. Make sure it has the labels `self-hosted`, `Linux`, and `relaywright-test-linux`.
+2. Make sure it has the labels `self-hosted`, `Linux`, `X64`, `relaywright`, and `deploy`.
 3. Give the runner non-interactive administrative rights. Preferred: passwordless `sudo` for the runner account. Alternative: set the `RELAYWRIGHT_LINUX_TEST_SUDO_PASSWORD` Actions secret. Disposable test VM option: run the runner service as root.
 4. Make sure `systemd`, `curl`, and `openssl` are available.
 5. Allow outbound HTTPS to GitHub.
 6. Make sure any VM host/network firewall allows the ports you want to test. The deployment script can add rules for active `firewalld` or `ufw`.
+
+The current active deployment VM is `deploy-linux01`. Runner names are for humans; workflow routing uses the project label `relaywright` plus the role label `deploy`.
 
 Default deployment values:
 
