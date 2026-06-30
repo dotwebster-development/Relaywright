@@ -59,7 +59,9 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - relaywright-test-linux
+      - X64
+      - relaywright
+      - deploy
     environment: linux-test
 
     env:
