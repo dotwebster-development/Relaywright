@@ -20,7 +20,7 @@ The vulnerability report must not contain any project with vulnerable packages.
 
 ## Windows Validation
 
-- Run the `Validate Windows Release` workflow in `full-release` mode against the release candidate on `DOT-WINDOWS02`.
+- Run the `Validate Windows Release` workflow in `full-release` mode against the release candidate on `test-windows01`.
 - If diagnosing separately, run `clean-installer` and `update-package` modes against the same release candidate artifacts.
 - Clean install the Windows installer on a disposable VM.
 - Confirm first-run setup works without a bootstrap password.
