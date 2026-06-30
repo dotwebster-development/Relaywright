@@ -9,10 +9,12 @@ Use a disposable Linux install VM with a GitHub Actions self-hosted runner label
 ```text
 self-hosted
 Linux
-relaywright-install-linux
+X64
+relaywright
+test
 ```
 
-Do not use the active Linux deployment VM for this lane. The validation workflow removes services, firewall rules, install directories, and data directories.
+For the current shared-runner naming model, this is `test-linux01`. Do not use the active Linux deployment VM for this lane. The validation workflow removes services, firewall rules, install directories, and data directories.
 
 Create the GitHub environment:
 

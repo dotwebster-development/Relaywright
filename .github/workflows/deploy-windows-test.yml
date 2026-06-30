@@ -59,7 +59,9 @@ jobs:
     runs-on:
       - self-hosted
       - Windows
-      - relaywright-test-windows
+      - X64
+      - relaywright
+      - deploy
     environment: windows-test
 
     env:
