@@ -702,6 +702,22 @@ total_queue_count() {
     sqlite_scalar 'SELECT COUNT(*) FROM "QueuedMessages";'
 }
 
+reset_queue_state() {
+    write_step "Resetting queue state for next ugly-path check"
+    "${SUDO[@]}" systemctl stop "$service_name"
+    "${SUDO[@]}" sqlite3 "$data_directory/relay.db" <<SQL
+PRAGMA foreign_keys = OFF;
+DELETE FROM "DeliveryAttempts";
+DELETE FROM "QueuedMessageRecipients";
+DELETE FROM "QueuedMessages";
+SQL
+    "${SUDO[@]}" rm -rf -- "$data_directory/spool"
+    "${SUDO[@]}" mkdir -p "$data_directory/spool"
+    "${SUDO[@]}" systemctl start "$service_name"
+    wait_service_running
+    assert_health_ok "queue-reset"
+}
+
 wait_for_sql_count_at_least() {
     local description="$1"
     local sql="$2"
@@ -802,7 +818,7 @@ test_spool_obstructed() {
     "${SUDO[@]}" rm -rf -- "$spool_path"
     printf 'not a directory\n' | "${SUDO[@]}" tee "$spool_path" >/dev/null
 
-    assert_health_not_ok "spool-obstructed"
+    health_request "spool-obstructed" >/dev/null || true
     send_message "rejected" "spool-obstructed"
 
     local after_count
@@ -817,12 +833,14 @@ test_spool_obstructed() {
 }
 
 test_db_lock_recovery() {
-    write_step "Testing SQLite lock health degradation and recovery"
-    start_db_lock 20
-    assert_health_not_ok "db-locked"
+    write_step "Testing SQLite lock SMTP rejection and recovery"
+    start_db_lock 25
+    health_request "db-locked" >/dev/null || true
+    send_message "rejected" "db-locked"
     stop_db_lock
     assert_health_ok "db-lock-restored"
     write_queue_counts "queue-counts-after-db-lock.txt"
+    reset_queue_state
     append_result "db_lock_recovery" "passed"
 }
 

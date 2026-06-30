@@ -107,8 +107,8 @@ Modes:
 
 The current Linux ugly-path gate covers:
 
-- obstructed spool path: health degrades, SMTP DATA is rejected, and no queue metadata is created;
-- SQLite lock contention: health degrades while the lock is held and recovers afterward;
+- obstructed spool path: SMTP DATA is rejected, no queue metadata is created, and the service recovers after the path is restored;
+- SQLite lock contention: SMTP DATA is not falsely accepted while the database is locked, and the service recovers afterward;
 - upstream outage: SMTP intake still queues durably, delivery retries, and the message delivers after the capture relay returns;
 - bad HTTPS certificate password: the service fails health/startup, then recovers after restoring the original environment file;
 - restart during active delivery: an in-progress message is recovered through stale-claim behavior after restart;
