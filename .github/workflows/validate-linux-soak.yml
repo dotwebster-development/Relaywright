@@ -49,6 +49,7 @@ concurrency:
 
 jobs:
   validate-linux-soak:
+    timeout-minutes: 1500
     runs-on:
       - self-hosted
       - Linux
