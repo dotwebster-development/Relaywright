@@ -36,6 +36,35 @@ public sealed class ReleaseDefaultsTests
 
         Assert.Contains("version=\"1.0.0\"", script, StringComparison.Ordinal);
         Assert.Contains("enable_http=false", script, StringComparison.Ordinal);
+        Assert.Contains("runtime_identifier=\"${RELAYWRIGHT_LINUX_RUNTIME:-}\"", script, StringComparison.Ordinal);
+        Assert.Contains("--runtime RID", script, StringComparison.Ordinal);
+        Assert.Contains("artifact_name=\"relaywright-${version}-${runtime_identifier}.tar.gz\"", script, StringComparison.Ordinal);
+        Assert.Contains("linux-arm64", script, StringComparison.Ordinal);
+        Assert.Contains("linux-arm", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ReleaseWorkflowPublishesLinuxX64AndArmPackages()
+    {
+        var workflow = ReadRepositoryFile(".github", "workflows", "release.yml");
+
+        Assert.Contains("for runtime in linux-x64 linux-arm64 linux-arm; do", workflow, StringComparison.Ordinal);
+        Assert.Contains("relaywright-${RELAYWRIGHT_VERSION}-${runtime}.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("relaywright-${RELAYWRIGHT_VERSION}-linux-x64.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("relaywright-${RELAYWRIGHT_VERSION}-linux-arm64.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("relaywright-${RELAYWRIGHT_VERSION}-linux-arm.tar.gz", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void LinuxReleaseValidationCanTargetArm64Runner()
+    {
+        var workflow = ReadRepositoryFile(".github", "workflows", "validate-linux-release.yml");
+
+        Assert.Contains("runner_architecture:", workflow, StringComparison.Ordinal);
+        Assert.Contains("- ARM64", workflow, StringComparison.Ordinal);
+        Assert.Contains("- ${{ inputs.runner_architecture }}", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

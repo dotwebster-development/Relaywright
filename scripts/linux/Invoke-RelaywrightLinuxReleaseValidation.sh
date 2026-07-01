@@ -146,20 +146,29 @@ is_any_scope() {
     [[ "${1,,}" == "any" ]]
 }
 
+command_available() {
+    local command_name="$1"
+    if command -v "$command_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    "${SUDO[@]}" sh -c "command -v '$command_name' >/dev/null 2>&1"
+}
+
 get_local_ipv4_cidrs() {
-    command -v ip >/dev/null 2>&1 || return 0
-    ip -o -4 addr show scope global up 2>/dev/null |
+    command_available ip || return 0
+    "${SUDO[@]}" ip -o -4 addr show scope global up 2>/dev/null |
         awk '{print $4}' |
         sort -u
 }
 
 active_firewall_backend() {
-    if command -v firewall-cmd >/dev/null 2>&1 && "${SUDO[@]}" firewall-cmd --state >/dev/null 2>&1; then
+    if command_available firewall-cmd && "${SUDO[@]}" firewall-cmd --state >/dev/null 2>&1; then
         echo "firewalld"
         return
     fi
 
-    if command -v ufw >/dev/null 2>&1 && "${SUDO[@]}" ufw status | grep -qi "^Status: active"; then
+    if command_available ufw && "${SUDO[@]}" ufw status | grep -qi "^Status: active"; then
         echo "ufw"
         return
     fi
@@ -387,6 +396,7 @@ run_installer_script() {
         --https-port "$https_port"
         --http-port "$http_port"
         --smtp-port "$smtp_port"
+        --health-timeout-seconds 240
         --configure-firewall
         --firewall-remote-address "$firewall_remote_address"
         --non-interactive
@@ -545,6 +555,8 @@ save_diagnostics() {
         "${SUDO[@]}" firewall-cmd --list-all > "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
         "${SUDO[@]}" firewall-cmd --list-rich-rules >> "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
     elif [[ "$(active_firewall_backend || true)" == "ufw" ]]; then
+        "${SUDO[@]}" ufw status numbered > "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
+    elif command_available ufw; then
         "${SUDO[@]}" ufw status numbered > "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
     else
         printf 'No active firewalld or ufw firewall detected.\n' > "$artifacts_directory/firewall-${suffix}.txt"

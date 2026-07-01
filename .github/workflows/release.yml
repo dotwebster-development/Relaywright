@@ -171,25 +171,31 @@ jobs:
             exit 1
           fi
 
-      - name: Publish Linux package
-        run: >
-          dotnet publish src/Relaywright.Web/Relaywright.Web.csproj
-          --configuration Release
-          --runtime linux-x64
-          --self-contained true
-          --output artifacts/relaywright-linux-x64
-          /p:Version=${RELAYWRIGHT_VERSION}
-          /p:InformationalVersion=${RELAYWRIGHT_VERSION}+${{ github.sha }}
-          /p:PublishSingleFile=false
-          /p:PublishTrimmed=false
-          /p:DebugType=None
-          /p:DebugSymbols=false
+      - name: Publish Linux packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runtime in linux-x64 linux-arm64 linux-arm; do
+            dotnet publish src/Relaywright.Web/Relaywright.Web.csproj \
+              --configuration Release \
+              --runtime "$runtime" \
+              --self-contained true \
+              --output "artifacts/relaywright-$runtime" \
+              /p:Version=${RELAYWRIGHT_VERSION} \
+              /p:InformationalVersion=${RELAYWRIGHT_VERSION}+${{ github.sha }} \
+              /p:PublishSingleFile=false \
+              /p:PublishTrimmed=false \
+              /p:DebugType=None \
+              /p:DebugSymbols=false
+          done
 
       - name: Package Linux tarball
         shell: bash
         run: |
           mkdir -p artifacts/release
-          tar -czf "artifacts/release/relaywright-${RELAYWRIGHT_VERSION}-linux-x64.tar.gz" -C artifacts/relaywright-linux-x64 .
+          for runtime in linux-x64 linux-arm64 linux-arm; do
+            tar -czf "artifacts/release/relaywright-${RELAYWRIGHT_VERSION}-${runtime}.tar.gz" -C "artifacts/relaywright-$runtime" .
+          done
           cp scripts/linux/install-relaywright.sh artifacts/release/install-relaywright.sh
           chmod +x artifacts/release/install-relaywright.sh
 
@@ -257,6 +263,8 @@ jobs:
           - Relaywright-${RELAYWRIGHT_VERSION}-windows-x64-installer.exe
           - relaywright-${RELAYWRIGHT_VERSION}-windows-x64.zip
           - relaywright-${RELAYWRIGHT_VERSION}-linux-x64.tar.gz
+          - relaywright-${RELAYWRIGHT_VERSION}-linux-arm64.tar.gz
+          - relaywright-${RELAYWRIGHT_VERSION}-linux-arm.tar.gz
           - install-relaywright.sh
           - SHA256SUMS.txt
 

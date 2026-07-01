@@ -43,7 +43,7 @@ Relaywright supports:
 
 - Windows service hosting;
 - Linux systemd hosting;
-- self-contained `win-x64` and `linux-x64` release artifacts.
+- self-contained `win-x64`, `linux-x64`, and `linux-arm64` release artifacts, with a best-effort `linux-arm` package for older 32-bit ARM hosts.
 
 The admin UI is HTTPS-first for production installs. The admin HTTP listener is disabled by default unless explicitly enabled. Firewall handling is scoped by default on Windows and opt-in on Linux.
 
@@ -67,6 +67,8 @@ curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/downlo
 ```
 
 Replace `<version>` with a published version such as `1.0.0-rc.7`.
+
+The Linux installer auto-selects the matching package for x64, ARM64, or 32-bit ARMv7 hosts. For Raspberry Pi class devices, prefer a 64-bit OS so the installer selects the validated `linux-arm64` package; `linux-arm` is best-effort until dedicated ARMv7 validation is available.
 
 ## Runtime Data
 

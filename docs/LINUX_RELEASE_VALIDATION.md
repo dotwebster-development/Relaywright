@@ -28,6 +28,8 @@ If the runner account does not have passwordless `sudo`, add the environment sec
 
 Run `Validate Linux Release` from GitHub Actions.
 
+Use `runner_architecture=X64` for the normal Linux validation VM. Use `runner_architecture=ARM64` for the ARM64 validation VM.
+
 ### `clean-installer`
 
 Use this for every release candidate.
@@ -78,3 +80,19 @@ Use this to reset the Linux install VM after failed runs or manual investigation
 - HTTP firewall rules are not present.
 
 The validation VM should have either active `ufw` or active `firewalld`; `ufw` is common on Ubuntu and `firewalld` is common on RHEL/Fedora. If no supported firewall is active, release validation fails because firewall defaults cannot be proven.
+
+## ARM Validation
+
+Linux releases publish x64 and ARM64 tarballs, plus a best-effort ARMv7 tarball until dedicated 32-bit ARM validation hardware is available. The installer auto-detects the host package unless `--runtime` is supplied.
+
+Before advertising a release as ARM-ready, run at least a clean install on a real ARM64 runner or device, preferably a 64-bit Raspberry Pi OS or Ubuntu Server host. A separate self-hosted runner can use labels such as:
+
+```text
+self-hosted
+Linux
+ARM64
+relaywright
+test
+```
+
+Use `--runtime linux-arm64` only when intentionally overriding auto-detection. Treat `linux-arm` as unvalidated best-effort unless a real 32-bit ARMv7 runner or device has passed the same clean-install checks.
