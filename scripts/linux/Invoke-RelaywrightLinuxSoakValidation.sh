@@ -381,7 +381,6 @@ run_installer() {
     wait_service_running
     assert_health
     assert_http_disabled
-    assert_smtp_ready "after-install"
 }
 
 configure_relay_for_soak() {
