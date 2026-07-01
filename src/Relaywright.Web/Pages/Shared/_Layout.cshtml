@@ -228,18 +228,23 @@
         })();
 
         (() => {
-            const flashMessages = document.querySelectorAll('[data-flash-status]');
-            if (flashMessages.length === 0) {
+            const statusMessages = document.querySelectorAll('[data-flash-status], [data-dismissible-status]');
+            if (statusMessages.length === 0) {
                 return;
             }
 
-            flashMessages.forEach((message) => {
+            statusMessages.forEach((message) => {
                 const removeMessage = () => {
                     message.classList.add('is-hiding');
                     window.setTimeout(() => message.remove(), 220);
                 };
 
-                window.setTimeout(removeMessage, 5000);
+                const dismissButton = message.querySelector('[data-status-dismiss]');
+                dismissButton?.addEventListener('click', removeMessage);
+
+                if (message.hasAttribute('data-flash-status')) {
+                    window.setTimeout(removeMessage, 5000);
+                }
             });
         })();
     </script>

@@ -33,8 +33,9 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status dismissible-status" data-dismissible-status role="alert" aria-live="assertive">
             <p class="status error">@Model.ErrorMessage</p>
+            <button type="button" class="status-dismiss" data-status-dismiss aria-label="Dismiss error message">x</button>
         </div>
     }
 </section>

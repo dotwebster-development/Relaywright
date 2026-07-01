@@ -1171,7 +1171,8 @@ button:hover,
     background: var(--bg-surface);
 }
 
-.surface-status.flash-status {
+.surface-status.flash-status,
+.surface-status.dismissible-status {
     position: fixed;
     top: 74px;
     right: 22px;
@@ -1188,7 +1189,35 @@ button:hover,
     box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.surface-status.flash-status.is-hiding {
+.surface-status.dismissible-status .status {
+    padding-right: 42px;
+    box-shadow: inset 3px 0 0 var(--danger);
+    user-select: text;
+}
+
+.status-dismiss {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    min-height: 26px;
+    padding: 0;
+    border-color: transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--danger);
+    font-weight: 800;
+}
+
+.status-dismiss:hover,
+.status-dismiss:focus {
+    border-color: #fac5c0;
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.surface-status.flash-status.is-hiding,
+.surface-status.dismissible-status.is-hiding {
     opacity: 0;
     transform: translateY(-8px);
     pointer-events: none;
@@ -1614,7 +1643,8 @@ button:hover,
         font-size: 13px;
     }
 
-    .surface-status.flash-status {
+    .surface-status.flash-status,
+    .surface-status.dismissible-status {
         top: 12px;
         left: 14px;
         right: 14px;
