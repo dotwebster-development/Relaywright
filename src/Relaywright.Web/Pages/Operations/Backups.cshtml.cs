@@ -55,7 +55,7 @@ public sealed class BackupsModel(
             cancellationToken,
             EncryptionPassword);
         StatusMessage = run.Status == BackupRunStatus.Succeeded
-            ? run.IsEncrypted ? "Encrypted backup created." : "Backup created."
+            ? run.IsEncrypted ? "Encrypted backup file created in Backup History." : "Backup file created in Backup History."
             : $"Backup failed: {run.Message}";
         RestoreSummaryJson = null;
         logger.LogInformation(

@@ -943,6 +943,31 @@ textarea {
     grid-column: 1 / -1;
 }
 
+.backup-action-grid {
+    align-items: end;
+}
+
+.backup-action-grid .toggle-field,
+.backup-action-context,
+.backup-form-actions {
+    min-height: 36px;
+    align-items: center;
+}
+
+.backup-action-grid .toggle-field {
+    align-self: end;
+}
+
+.backup-action-context {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.backup-form-actions {
+    justify-content: flex-end;
+}
+
 .bind-address-field.is-collapsed {
     visibility: hidden;
     pointer-events: none;
@@ -1443,6 +1468,12 @@ button:hover,
 
 .row-actions {
     justify-content: flex-end;
+}
+
+.empty-cell {
+    padding: 16px;
+    color: var(--text-muted);
+    text-align: center;
 }
 
 .inline-edit-form {
