@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 
@@ -14,6 +15,7 @@ public sealed class IndexModel(
     IRelayConfigurationService relayConfigurationService,
     IRuntimeStatusService runtimeStatusService,
     IDashboardMetricsService dashboardMetricsService,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
     public RelayConfigurationSnapshot Configuration { get; private set; } = new();
@@ -56,25 +58,38 @@ public sealed class IndexModel(
                 x.Status == QueuedMessageStatus.Failed
                 || x.Status == QueuedMessageStatus.Expired,
                 cancellationToken);
-        DeliveredTodayCount = await dbContext.QueuedMessages
-            .FromSqlInterpolated($"""
-                SELECT *
-                FROM "QueuedMessages"
-                WHERE "Status" = {(int)QueuedMessageStatus.Delivered}
-                    AND "DeliveredUtc" IS NOT NULL
-                    AND "DeliveredUtc" >= {todayUtc}
-                """)
-            .CountAsync(cancellationToken);
+        DeliveredTodayCount = databaseConfiguration.IsSqlite
+            ? await dbContext.QueuedMessages
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "QueuedMessages"
+                    WHERE "Status" = {(int)QueuedMessageStatus.Delivered}
+                        AND "DeliveredUtc" IS NOT NULL
+                        AND "DeliveredUtc" >= {todayUtc}
+                    """)
+                .CountAsync(cancellationToken)
+            : await dbContext.QueuedMessages
+                .CountAsync(x =>
+                    x.Status == QueuedMessageStatus.Delivered
+                    && x.DeliveredUtc != null
+                    && x.DeliveredUtc >= todayUtc,
+                    cancellationToken);
 
-        RecentEvents = await dbContext.OperationalEvents
-            .FromSqlRaw("""
-                SELECT *
-                FROM "OperationalEvents"
-                ORDER BY "OccurredUtc" DESC
-                LIMIT 20
-                """)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        RecentEvents = databaseConfiguration.IsSqlite
+            ? await dbContext.OperationalEvents
+                .FromSqlRaw("""
+                    SELECT *
+                    FROM "OperationalEvents"
+                    ORDER BY "OccurredUtc" DESC
+                    LIMIT 20
+                    """)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken)
+            : await dbContext.OperationalEvents
+                .AsNoTracking()
+                .OrderByDescending(x => x.OccurredUtc)
+                .Take(20)
+                .ToListAsync(cancellationToken);
 
         logger.LogDebug(
             "Dashboard loaded. Pending={PendingCount}; Retry={RetryCount}; Failed={FailedCount}; DeliveredToday={DeliveredTodayCount}; RecentEventCount={RecentEventCount}; Listener={ListenerBindAddress}:{ListenerPort}; User={UserName}",

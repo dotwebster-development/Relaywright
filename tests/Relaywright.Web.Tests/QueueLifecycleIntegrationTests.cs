@@ -27,6 +27,7 @@ public sealed class QueueLifecycleIntegrationTests
             new ImmediateBackupCoordinator(),
             events,
             signal,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<MessageQueueService>.Instance);
         var bytes = TestData.MimeBytes();
         var messageId = Guid.NewGuid();
@@ -80,6 +81,7 @@ public sealed class QueueLifecycleIntegrationTests
             new ImmediateBackupCoordinator(),
             new RecordingOperationalEventService(),
             new RecordingQueueSignal(),
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<MessageQueueService>.Instance);
         var messageId = Guid.NewGuid();
         var acceptedUtc = DateTimeOffset.UtcNow.AddMinutes(-1);

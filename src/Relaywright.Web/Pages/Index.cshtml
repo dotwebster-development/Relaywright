@@ -83,7 +83,7 @@
                 <dt>Route Target</dt>
                 <dd>@(Model.Metrics.OutboundRoute.RemoteAddress ?? "Not available")</dd>
                 <dt>Database</dt>
-                <dd>@IndexModel.FormatBytes(Model.Metrics.DatabaseSizeBytes)</dd>
+                <dd>@(Model.Metrics.IsDatabaseExternallyManaged ? Model.Metrics.DatabaseDescription : IndexModel.FormatBytes(Model.Metrics.DatabaseSizeBytes))</dd>
                 <dt>Spool</dt>
                 <dd>@IndexModel.FormatBytes(Model.Metrics.SpoolSizeBytes)</dd>
                 <dt>Backups</dt>

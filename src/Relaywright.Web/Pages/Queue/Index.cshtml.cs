@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Queueing;
 
 namespace Relaywright.Web.Pages.Queue;
@@ -11,6 +12,7 @@ namespace Relaywright.Web.Pages.Queue;
 public sealed class IndexModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IMessageQueueService messageQueueService,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
     private const int PageSize = 50;
@@ -82,33 +84,40 @@ public sealed class IndexModel(
             PageNumber = TotalPages;
         }
 
-        var (sql, parameters) = BuildPagedMessagesSql(
-            SelectedStatus,
-            Search?.Trim(),
-            (PageNumber - 1) * PageSize,
-            PageSize);
+        var offset = (PageNumber - 1) * PageSize;
+        IReadOnlyList<QueuedMessage> messages;
+        if (databaseConfiguration.IsSqlite)
+        {
+            var orderedIds = await GetSqliteOrderedIdsAsync(dbContext, SelectedStatus, Search?.Trim(), offset, PageSize, cancellationToken);
+            var messageOrder = orderedIds
+                .Select((id, index) => new { id, index })
+                .ToDictionary(x => x.id, x => x.index);
 
-        var orderedPage = await dbContext.QueuedMessages
-            .FromSqlRaw(sql, parameters)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-        var orderedIds = orderedPage.Select(x => x.Id).ToArray();
-        var messageOrder = orderedIds
-            .Select((id, index) => new { id, index })
-            .ToDictionary(x => x.id, x => x.index);
+            messages = orderedIds.Length == 0
+                ? []
+                : await dbContext.QueuedMessages
+                    .AsNoTracking()
+                    .AsSplitQuery()
+                    .Include(x => x.Recipients)
+                    .Where(x => orderedIds.Contains(x.Id))
+                    .ToListAsync(cancellationToken);
 
-        var messages = orderedIds.Length == 0
-            ? []
-            : await dbContext.QueuedMessages
-                .AsNoTracking()
+            messages = messages
+                .OrderBy(x => messageOrder[x.Id])
+                .ToList();
+        }
+        else
+        {
+            messages = await query
                 .AsSplitQuery()
                 .Include(x => x.Recipients)
-                .Where(x => orderedIds.Contains(x.Id))
+                .OrderByDescending(x => x.AcceptedUtc)
+                .Skip(offset)
+                .Take(PageSize)
                 .ToListAsync(cancellationToken);
+        }
 
-        Messages = messages
-            .OrderBy(x => messageOrder[x.Id])
-            .ToList();
+        Messages = messages;
 
         logger.LogDebug(
             "Queue page loaded. Status={Status}; SearchPresent={SearchPresent}; PageNumber={PageNumber}; TotalCount={TotalCount}; ReturnedCount={ReturnedCount}; User={UserName}",
@@ -235,5 +244,22 @@ public sealed class IndexModel(
         {
             Value = value
         };
+    }
+
+    private static async Task<Guid[]> GetSqliteOrderedIdsAsync(
+        ApplicationDbContext dbContext,
+        string selectedStatus,
+        string? search,
+        int offset,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = BuildPagedMessagesSql(selectedStatus, search, offset, pageSize);
+        var orderedPage = await dbContext.QueuedMessages
+            .FromSqlRaw(sql, parameters)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return orderedPage.Select(x => x.Id).ToArray();
     }
 }

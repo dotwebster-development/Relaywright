@@ -32,6 +32,7 @@ public sealed class SmtpIntakeIntegrationTests
             new ImmediateBackupCoordinator(),
             events,
             signal,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<MessageQueueService>.Instance);
         var store = new RelayMessageStore(
             spool,

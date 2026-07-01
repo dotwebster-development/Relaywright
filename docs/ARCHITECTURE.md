@@ -7,15 +7,15 @@ Relaywright is an ASP.NET Core Razor Pages application that accepts SMTP submiss
 `Program.cs` wires the application:
 
 - Windows service and systemd hosting support
-- `StorageOptions` and `BootstrapAdminOptions`
-- `AppPaths` for database, spool, and Data Protection key directories
-- SQLite EF Core contexts and context factory
+- `StorageOptions`, `DatabaseOptions`, and `BootstrapAdminOptions`
+- `AppPaths` for local data, spool, and Data Protection key directories
+- provider-aware EF Core contexts and context factory for SQLite, SQL Server, or MySQL
 - ASP.NET Core Identity
 - Razor Pages authorization
 - singleton domain services
 - hosted services for SMTP intake, delivery, maintenance, alerts, and scheduled backups
 
-`DataSeeder` runs at startup. It creates the SQLite database if needed, performs the current manual schema upgrades, ensures one relay configuration row exists, seeds localhost trusted networks, seeds runtime control and submission policy rows, seeds built-in alert rules, and creates the bootstrap admin only when an explicit bootstrap password is configured. Otherwise the first admin is created through the first-run setup page.
+`DataSeeder` runs at startup. For SQLite it creates the local database if needed and performs the current manual schema upgrades. For SQL Server/MySQL it initializes an empty configured database or verifies that the current Relaywright schema already exists. It then ensures one relay configuration row exists, seeds localhost trusted networks, seeds runtime control and submission policy rows, seeds built-in alert rules, and creates the bootstrap admin only when an explicit bootstrap password is configured. Otherwise the first admin is created through the first-run setup page.
 
 ## Storage
 
@@ -25,6 +25,8 @@ Default runtime storage lives under `App_Data`:
 - Message spool: `App_Data/spool`
 - Data Protection keys: `App_Data/keys`
 - Backup bundles: `App_Data/backups`
+
+The installers can configure SQL Server or MySQL instead of SQLite by writing `Database__Provider` and `Database__ConnectionString` into the service environment. This is intentionally not an admin UI setting. Server database backups are owned by the database platform; Relaywright's built-in database snapshot backup/restore path is SQLite-only.
 
 These are runtime artifacts and should remain ignored by source control.
 
@@ -37,7 +39,7 @@ These are runtime artifacts and should remain ignored by source control.
 5. `TrustedDeviceRateLimiter` enforces any per-device hourly message limit.
 6. `RelayMessageStore.SaveAsync` receives SMTP DATA.
 7. `MessageSpoolService.WriteAsync` writes the raw message to disk.
-8. `MessageQueueService.EnqueueAsync` stores queue metadata and recipients in SQLite.
+8. `MessageQueueService.EnqueueAsync` stores queue metadata and recipients in the configured database.
 9. `OperationalEventService` records session and queue events.
 
 The critical guarantee is that accepted message content is written to the spool and queue metadata is saved before the SMTP server returns success. Submission-policy rejections happen before DATA is accepted, so rejected content is not spooled.

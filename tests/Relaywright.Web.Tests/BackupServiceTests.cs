@@ -72,6 +72,7 @@ public sealed class BackupServiceTests
             new BackupCoordinator(),
             new RecordingOperationalEventService(),
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupService>.Instance);
 
         var run = await service.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
@@ -101,6 +102,7 @@ public sealed class BackupServiceTests
             new BackupCoordinator(),
             new RecordingOperationalEventService(),
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupService>.Instance);
 
         var run = await service.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
@@ -140,6 +142,7 @@ public sealed class BackupServiceTests
             new BackupCoordinator(),
             new RecordingOperationalEventService(),
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupService>.Instance);
 
         var run = await service.CreateBackupAsync(
@@ -170,6 +173,7 @@ public sealed class BackupServiceTests
             new BackupCoordinator(),
             new RecordingOperationalEventService(),
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupService>.Instance);
 
         var run = await service.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
@@ -180,6 +184,41 @@ public sealed class BackupServiceTests
         Assert.True(readiness.IsReady);
         Assert.Equal(run.Id, readiness.BackupId);
         Assert.True(readiness.BackupStorageBytes > 0);
+    }
+
+    [Fact]
+    public async Task ExternalDatabaseModeReportsBackupsAsExternallyManaged()
+    {
+        using var appData = TempAppData.Create();
+        var factory = await CreateFileBackedDatabaseAsync(appData);
+        var configuration = TestDatabaseConfiguration.SqlServer(
+            "Server=localhost;Database=Relaywright;User Id=relaywright;Password=secret;TrustServerCertificate=True");
+        var events = new RecordingOperationalEventService();
+        var service = new BackupService(
+            factory,
+            new BackupCoordinator(),
+            events,
+            appData.Paths,
+            configuration,
+            NullLogger<BackupService>.Instance);
+
+        var run = await service.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
+        var readiness = await service.GetReadinessAsync(CancellationToken.None);
+        await using var uploadStream = new MemoryStream([1, 2, 3]);
+        var formFile = new FormFile(uploadStream, 0, uploadStream.Length, "RestoreBackupFile", "backup.zip");
+        var restoreService = new BackupRestoreService(
+            appData.Paths,
+            configuration,
+            NullLogger<BackupRestoreService>.Instance);
+        var restore = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
+
+        Assert.Equal(BackupRunStatus.Failed, run.Status);
+        Assert.Contains("only available for SQLite", run.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(readiness.IsReady);
+        Assert.Contains("managed outside Relaywright", readiness.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(restore.Succeeded);
+        Assert.Contains("managed outside Relaywright", restore.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(events.Events, x => x.Severity == EventSeverity.Warning);
     }
 
     [Fact]
@@ -194,6 +233,7 @@ public sealed class BackupServiceTests
             new BackupCoordinator(),
             new RecordingOperationalEventService(),
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupService>.Instance);
         var run = await backupService.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
         var backupPath = await backupService.GetBackupPathAsync(run.Id, CancellationToken.None);
@@ -204,6 +244,7 @@ public sealed class BackupServiceTests
         var formFile = new FormFile(uploadStream, 0, bytes.Length, "RestoreBackupFile", Path.GetFileName(backupPath!));
         var restoreService = new BackupRestoreService(
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupRestoreService>.Instance);
 
         var staged = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
@@ -262,6 +303,7 @@ public sealed class BackupServiceTests
         var formFile = new FormFile(uploadStream, 0, backupBytes.Length, "RestoreBackupFile", "legacy.zip");
         var restoreService = new BackupRestoreService(
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupRestoreService>.Instance);
 
         var staged = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
@@ -309,6 +351,7 @@ public sealed class BackupServiceTests
         var formFile = new FormFile(uploadStream, 0, backupBytes.Length, "RestoreBackupFile", "malicious.zip");
         var restoreService = new BackupRestoreService(
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupRestoreService>.Instance);
 
         var staged = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
@@ -345,6 +388,7 @@ public sealed class BackupServiceTests
         var formFile = new FormFile(uploadStream, 0, backupBytes.Length, "RestoreBackupFile", "overlap.zip");
         var restoreService = new BackupRestoreService(
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupRestoreService>.Instance);
 
         var staged = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
@@ -394,6 +438,7 @@ public sealed class BackupServiceTests
             new BackupCoordinator(),
             new RecordingOperationalEventService(),
             appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<BackupService>.Instance);
 
         var runs = await service.GetRunsAsync(CancellationToken.None);

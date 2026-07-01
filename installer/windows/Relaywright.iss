@@ -51,6 +51,8 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 [Code]
 var
   DataDirPage: TInputDirWizardPage;
+  DatabasePage: TInputOptionWizardPage;
+  DatabaseConnectionPage: TInputQueryWizardPage;
   ServicePage: TInputQueryWizardPage;
   PortPage: TInputQueryWizardPage;
   OptionPage: TInputOptionWizardPage;
@@ -93,6 +95,16 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
+  if CurPageID = DatabaseConnectionPage.ID then
+  begin
+    if (not DatabasePage.Values[0]) and (DatabaseConnectionPage.Values[0] = '') then
+    begin
+      MsgBox('SQL Server and MySQL require a database connection string.', mbError, MB_OK);
+      Result := False;
+      exit;
+    end;
+  end;
+
   if CurPageID = PortPage.ID then
   begin
     if not IsValidPort(PortPage.Values[0]) then
@@ -137,8 +149,27 @@ begin
   DataDirPage.Add('Data directory:');
   DataDirPage.Values[0] := ExpandConstant('{commonappdata}\Relaywright');
 
-  ServicePage := CreateInputQueryPage(
+  DatabasePage := CreateInputOptionPage(
     DataDirPage.ID,
+    'Database',
+    'Choose where Relaywright stores operational data.',
+    'This is an installation-time choice. Existing SQLite installations stay on SQLite unless you install a new instance with a server database.',
+    True,
+    False);
+  DatabasePage.Add('SQLite local database');
+  DatabasePage.Add('Microsoft SQL Server');
+  DatabasePage.Add('MySQL');
+  DatabasePage.Values[0] := True;
+
+  DatabaseConnectionPage := CreateInputQueryPage(
+    DatabasePage.ID,
+    'Database Connection',
+    'Provide the server database connection string.',
+    'Use a pre-created empty database. The connection string is written only to the Windows service environment.');
+  DatabaseConnectionPage.Add('Connection string:', True);
+
+  ServicePage := CreateInputQueryPage(
+    DatabaseConnectionPage.ID,
     'Windows Service',
     'Choose the Windows service identity.',
     'The service is configured to start automatically.');
@@ -194,6 +225,13 @@ begin
   BootstrapPage.Values[2] := '';
 end;
 
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  if PageID = DatabaseConnectionPage.ID then
+    Result := DatabasePage.Values[0];
+end;
+
 function BoolParameter(Name: String; Enabled: Boolean): String;
 begin
   if Enabled then
@@ -216,6 +254,26 @@ begin
     Result := ExpandConstant('{commonappdata}\Relaywright')
   else
     Result := DataDirPage.Values[0];
+end;
+
+function GetDatabaseProviderValue: String;
+begin
+  if WizardSilent then
+    Result := 'Sqlite'
+  else if DatabasePage.Values[1] then
+    Result := 'SqlServer'
+  else if DatabasePage.Values[2] then
+    Result := 'MySql'
+  else
+    Result := 'Sqlite';
+end;
+
+function GetDatabaseConnectionStringValue: String;
+begin
+  if WizardSilent then
+    Result := ''
+  else
+    Result := DatabaseConnectionPage.Values[0];
 end;
 
 function GetServiceNameValue: String;
@@ -331,6 +389,7 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Params: String;
+  DatabaseConnectionStringFile: String;
   ResultCode: Integer;
 begin
   if CurStep <> ssPostInstall then
@@ -341,6 +400,7 @@ begin
     ' -PackagePath ' + Quote(ExpandConstant('{app}\package')) +
     ' -InstallRoot ' + Quote(ExpandConstant('{app}')) +
     ' -DataDirectory ' + Quote(GetDataDirectoryValue) +
+    ' -DatabaseProvider ' + Quote(GetDatabaseProviderValue) +
     ' -ServiceName ' + Quote(GetServiceNameValue) +
     ' -DisplayName ' + Quote(GetDisplayNameValue) +
     ' -HttpsPort ' + GetHttpsPortValue +
@@ -355,6 +415,13 @@ begin
 
   Params := Params + BoolParameter('EnableHttp', GetEnableHttpValue);
   Params := Params + BoolParameter('ConfigureFirewall', GetConfigureFirewallValue);
+
+  if GetDatabaseProviderValue <> 'Sqlite' then
+  begin
+    DatabaseConnectionStringFile := ExpandConstant('{tmp}\relaywright-database-connection.txt');
+    SaveStringToFile(DatabaseConnectionStringFile, GetDatabaseConnectionStringValue, False);
+    Params := Params + ' -DatabaseConnectionStringFile ' + Quote(DatabaseConnectionStringFile);
+  end;
 
   if GetBootstrapPasswordValue <> '' then
     Params := Params + ' -BootstrapPassword ' + Quote(GetBootstrapPasswordValue);

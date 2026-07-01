@@ -2,12 +2,14 @@ using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Relaywright.Web.Infrastructure;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Services.Backups;
 
 public sealed class BackupRestoreService(
     AppPaths appPaths,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<BackupRestoreService> logger) : IBackupRestoreService
 {
     private const long MaxRestoreUploadBytes = 5L * 1024 * 1024 * 1024;
@@ -24,6 +26,15 @@ public sealed class BackupRestoreService(
         string? encryptionPassword,
         CancellationToken cancellationToken)
     {
+        if (databaseConfiguration.IsExternalServer)
+        {
+            return new BackupRestoreResult
+            {
+                Succeeded = false,
+                Message = $"{databaseConfiguration.Provider} database restore is managed outside Relaywright. Restore the database with platform tooling and restore spool/certificate files from host backups."
+            };
+        }
+
         if (backupFile.Length <= 0)
         {
             return new BackupRestoreResult

@@ -21,6 +21,7 @@ sudo bash install-relaywright.sh \
   --runtime auto \
   --install-root /opt/relaywright \
   --data-directory /var/lib/relaywright \
+  --database-provider Sqlite \
   --service-name relaywright \
   --https-port 5443 \
   --http-port 0 \
@@ -32,6 +33,18 @@ sudo bash install-relaywright.sh \
 The admin HTTP listener is disabled by default. Use a non-zero `--http-port` only when you intentionally want an HTTP listener.
 
 Use `--runtime linux-x64`, `--runtime linux-arm64`, or `--runtime linux-arm` only when you need to override auto-detection.
+
+SQLite is the default database provider and stores `relay.db` under the selected data directory. SQL Server and MySQL are installation-time choices for new installs with pre-created empty databases:
+
+```bash
+sudo bash install-relaywright.sh \
+  --version latest \
+  --database-provider SqlServer \
+  --database-connection-string-file /root/relaywright-db-connection.txt \
+  --non-interactive
+```
+
+You can also use `--database-connection-string` or set `RELAYWRIGHT_DATABASE_CONNECTION_STRING`, but a file is preferred so the secret is not exposed in shell history. The admin UI does not change database providers after install. In SQL Server/MySQL mode, use database platform tooling for database backups; Relaywright's built-in backup/restore workflow is SQLite-only.
 
 Firewall changes are optional on Linux. Pass `--configure-firewall` only when you want the installer to manage host firewall rules. With `--configure-firewall`, the default remote scope is `local-subnet`, which resolves the host's active IPv4 interface CIDRs and creates scoped rules. You can also pass an explicit CIDR such as `192.168.1.0/24`, or `Any` if you intentionally want broad exposure.
 
