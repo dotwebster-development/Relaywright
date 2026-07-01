@@ -33,6 +33,16 @@ Good unit-test targets:
 
 Use `Category=Integration` for local multi-service tests that use real SQLite, real temporary app data, and real Relaywright services. These tests still must not use live SMTP relays, Microsoft endpoints, public network calls, or machine-specific network interfaces.
 
+SQL Server and MySQL provider tests are optional locally. They run only when these environment variables are set:
+
+```powershell
+$env:RELAYWRIGHT_TEST_SQLSERVER_CONNECTION_STRING="Server=127.0.0.1,1433;Database=RelaywrightProviderTests;User Id=sa;Password=...;Encrypt=True;TrustServerCertificate=True"
+$env:RELAYWRIGHT_TEST_MYSQL_CONNECTION_STRING="server=127.0.0.1;port=3306;database=RelaywrightProviderTests;user=root;password=...;SslMode=Disabled;AllowPublicKeyRetrieval=True"
+dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --filter "FullyQualifiedName~DatabaseProviderIntegrationTests"
+```
+
+CI runs those provider checks in dedicated jobs with disposable service containers.
+
 Good service-integration targets:
 
 - SMTP DATA accepted -> spool write -> queue metadata saved -> SMTP OK

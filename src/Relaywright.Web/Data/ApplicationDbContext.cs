@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using MySql.EntityFrameworkCore.Extensions;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
 
@@ -209,6 +210,86 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.Summary).HasMaxLength(2048);
             entity.Property(x => x.CreatedBy).HasMaxLength(256);
             entity.HasIndex(x => new { x.Area, x.CreatedUtc });
+        });
+
+        ConfigureMySqlLargeTextColumns(builder);
+    }
+
+    private void ConfigureMySqlLargeTextColumns(ModelBuilder builder)
+    {
+        if (!Database.IsMySql())
+        {
+            return;
+        }
+
+        builder.Entity<TrustedNetwork>(entity =>
+        {
+            entity.Property(x => x.AllowedSenderAddresses).HasColumnType("text");
+            entity.Property(x => x.BlockedSenderAddresses).HasColumnType("text");
+            entity.Property(x => x.AllowedRecipientDomains).HasColumnType("text");
+            entity.Property(x => x.BlockedRecipientDomains).HasColumnType("text");
+        });
+
+        builder.Entity<SubmissionPolicy>(entity =>
+        {
+            entity.Property(x => x.AllowedSenderAddresses).HasColumnType("text");
+            entity.Property(x => x.BlockedSenderAddresses).HasColumnType("text");
+            entity.Property(x => x.AllowedRecipientDomains).HasColumnType("text");
+            entity.Property(x => x.BlockedRecipientDomains).HasColumnType("text");
+        });
+
+        builder.Entity<QueuedMessage>(entity =>
+        {
+            entity.Property(x => x.LastResponseText).HasColumnType("text");
+            entity.Property(x => x.LastError).HasColumnType("text");
+        });
+
+        builder.Entity<DeliveryAttempt>(entity =>
+        {
+            entity.Property(x => x.ResponseText).HasColumnType("text");
+            entity.Property(x => x.ExceptionMessage).HasColumnType("text");
+        });
+
+        builder.Entity<OperationalEvent>(entity =>
+        {
+            entity.Property(x => x.Message).HasColumnType("text");
+            entity.Property(x => x.Detail).HasColumnType("text");
+        });
+
+        builder.Entity<AlertRule>(entity =>
+        {
+            entity.Property(x => x.Description).HasColumnType("text");
+            entity.Property(x => x.EmailRecipients).HasColumnType("text");
+            entity.Property(x => x.LastNotificationMessage).HasColumnType("text");
+        });
+
+        builder.Entity<AlertResult>(entity =>
+        {
+            entity.Property(x => x.Message).HasColumnType("text");
+            entity.Property(x => x.NotificationMessage).HasColumnType("text");
+        });
+
+        builder.Entity<BackupRun>(entity =>
+        {
+            entity.Property(x => x.Message).HasColumnType("text");
+            entity.Property(x => x.LastValidationMessage).HasColumnType("text");
+        });
+
+        builder.Entity<DiagnosticRun>(entity =>
+        {
+            entity.Property(x => x.Message).HasColumnType("text");
+        });
+
+        builder.Entity<DiagnosticStage>(entity =>
+        {
+            entity.Property(x => x.Message).HasColumnType("text");
+            entity.Property(x => x.Detail).HasColumnType("text");
+        });
+
+        builder.Entity<ConfigurationSnapshot>(entity =>
+        {
+            entity.Property(x => x.Summary).HasColumnType("text");
+            entity.Property(x => x.PayloadJson).HasColumnType("text");
         });
     }
 }

@@ -26,6 +26,16 @@ public sealed class ReleaseDefaultsTests
         Assert.Contains("FirewallPage.Values[0] := 'LocalSubnet';", installer, StringComparison.Ordinal);
         Assert.Contains("[switch]$EnableHttp", script, StringComparison.Ordinal);
         Assert.Contains("[string]$FirewallRemoteAddress = \"LocalSubnet\"", script, StringComparison.Ordinal);
+        Assert.Contains("[string]$DatabaseProvider = \"\"", script, StringComparison.Ordinal);
+        Assert.Contains("[string]$DatabaseConnectionStringFile = \"\"", script, StringComparison.Ordinal);
+        Assert.Contains("Database__Provider=$($databaseSettings.Provider)", script, StringComparison.Ordinal);
+        Assert.Contains("Database__ConnectionString=$($databaseSettings.ConnectionString)", script, StringComparison.Ordinal);
+        Assert.Contains("DatabasePage := CreateInputOptionPage", installer, StringComparison.Ordinal);
+        Assert.Contains("SQLite local database", installer, StringComparison.Ordinal);
+        Assert.Contains("Microsoft SQL Server", installer, StringComparison.Ordinal);
+        Assert.Contains("MySQL", installer, StringComparison.Ordinal);
+        Assert.Contains("relaywright-database-connection.txt", installer, StringComparison.Ordinal);
+        Assert.Contains("-DatabaseConnectionStringFile", installer, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -41,6 +51,12 @@ public sealed class ReleaseDefaultsTests
         Assert.Contains("artifact_name=\"relaywright-${version}-${runtime_identifier}.tar.gz\"", script, StringComparison.Ordinal);
         Assert.Contains("linux-arm64", script, StringComparison.Ordinal);
         Assert.Contains("linux-arm", script, StringComparison.Ordinal);
+        Assert.Contains("database_provider=\"${RELAYWRIGHT_DATABASE_PROVIDER:-}\"", script, StringComparison.Ordinal);
+        Assert.Contains("database_connection_string=\"${RELAYWRIGHT_DATABASE_CONNECTION_STRING:-}\"", script, StringComparison.Ordinal);
+        Assert.Contains("--database-provider PROVIDER", script, StringComparison.Ordinal);
+        Assert.Contains("--database-connection-string-file PATH", script, StringComparison.Ordinal);
+        Assert.Contains("write_env_line \"Database__Provider\" \"$database_provider\"", script, StringComparison.Ordinal);
+        Assert.Contains("write_env_line \"Database__ConnectionString\" \"$database_connection_string\"", script, StringComparison.Ordinal);
     }
 
     [Fact]

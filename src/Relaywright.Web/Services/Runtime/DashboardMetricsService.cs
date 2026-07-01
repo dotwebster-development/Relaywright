@@ -3,6 +3,7 @@ using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Infrastructure;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Backups;
 
 namespace Relaywright.Web.Services.Runtime;
@@ -10,6 +11,7 @@ namespace Relaywright.Web.Services.Runtime;
 public sealed class DashboardMetricsService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     AppPaths appPaths,
+    DatabaseConfiguration databaseConfiguration,
     IBackupService backupService,
     IOutboundRouteProbe outboundRouteProbe,
     ILogger<DashboardMetricsService> logger) : IDashboardMetricsService
@@ -73,7 +75,11 @@ public sealed class DashboardMetricsService(
             LastUpstreamFailureMessage = lastFailure is null
                 ? null
                 : FirstNonEmpty(lastFailure.ResponseText, lastFailure.ExceptionMessage, lastFailure.FailureCategory.ToString()),
-            DatabaseSizeBytes = FileSize(appPaths.DatabasePath),
+            DatabaseSizeBytes = databaseConfiguration.IsSqlite ? FileSize(appPaths.DatabasePath) : 0,
+            IsDatabaseExternallyManaged = databaseConfiguration.IsExternalServer,
+            DatabaseDescription = databaseConfiguration.IsSqlite
+                ? "SQLite database file"
+                : $"{databaseConfiguration.Provider} managed externally",
             SpoolSizeBytes = DirectorySize(appPaths.SpoolRootDirectory),
             BackupSizeBytes = DirectorySize(appPaths.BackupDirectory),
             OutboundRoute = route,

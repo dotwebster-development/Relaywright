@@ -20,6 +20,10 @@ public sealed class DashboardMetricsSnapshot
 
     public long DatabaseSizeBytes { get; init; }
 
+    public bool IsDatabaseExternallyManaged { get; init; }
+
+    public string DatabaseDescription { get; init; } = string.Empty;
+
     public long SpoolSizeBytes { get; init; }
 
     public long BackupSizeBytes { get; init; }

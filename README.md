@@ -2,7 +2,7 @@
 
 Relaywright is a self-hosted SMTP relay gateway for trusted devices, apps, and internal systems that need a controlled path to an upstream smart host.
 
-It is built with ASP.NET Core, SQLite, SmtpServer, and MailKit. Release builds are self-contained for Windows and Linux, so the target machine does not need a separate .NET runtime.
+It is built with ASP.NET Core, EF Core, SmtpServer, and MailKit. Release builds are self-contained for Windows and Linux, so the target machine does not need a separate .NET runtime.
 
 ## Status
 
@@ -30,7 +30,7 @@ The relay uses:
 
 - trusted-network checks for SMTP submissions;
 - submission policy before DATA is accepted;
-- SQLite for configuration and queue metadata;
+- SQLite, SQL Server, or MySQL for configuration and queue metadata;
 - a disk spool for raw message content;
 - ASP.NET Core Data Protection for persisted secrets;
 - operational events for visible configuration, queue, delivery, diagnostics, and system activity.
@@ -80,11 +80,13 @@ Default runtime data locations depend on how Relaywright is started:
 
 Runtime data includes:
 
-- `relay.db` for SQLite data;
+- `relay.db` for SQLite data when the default local database is used;
 - `spool` for accepted message files;
 - `keys` for Data Protection keys;
 - `backups` for backup bundles;
 - `certs` for generated/admin certificate material.
+
+SQL Server and MySQL are installer-time choices for new installs with pre-created empty databases. Existing SQLite installs stay on SQLite unless a future migration tool is introduced. In SQL Server/MySQL mode, database backups are managed outside Relaywright with the database platform's normal backup tooling.
 
 Do not commit runtime data, Data Protection keys, certificates, or backups to source control.
 

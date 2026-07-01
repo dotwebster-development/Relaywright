@@ -198,6 +198,7 @@ public sealed class MessageQueueServiceTests
                 new ImmediateBackupCoordinator(),
                 new TestOperationalEventService(),
                 new TestQueueSignal(),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<MessageQueueService>.Instance);
         }
 

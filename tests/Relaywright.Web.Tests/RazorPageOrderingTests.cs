@@ -172,6 +172,7 @@ public sealed class RazorPageOrderingTests
             return AttachPageContext(new QueueIndexModel(
                 _dbContextFactory,
                 new TestQueueService(),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<QueueIndexModel>.Instance));
         }
 
@@ -179,6 +180,7 @@ public sealed class RazorPageOrderingTests
         {
             return AttachPageContext(new LogsIndexModel(
                 _dbContextFactory,
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<LogsIndexModel>.Instance));
         }
 
@@ -189,6 +191,7 @@ public sealed class RazorPageOrderingTests
                 new TestRelayConfigurationService(),
                 new StaticRuntimeStatusService(),
                 new TestDashboardMetricsService(),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
