@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
@@ -18,6 +19,8 @@ public sealed class BackupsModel(
 
     public BackupReadiness Readiness { get; private set; } = new();
 
+    public BackupRestoreSummary? RestoreSummary { get; private set; }
+
     [BindProperty]
     public BackupScheduleState Schedule { get; set; } = new();
 
@@ -36,6 +39,9 @@ public sealed class BackupsModel(
     [TempData]
     public string? StatusMessage { get; set; }
 
+    [TempData]
+    public string? RestoreSummaryJson { get; set; }
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         await LoadAsync(cancellationToken);
@@ -51,6 +57,7 @@ public sealed class BackupsModel(
         StatusMessage = run.Status == BackupRunStatus.Succeeded
             ? run.IsEncrypted ? "Encrypted backup created." : "Backup created."
             : $"Backup failed: {run.Message}";
+        RestoreSummaryJson = null;
         logger.LogInformation(
             "Manual backup requested. BackupId={BackupId}; Status={Status}; User={UserName}",
             run.Id,
@@ -94,6 +101,7 @@ public sealed class BackupsModel(
         if (!restore.Succeeded)
         {
             StatusMessage = restore.Message;
+            RestoreSummaryJson = null;
             logger.LogWarning(
                 "Backup restore staging failed from admin page. FileName={FileName}; User={UserName}; Message={Message}",
                 RestoreBackupFile.FileName,
@@ -108,6 +116,7 @@ public sealed class BackupsModel(
             cancellationToken);
 
         StatusMessage = $"{restore.Message} {restart.Message}";
+        RestoreSummaryJson = restore.Summary is null ? null : JsonSerializer.Serialize(restore.Summary);
         logger.LogWarning(
             "Backup restore staged from admin page. FileName={FileName}; User={UserName}; RestartScheduled={RestartScheduled}",
             RestoreBackupFile.FileName,
@@ -142,5 +151,8 @@ public sealed class BackupsModel(
         Runs = await backupService.GetRunsAsync(cancellationToken);
         Schedule = await backupService.GetScheduleAsync(cancellationToken);
         Readiness = await backupService.GetReadinessAsync(cancellationToken);
+        RestoreSummary = string.IsNullOrWhiteSpace(RestoreSummaryJson)
+            ? null
+            : JsonSerializer.Deserialize<BackupRestoreSummary>(RestoreSummaryJson);
     }
 }

@@ -71,6 +71,7 @@ public sealed class UpstreamTestEmailSender(
             {
                 Succeeded = false,
                 Message = "Upstream host is not configured.",
+                Recommendation = "Configure the upstream relay host and port under Relay Settings.",
                 SessionId = sessionId,
                 DiagnosticRunId = run.Id
             };
@@ -269,6 +270,7 @@ public sealed class UpstreamTestEmailSender(
             {
                 Succeeded = true,
                 Message = "Test email accepted by the upstream relay.",
+                Recommendation = "No change is needed for upstream diagnostic sending.",
                 SessionId = sessionId,
                 DiagnosticRunId = run.Id
             };
@@ -322,10 +324,38 @@ public sealed class UpstreamTestEmailSender(
             {
                 Succeeded = false,
                 Message = exception.Message,
+                Recommendation = Recommend(exception),
                 SessionId = sessionId,
                 DiagnosticRunId = run.Id
             };
         }
+    }
+
+    private static string Recommend(Exception exception)
+    {
+        var message = exception.Message;
+        if (message.Contains("authentication", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("credentials", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("oauth", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Review upstream authentication, OAuth consent, and mailbox send permissions.";
+        }
+
+        if (message.Contains("recipient", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("sender", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("mailbox", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Check whether the upstream relay allows this test sender and recipient.";
+        }
+
+        if (message.Contains("certificate", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("ssl", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("tls", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Review the upstream TLS mode and certificate trust from this host.";
+        }
+
+        return "Check the failed diagnostic stage, upstream relay settings, and application logs.";
     }
 
     private Task WriteAsync(

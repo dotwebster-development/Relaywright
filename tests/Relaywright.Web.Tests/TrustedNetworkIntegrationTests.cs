@@ -247,6 +247,43 @@ public sealed class TrustedNetworkIntegrationTests
         Assert.Equal("specific", match!.Description);
     }
 
+    [Fact]
+    public async Task PolicySummaryShowsEffectiveLimitsAndRuleCounts()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var events = new RecordingOperationalEventService();
+        var policyService = new TrustedDevicePolicyService(
+            database.DbContextFactory,
+            events,
+            NullLogger<TrustedDevicePolicyService>.Instance);
+
+        var summary = policyService.DescribeEffectivePolicy(
+            new TrustedNetwork
+            {
+                Id = 5,
+                MaxMessageSizeBytes = 1024,
+                MaxRecipientsPerMessage = 10,
+                AllowedSenderAddresses = "scanner@example.test",
+                BlockedRecipientDomains = "blocked.test"
+            },
+            new SubmissionPolicy
+            {
+                IsEnabled = true,
+                MaxMessageSizeBytes = 2048,
+                MaxRecipientsPerMessage = 3,
+                BlockedSenderAddresses = "blocked@example.test",
+                AllowedRecipientDomains = "example.test"
+            });
+
+        Assert.Equal(5, summary.TrustedNetworkId);
+        Assert.Equal(1024, summary.MessageSizeLimit.Value);
+        Assert.Contains("Trusted device", summary.MessageSizeLimit.Source);
+        Assert.Equal(3, summary.RecipientLimit.Value);
+        Assert.Contains("Global policy", summary.RecipientLimit.Source);
+        Assert.Equal(2, summary.AllowedSenderRuleCount + summary.BlockedSenderRuleCount);
+        Assert.Equal(2, summary.AllowedRecipientDomainRuleCount + summary.BlockedRecipientDomainRuleCount);
+    }
+
     private static TrustedNetworkMailboxFilter CreateFilter(
         SqliteTestStore database,
         RecordingOperationalEventService events)

@@ -8,6 +8,8 @@ public interface ITrustedDevicePolicyService
 
     Task SavePolicyAsync(SubmissionPolicy policy, CancellationToken cancellationToken);
 
+    TrustedDevicePolicySummary DescribeEffectivePolicy(TrustedNetwork profile, SubmissionPolicy policy);
+
     SubmissionPolicyDecision CanAcceptFrom(
         TrustedNetwork profile,
         SubmissionPolicy policy,

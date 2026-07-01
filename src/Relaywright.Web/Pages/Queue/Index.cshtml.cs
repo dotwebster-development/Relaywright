@@ -6,6 +6,7 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Queueing;
+using Relaywright.Web.UI;
 
 namespace Relaywright.Web.Pages.Queue;
 
@@ -40,6 +41,8 @@ public sealed class IndexModel(
     [TempData]
     public string? StatusMessage { get; set; }
 
+    public DateTimeOffset LoadedUtc { get; private set; }
+
     public int TotalCount { get; private set; }
 
     public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
@@ -50,12 +53,17 @@ public sealed class IndexModel(
 
     public IReadOnlyList<QueuedMessage> Messages { get; private set; } = Array.Empty<QueuedMessage>();
 
+    public IReadOnlyList<QueueFailureGroup> FailureGroups { get; private set; } = Array.Empty<QueueFailureGroup>();
+
     public async Task OnGetAsync(string? status, CancellationToken cancellationToken)
     {
+        LoadedUtc = DateTimeOffset.UtcNow;
         SelectedStatus = string.IsNullOrWhiteSpace(status) ? "active" : status.ToLowerInvariant();
         PageNumber = Math.Max(1, PageNumber);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        FailureGroups = await LoadFailureGroupsAsync(dbContext, cancellationToken);
+
         var query = dbContext.QueuedMessages
             .AsNoTracking()
             .AsQueryable();
@@ -131,6 +139,38 @@ public sealed class IndexModel(
 
     public bool IsStatusActive(string status) =>
         string.Equals(SelectedStatus, status, StringComparison.OrdinalIgnoreCase);
+
+    public string FormatAge(QueuedMessage message) =>
+        TimeFormatter.FormatAge(message.AcceptedUtc, LoadedUtc);
+
+    public string FormatNextAttempt(QueuedMessage message)
+    {
+        return message.Status switch
+        {
+            QueuedMessageStatus.Pending or QueuedMessageStatus.InProgress when message.NextAttemptAtUtc <= LoadedUtc => "Due now",
+            QueuedMessageStatus.Pending or QueuedMessageStatus.InProgress => TimeFormatter.FormatRelative(message.NextAttemptAtUtc, LoadedUtc),
+            QueuedMessageStatus.RetryScheduled when message.NextAttemptAtUtc <= LoadedUtc => "Retry due",
+            QueuedMessageStatus.RetryScheduled => $"Retry {TimeFormatter.FormatRelative(message.NextAttemptAtUtc, LoadedUtc)}",
+            QueuedMessageStatus.Delivered => "Delivered",
+            QueuedMessageStatus.Expired => "Expired",
+            _ => "Not scheduled"
+        };
+    }
+
+    public string FormatExpiry(QueuedMessage message)
+    {
+        if (message.Status == QueuedMessageStatus.Delivered)
+        {
+            return "Delivered";
+        }
+
+        if (message.Status == QueuedMessageStatus.Expired || message.ExpiresUtc <= LoadedUtc)
+        {
+            return "Expired";
+        }
+
+        return TimeFormatter.FormatRelative(message.ExpiresUtc, LoadedUtc);
+    }
 
     public async Task<IActionResult> OnPostBulkRetryAsync(CancellationToken cancellationToken)
     {
@@ -262,4 +302,30 @@ public sealed class IndexModel(
 
         return orderedPage.Select(x => x.Id).ToArray();
     }
+
+    private static async Task<IReadOnlyList<QueueFailureGroup>> LoadFailureGroupsAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var failedMessages = await dbContext.QueuedMessages
+            .AsNoTracking()
+            .Where(x => x.Status == QueuedMessageStatus.Failed || x.Status == QueuedMessageStatus.Expired)
+            .Select(x => new { x.FailureCategory, x.AcceptedUtc })
+            .ToListAsync(cancellationToken);
+
+        return failedMessages
+            .GroupBy(x => x.FailureCategory)
+            .OrderByDescending(x => x.Count())
+            .ThenBy(x => x.Key)
+            .Select(x => new QueueFailureGroup(
+                x.Key,
+                x.Count(),
+                x.Min(item => item.AcceptedUtc)))
+            .ToList();
+    }
 }
+
+public sealed record QueueFailureGroup(
+    DeliveryFailureCategory FailureCategory,
+    int Count,
+    DateTimeOffset OldestAcceptedUtc);

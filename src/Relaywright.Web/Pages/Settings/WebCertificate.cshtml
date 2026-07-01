@@ -16,7 +16,7 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
     }

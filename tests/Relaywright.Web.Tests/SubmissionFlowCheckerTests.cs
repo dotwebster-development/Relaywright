@@ -102,10 +102,66 @@ public sealed class SubmissionFlowCheckerTests
         Assert.Contains("recipient limit", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task FlowEvaluatorUsesPolicyOverrideWithoutSavingPolicy()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.TrustedNetworks.Add(new TrustedNetwork
+            {
+                Cidr = "192.168.10.25/32",
+                Description = "Scanner",
+                IsEnabled = true
+            });
+            dbContext.SubmissionPolicies.Add(new SubmissionPolicy
+            {
+                Id = 1,
+                IsEnabled = true,
+                MaxRecipientsPerMessage = 10
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var evaluator = CreateEvaluator(database);
+        var result = await evaluator.EvaluateAsync(
+            new SubmissionFlowCheckRequest
+            {
+                SourceIpAddress = "192.168.10.25",
+                EnvelopeFrom = "scanner@example.test",
+                Recipients = "one@example.test;two@example.test",
+                DeclaredSizeBytes = 1024
+            },
+            CancellationToken.None,
+            new SubmissionPolicy
+            {
+                Id = 1,
+                IsEnabled = true,
+                MaxRecipientsPerMessage = 1
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("recipient limit", result.Message, StringComparison.OrdinalIgnoreCase);
+
+        await using var verifyContext = database.CreateDbContext();
+        Assert.Equal(10, verifyContext.SubmissionPolicies.Single().MaxRecipientsPerMessage);
+    }
+
     private static SubmissionFlowChecker CreateChecker(SqliteTestStore database)
     {
-        var events = new RecordingOperationalEventService();
+        var evaluator = CreateEvaluator(database);
         return new SubmissionFlowChecker(
+            evaluator,
+            new DiagnosticRunRecorder(
+                database.DbContextFactory,
+                NullLogger<DiagnosticRunRecorder>.Instance),
+            NullLogger<SubmissionFlowChecker>.Instance);
+    }
+
+    private static SubmissionFlowEvaluator CreateEvaluator(SqliteTestStore database)
+    {
+        var events = new RecordingOperationalEventService();
+        return new SubmissionFlowEvaluator(
             new TrustedNetworkService(
                 database.DbContextFactory,
                 events,
@@ -114,10 +170,6 @@ public sealed class SubmissionFlowCheckerTests
                 database.DbContextFactory,
                 events,
                 NullLogger<TrustedDevicePolicyService>.Instance),
-            new TrustedDeviceRateLimiter(),
-            new DiagnosticRunRecorder(
-                database.DbContextFactory,
-                NullLogger<DiagnosticRunRecorder>.Instance),
-            NullLogger<SubmissionFlowChecker>.Instance);
+            new TrustedDeviceRateLimiter());
     }
 }

@@ -98,6 +98,48 @@ public sealed class AlertServiceTests
         Assert.True(recentResults.Single().ObservedValue >= 89);
     }
 
+    [Fact]
+    public async Task GetRuleSummariesReturnsObservedValuesWithoutWritingResults()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        using var appData = TempAppData.Create();
+        await using (var dbContext = database.CreateDbContext())
+        {
+            dbContext.AlertRules.Add(new AlertRule
+            {
+                Key = "queue-depth",
+                DisplayName = "Queue depth",
+                Description = "Queue is deep.",
+                IsEnabled = true,
+                Threshold = 2,
+                CooldownMinutes = 60
+            });
+            dbContext.QueuedMessages.Add(TestData.QueuedMessage());
+            await dbContext.SaveChangesAsync();
+        }
+
+        var service = new AlertService(
+            database.DbContextFactory,
+            new StaticRuntimeStatusService(),
+            new StaticRelayConfigurationService(TestData.Snapshot()),
+            new NullAdminHttpsCertificateService(),
+            new RecordingAlertEmailNotifier(),
+            new RecordingOperationalEventService(),
+            appData.Paths,
+            NullLogger<AlertService>.Instance);
+
+        var summaries = await service.GetRuleSummariesAsync(CancellationToken.None);
+
+        var summary = Assert.Single(summaries);
+        Assert.Equal(1, summary.ObservedValue);
+        Assert.Equal(2, summary.Threshold);
+        Assert.False(summary.IsActive);
+
+        await using var verifyContext = database.CreateDbContext();
+        Assert.Empty(verifyContext.AlertResults);
+        Assert.False(verifyContext.AlertRules.Single().IsActive);
+    }
+
     private sealed class RecordingAlertEmailNotifier : IAlertEmailNotifier
     {
         public int SendCount { get; private set; }

@@ -15,7 +15,7 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
     }
@@ -33,6 +33,22 @@
                 <span>@(Model.RuntimeStatus.RestartSupported ? "A graceful restart has been requested." : "Restart Relaywright from the host service manager to apply the change.")</span>
             </section>
         </div>
+    }
+
+    @if (Model.AttentionItems.Count > 0)
+    {
+        <section class="panel attention-panel">
+            <h2>Needs Attention</h2>
+            <div class="attention-list">
+                @foreach (var item in Model.AttentionItems)
+                {
+                    <div class="attention-item">
+                        <span class="status-badge @item.BadgeClass">@item.Title</span>
+                        <span>@item.Detail</span>
+                    </div>
+                }
+            </div>
+        </section>
     }
 
     <div class="stats-grid">
@@ -123,17 +139,28 @@
 
         <section class="panel">
             <h2>Runtime Status</h2>
+            @{
+                var smtpHeartbeat = TimeFormatter.FormatHeartbeat(Model.RuntimeStatus.SmtpListener.LastHeartbeatUtc, Model.LoadedUtc);
+                var deliveryHeartbeat = TimeFormatter.FormatHeartbeat(Model.RuntimeStatus.DeliveryWorker.LastHeartbeatUtc, Model.LoadedUtc);
+                var maintenanceHeartbeat = TimeFormatter.FormatHeartbeat(Model.RuntimeStatus.MaintenanceWorker.LastHeartbeatUtc, Model.LoadedUtc);
+            }
             <dl class="kv">
                 <dt>SMTP Listener</dt>
                 <dd><span class="status-badge status-@Model.RuntimeStatus.SmtpListener.Status.ToLowerInvariant()">@Model.RuntimeStatus.SmtpListener.Status</span></dd>
                 <dt>Listener Detail</dt>
                 <dd>@Model.RuntimeStatus.SmtpListener.Detail</dd>
+                <dt>Listener Heartbeat</dt>
+                <dd><span class="status-badge @smtpHeartbeat.BadgeClass">@smtpHeartbeat.Text</span></dd>
                 <dt>Delivery Worker</dt>
                 <dd><span class="status-badge @(Model.RuntimeStatus.IsDeliveryPaused ? "status-disabled" : Model.RuntimeStatus.DeliveryWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : Model.RuntimeStatus.DeliveryWorker.Status)</span></dd>
                 <dt>Active Deliveries</dt>
                 <dd>@Model.RuntimeStatus.ActiveDeliveries</dd>
+                <dt>Delivery Heartbeat</dt>
+                <dd><span class="status-badge @deliveryHeartbeat.BadgeClass">@deliveryHeartbeat.Text</span></dd>
                 <dt>Maintenance</dt>
                 <dd><span class="status-badge @(Model.RuntimeStatus.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@Model.RuntimeStatus.MaintenanceWorker.Status</span></dd>
+                <dt>Maintenance Heartbeat</dt>
+                <dd><span class="status-badge @maintenanceHeartbeat.BadgeClass">@maintenanceHeartbeat.Text</span></dd>
                 <dt>Last Cleanup</dt>
                 <dd>@Model.RuntimeStatus.LastCleanupUtc?.ToLocalTime()</dd>
             </dl>

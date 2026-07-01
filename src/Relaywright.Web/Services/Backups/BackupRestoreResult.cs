@@ -7,4 +7,6 @@ public sealed class BackupRestoreResult
     public bool RestartRequired { get; init; }
 
     public string Message { get; init; } = string.Empty;
+
+    public BackupRestoreSummary? Summary { get; init; }
 }

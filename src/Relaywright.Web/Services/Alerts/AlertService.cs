@@ -29,6 +29,55 @@ public sealed class AlertService(
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AlertRuleSummary>> GetRuleSummariesAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var runtimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
+        var adminCertificate = await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var rules = await dbContext.AlertRules
+            .AsNoTracking()
+            .OrderBy(x => x.DisplayName)
+            .ToListAsync(cancellationToken);
+
+        var summaries = new List<AlertRuleSummary>(rules.Count);
+        foreach (var rule in rules)
+        {
+            try
+            {
+                var evaluation = await EvaluateRuleAsync(
+                    dbContext,
+                    rule,
+                    runtimeStatus,
+                    adminCertificate,
+                    now,
+                    cancellationToken);
+
+                summaries.Add(new AlertRuleSummary
+                {
+                    Rule = rule,
+                    IsActive = evaluation.IsActive,
+                    ObservedValue = evaluation.ObservedValue,
+                    Threshold = rule.Threshold,
+                    Message = evaluation.Message
+                });
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Read-only alert summary failed. Key={AlertRuleKey}", rule.Key);
+                summaries.Add(new AlertRuleSummary
+                {
+                    Rule = rule,
+                    Threshold = rule.Threshold,
+                    Message = "Current value could not be evaluated."
+                });
+            }
+        }
+
+        return summaries;
+    }
+
     public async Task<IReadOnlyList<AlertResult>> GetRecentResultsAsync(int count, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);

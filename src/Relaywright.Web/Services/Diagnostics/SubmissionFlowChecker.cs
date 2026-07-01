@@ -1,13 +1,9 @@
-using System.Net;
 using Relaywright.Web.Data.Entities;
-using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Services.Diagnostics;
 
 public sealed class SubmissionFlowChecker(
-    ITrustedNetworkService trustedNetworkService,
-    ITrustedDevicePolicyService trustedDevicePolicyService,
-    ITrustedDeviceRateLimiter trustedDeviceRateLimiter,
+    ISubmissionFlowEvaluator submissionFlowEvaluator,
     IDiagnosticRunRecorder diagnosticRunRecorder,
     ILogger<SubmissionFlowChecker> logger) : ISubmissionFlowChecker
 {
@@ -21,100 +17,18 @@ public sealed class SubmissionFlowChecker(
             sessionId: null,
             requestedBy,
             cancellationToken);
-        var stages = new List<SubmissionFlowCheckStage>();
-        var sequence = 0;
-
-        async Task<bool> StageAsync(string name, bool succeeded, string message)
-        {
-            var stage = await diagnosticRunRecorder.StartStageAsync(run.Id, ++sequence, name, message, cancellationToken);
-            await diagnosticRunRecorder.CompleteStageAsync(
-                stage.Id,
-                succeeded ? DiagnosticStageStatus.Succeeded : DiagnosticStageStatus.Failed,
-                message,
-                detail: null,
-                cancellationToken);
-            stages.Add(new SubmissionFlowCheckStage
-            {
-                Name = name,
-                Succeeded = succeeded,
-                Message = message
-            });
-            return succeeded;
-        }
-
         try
         {
-            if (!IPAddress.TryParse(request.SourceIpAddress.Trim(), out var remoteIp))
-            {
-                await StageAsync("Source IP", false, "Source IP address is not valid.");
-                await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, "Source IP address is not valid.", cancellationToken);
-                return Result(false, run.Id, "Source IP address is not valid.", stages);
-            }
-
-            var profile = await trustedNetworkService.FindMatchingAsync(remoteIp, cancellationToken);
-            if (profile is null)
-            {
-                await StageAsync("Trusted Network", false, "Source IP does not match an enabled trusted network.");
-                await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, "Source IP does not match an enabled trusted network.", cancellationToken);
-                return Result(false, run.Id, "Source IP does not match an enabled trusted network.", stages);
-            }
-
-            await StageAsync(
-                "Trusted Network",
-                true,
-                $"Matched {profile.Cidr} ({profile.Description}).");
-
-            var policy = await trustedDevicePolicyService.GetPolicyAsync(cancellationToken);
-            var senderDecision = trustedDevicePolicyService.CanAcceptFrom(
-                profile,
-                policy,
-                request.EnvelopeFrom,
-                Math.Max(0, request.DeclaredSizeBytes));
-            if (!await StageAsync("Sender And Size", senderDecision.Allowed, senderDecision.Message))
-            {
-                await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, senderDecision.Message, cancellationToken);
-                return Result(false, run.Id, senderDecision.Message, stages);
-            }
-
-            var rateDecision = trustedDeviceRateLimiter.PreviewAcceptMessage(profile, remoteIp.ToString());
-            if (!await StageAsync("Rate Limit", rateDecision.Allowed, rateDecision.Message))
-            {
-                await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, rateDecision.Message, cancellationToken);
-                return Result(false, run.Id, rateDecision.Message, stages);
-            }
-
-            var recipients = ParseRecipients(request.Recipients);
-            if (recipients.Count == 0)
-            {
-                await StageAsync("Recipients", false, "At least one recipient is required.");
-                await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, "At least one recipient is required.", cancellationToken);
-                return Result(false, run.Id, "At least one recipient is required.", stages);
-            }
-
-            for (var index = 0; index < recipients.Count; index++)
-            {
-                var recipient = recipients[index];
-                var recipientDecision = trustedDevicePolicyService.CanDeliverTo(
-                    profile,
-                    policy,
-                    recipient,
-                    index + 1);
-                if (!await StageAsync($"Recipient {index + 1}", recipientDecision.Allowed, $"{recipient}: {recipientDecision.Message}"))
-                {
-                    await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, recipientDecision.Message, cancellationToken);
-                    return Result(false, run.Id, recipientDecision.Message, stages);
-                }
-            }
-
-            var message = "Submission would be accepted before SMTP DATA.";
-            await diagnosticRunRecorder.CompleteRunAsync(run.Id, true, message, cancellationToken);
+            var evaluation = await submissionFlowEvaluator.EvaluateAsync(request, cancellationToken);
+            await PersistStagesAsync(run.Id, evaluation.Stages, cancellationToken);
+            await diagnosticRunRecorder.CompleteRunAsync(run.Id, evaluation.Succeeded, evaluation.Message, cancellationToken);
             logger.LogInformation(
-                "Submission flow check succeeded. RemoteIp={RemoteIp}; RecipientCount={RecipientCount}; RequestedBy={RequestedBy}",
-                remoteIp,
-                recipients.Count,
+                "Submission flow check completed. Succeeded={Succeeded}; SourceIp={SourceIp}; RequestedBy={RequestedBy}",
+                evaluation.Succeeded,
+                request.SourceIpAddress,
                 requestedBy);
 
-            return Result(true, run.Id, message, stages);
+            return Result(evaluation, run.Id);
         }
         catch (Exception exception)
         {
@@ -124,31 +38,48 @@ public sealed class SubmissionFlowChecker(
                 request.SourceIpAddress,
                 requestedBy);
             await diagnosticRunRecorder.CompleteRunAsync(run.Id, false, exception.Message, cancellationToken);
-            return Result(false, run.Id, exception.Message, stages);
+            return new SubmissionFlowCheckResult
+            {
+                Succeeded = false,
+                DiagnosticRunId = run.Id,
+                Message = exception.Message,
+                Recommendation = "Review the application logs for the failed diagnostic run."
+            };
         }
     }
 
-    private static SubmissionFlowCheckResult Result(
-        bool succeeded,
+    private async Task PersistStagesAsync(
         Guid runId,
-        string message,
-        IReadOnlyList<SubmissionFlowCheckStage> stages)
+        IReadOnlyList<SubmissionFlowCheckStage> stages,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < stages.Count; index++)
+        {
+            var stageResult = stages[index];
+            var stage = await diagnosticRunRecorder.StartStageAsync(
+                runId,
+                index + 1,
+                stageResult.Name,
+                stageResult.Message,
+                cancellationToken);
+            await diagnosticRunRecorder.CompleteStageAsync(
+                stage.Id,
+                stageResult.Succeeded ? DiagnosticStageStatus.Succeeded : DiagnosticStageStatus.Failed,
+                stageResult.Message,
+                detail: null,
+                cancellationToken);
+        }
+    }
+
+    private static SubmissionFlowCheckResult Result(SubmissionFlowEvaluation evaluation, Guid runId)
     {
         return new SubmissionFlowCheckResult
         {
-            Succeeded = succeeded,
+            Succeeded = evaluation.Succeeded,
             DiagnosticRunId = runId,
-            Message = message,
-            Stages = stages.ToArray()
+            Message = evaluation.Message,
+            Recommendation = evaluation.Recommendation,
+            Stages = evaluation.Stages.ToArray()
         };
-    }
-
-    private static IReadOnlyList<string> ParseRecipients(string value)
-    {
-        return value
-            .Split([',', ';', '\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 }

@@ -30,6 +30,10 @@
         @if (Model.Result is not null)
         {
             <p class="status @(Model.Result.Succeeded ? "ok" : "error")">@Model.Result.Message</p>
+            @if (!string.IsNullOrWhiteSpace(Model.Result.Recommendation))
+            {
+                <p class="field-hint">Next action: @Model.Result.Recommendation</p>
+            }
         }
     </section>
 

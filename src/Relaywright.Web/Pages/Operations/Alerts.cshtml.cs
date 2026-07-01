@@ -13,6 +13,8 @@ public sealed class AlertsModel(
 {
     public IReadOnlyList<AlertRule> Rules { get; private set; } = Array.Empty<AlertRule>();
 
+    public IReadOnlyList<AlertRuleSummary> RuleSummaries { get; private set; } = Array.Empty<AlertRuleSummary>();
+
     public IReadOnlyList<AlertResult> RecentResults { get; private set; } = Array.Empty<AlertResult>();
 
     [BindProperty]
@@ -70,6 +72,7 @@ public sealed class AlertsModel(
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         Rules = await alertService.GetRulesAsync(cancellationToken);
+        RuleSummaries = await alertService.GetRuleSummariesAsync(cancellationToken);
         RecentResults = await alertService.GetRecentResultsAsync(25, cancellationToken);
     }
 }

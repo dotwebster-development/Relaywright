@@ -78,7 +78,7 @@ public sealed class BackupRestoreService(
                     cancellationToken);
             }
 
-            await ExtractAndValidateArchiveAsync(archivePath, stagingDirectory, cancellationToken);
+            var summary = await ExtractAndValidateArchiveAsync(archivePath, stagingDirectory, cancellationToken);
 
             if (Directory.Exists(appPaths.RestorePendingDirectory))
             {
@@ -96,7 +96,8 @@ public sealed class BackupRestoreService(
             {
                 Succeeded = true,
                 RestartRequired = true,
-                Message = "Restore staged. Restart Relaywright to apply the restored database, spool, certificates, and listener settings. Admin accounts, protected relay secrets, Data Protection keys, and admin HTTPS certificate passwords are not restored."
+                Message = "Restore staged. Restart Relaywright to apply the restored database, spool, certificates, and listener settings. Admin accounts, protected relay secrets, Data Protection keys, and admin HTTPS certificate passwords are not restored.",
+                Summary = summary
             };
         }
         catch (Exception exception)
@@ -151,7 +152,7 @@ public sealed class BackupRestoreService(
         Directory.Delete(paths.RestorePendingDirectory, recursive: true);
     }
 
-    private static async Task ExtractAndValidateArchiveAsync(
+    private static async Task<BackupRestoreSummary> ExtractAndValidateArchiveAsync(
         string archivePath,
         string stagingDirectory,
         CancellationToken cancellationToken)
@@ -163,9 +164,10 @@ public sealed class BackupRestoreService(
         var databaseEntry = archive.GetEntry("relay.db")
             ?? throw new InvalidOperationException("Database snapshot is missing.");
 
+        RestoreManifest manifest;
         await using (var manifestStream = manifestEntry.Open())
         {
-            var manifest = await JsonSerializer.DeserializeAsync<RestoreManifest>(manifestStream, JsonOptions, cancellationToken)
+            manifest = await JsonSerializer.DeserializeAsync<RestoreManifest>(manifestStream, JsonOptions, cancellationToken)
                 ?? throw new InvalidOperationException("Backup manifest could not be read.");
             if (!string.Equals(manifest.Application, "Relaywright", StringComparison.Ordinal))
             {
@@ -191,7 +193,7 @@ public sealed class BackupRestoreService(
         }
 
         var stagedDatabasePath = Path.Combine(stagingDirectory, "relay.db");
-        await ValidateDatabaseAsync(stagedDatabasePath, cancellationToken);
+        var databaseSummary = await ReadDatabaseSummaryAsync(stagedDatabasePath, cancellationToken);
         await BackupCredentialSanitizer.SanitizeAsync(stagedDatabasePath, cancellationToken);
         await ValidateRestoredTrustedNetworksAsync(stagedDatabasePath, cancellationToken);
 
@@ -202,6 +204,23 @@ public sealed class BackupRestoreService(
                 stagedUtc = DateTimeOffset.UtcNow
             }, JsonOptions),
             cancellationToken);
+
+        return new BackupRestoreSummary
+        {
+            BackupId = manifest.BackupId == Guid.Empty ? null : manifest.BackupId,
+            CreatedUtc = manifest.CreatedUtc == default ? null : manifest.CreatedUtc,
+            ManifestSpoolFileCount = manifest.SpoolFileCount,
+            ArchiveSpoolFileCount = archive.Entries.Count(x =>
+                !string.IsNullOrWhiteSpace(x.Name)
+                && NormalizeArchivePath(x.FullName).StartsWith("spool/", StringComparison.OrdinalIgnoreCase)),
+            QueuedMessageCount = databaseSummary.QueuedMessageCount,
+            IncludesCertificateFiles = archive.Entries.Any(x =>
+                !string.IsNullOrWhiteSpace(x.Name)
+                && NormalizeArchivePath(x.FullName).StartsWith("certs/", StringComparison.OrdinalIgnoreCase)),
+            IncludesAdminWebListener = archive.Entries.Any(x =>
+                !string.IsNullOrWhiteSpace(x.Name)
+                && string.Equals(NormalizeArchivePath(x.FullName), "admin-web-listener.json", StringComparison.OrdinalIgnoreCase))
+        };
     }
 
     private static void ExtractRequiredEntry(ZipArchiveEntry entry, string root, string relativePath)
@@ -330,13 +349,23 @@ public sealed class BackupRestoreService(
         return candidate;
     }
 
-    private static async Task ValidateDatabaseAsync(string databasePath, CancellationToken cancellationToken)
+    private static async Task<RestoreDatabaseSummary> ReadDatabaseSummaryAsync(string databasePath, CancellationToken cancellationToken)
     {
         await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False");
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM \"AspNetUsers\";";
         _ = await command.ExecuteScalarAsync(cancellationToken);
+
+        long queuedMessages = 0;
+        if (await TableExistsAsync(connection, "QueuedMessages", cancellationToken))
+        {
+            await using var queuedCommand = connection.CreateCommand();
+            queuedCommand.CommandText = "SELECT COUNT(*) FROM \"QueuedMessages\";";
+            queuedMessages = Convert.ToInt64(await queuedCommand.ExecuteScalarAsync(cancellationToken));
+        }
+
+        return new RestoreDatabaseSummary(queuedMessages);
     }
 
     private static async Task ValidateRestoredTrustedNetworksAsync(
@@ -464,7 +493,13 @@ public sealed class BackupRestoreService(
         public Guid BackupId { get; set; }
 
         public string Application { get; set; } = string.Empty;
+
+        public DateTimeOffset CreatedUtc { get; set; }
+
+        public int SpoolFileCount { get; set; }
     }
+
+    private sealed record RestoreDatabaseSummary(long QueuedMessageCount);
 
     private sealed record TrustedNetworkCidr(int Id, string Cidr, CidrRange Range);
 }

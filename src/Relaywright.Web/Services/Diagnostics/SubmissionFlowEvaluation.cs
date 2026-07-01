@@ -1,6 +1,6 @@
 namespace Relaywright.Web.Services.Diagnostics;
 
-public sealed class ConnectivityTestResult
+public sealed class SubmissionFlowEvaluation
 {
     public bool Succeeded { get; init; }
 
@@ -8,5 +8,5 @@ public sealed class ConnectivityTestResult
 
     public string? Recommendation { get; init; }
 
-    public Guid? DiagnosticRunId { get; init; }
+    public IReadOnlyList<SubmissionFlowCheckStage> Stages { get; init; } = Array.Empty<SubmissionFlowCheckStage>();
 }

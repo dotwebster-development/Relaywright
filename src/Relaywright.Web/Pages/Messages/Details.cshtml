@@ -23,7 +23,7 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
     }
@@ -89,6 +89,22 @@
                     <dd>@Model.Metadata.ContentType</dd>
                 </dl>
             }
+        </section>
+
+        <section class="panel">
+            <h2>Delivery Timeline</h2>
+            <div class="timeline">
+                @foreach (var item in Model.Timeline)
+                {
+                    <div class="timeline-item">
+                        <div>
+                            <span class="status-badge @item.BadgeClass">@item.Label</span>
+                            <time>@item.Timestamp.ToLocalTime()</time>
+                        </div>
+                        <p>@item.Detail</p>
+                    </div>
+                }
+            </div>
         </section>
 
         <section class="panel">

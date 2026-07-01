@@ -51,6 +51,30 @@ public sealed class TrustedDevicePolicyService(
         }, cancellationToken);
     }
 
+    public TrustedDevicePolicySummary DescribeEffectivePolicy(TrustedNetwork profile, SubmissionPolicy policy)
+    {
+        return new TrustedDevicePolicySummary
+        {
+            TrustedNetworkId = profile.Id,
+            GlobalPolicyEnabled = policy.IsEnabled,
+            MessageSizeLimit = CreateLimitSummary(
+                profile.MaxMessageSizeBytes,
+                policy.IsEnabled ? policy.MaxMessageSizeBytes : null),
+            RecipientLimit = CreateLimitSummary(
+                profile.MaxRecipientsPerMessage,
+                policy.IsEnabled ? policy.MaxRecipientsPerMessage : null),
+            RateLimitMessagesPerHour = profile.RateLimitMessagesPerHour,
+            AllowedSenderRuleCount = CountRules(profile.AllowedSenderAddresses)
+                + (policy.IsEnabled ? CountRules(policy.AllowedSenderAddresses) : 0),
+            BlockedSenderRuleCount = CountRules(profile.BlockedSenderAddresses)
+                + (policy.IsEnabled ? CountRules(policy.BlockedSenderAddresses) : 0),
+            AllowedRecipientDomainRuleCount = CountRules(profile.AllowedRecipientDomains)
+                + (policy.IsEnabled ? CountRules(policy.AllowedRecipientDomains) : 0),
+            BlockedRecipientDomainRuleCount = CountRules(profile.BlockedRecipientDomains)
+                + (policy.IsEnabled ? CountRules(policy.BlockedRecipientDomains) : 0)
+        };
+    }
+
     public SubmissionPolicyDecision CanAcceptFrom(
         TrustedNetwork profile,
         SubmissionPolicy policy,
@@ -288,5 +312,50 @@ public sealed class TrustedDevicePolicyService(
             (null, { } r) => r,
             _ => null
         };
+    }
+
+    private static EffectivePolicyLimit CreateLimitSummary(long? profileValue, long? globalValue)
+    {
+        var value = MinPositive(profileValue, globalValue);
+        return new EffectivePolicyLimit
+        {
+            Value = value,
+            Source = DescribeLimitSource(profileValue, globalValue)
+        };
+    }
+
+    private static EffectivePolicyLimit CreateLimitSummary(int? profileValue, int? globalValue)
+    {
+        var value = MinPositive(profileValue, globalValue);
+        return new EffectivePolicyLimit
+        {
+            Value = value,
+            Source = DescribeLimitSource(profileValue, globalValue)
+        };
+    }
+
+    private static string DescribeLimitSource(long? profileValue, long? globalValue)
+    {
+        return (profileValue, globalValue) switch
+        {
+            (null, null) => "Not set",
+            ({ }, null) => "Trusted device",
+            (null, { }) => "Global policy",
+            ({ } profile, { } global) when profile < global => "Trusted device (stricter)",
+            ({ } profile, { } global) when global < profile => "Global policy (stricter)",
+            _ => "Trusted device + global policy"
+        };
+    }
+
+    private static string DescribeLimitSource(int? profileValue, int? globalValue)
+    {
+        return DescribeLimitSource(
+            profileValue is null ? null : (long?)profileValue.Value,
+            globalValue is null ? null : (long?)globalValue.Value);
+    }
+
+    private static int CountRules(string? value)
+    {
+        return ParseList(value).Count;
     }
 }

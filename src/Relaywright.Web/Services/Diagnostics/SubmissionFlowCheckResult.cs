@@ -8,6 +8,8 @@ public sealed class SubmissionFlowCheckResult
 
     public string Message { get; init; } = string.Empty;
 
+    public string? Recommendation { get; init; }
+
     public IReadOnlyList<SubmissionFlowCheckStage> Stages { get; init; } = Array.Empty<SubmissionFlowCheckStage>();
 }
 

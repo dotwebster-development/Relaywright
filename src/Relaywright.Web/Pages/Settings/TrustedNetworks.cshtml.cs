@@ -8,6 +8,7 @@ namespace Relaywright.Web.Pages.Settings;
 
 public sealed class TrustedNetworksModel(
     ITrustedNetworkService trustedNetworkService,
+    ITrustedDevicePolicyService trustedDevicePolicyService,
     IConfigurationSnapshotService configurationSnapshotService,
     ILogger<TrustedNetworksModel> logger) : PageModel
 {
@@ -16,12 +17,15 @@ public sealed class TrustedNetworksModel(
 
     public IReadOnlyList<TrustedNetwork> Networks { get; private set; } = Array.Empty<TrustedNetwork>();
 
+    public IReadOnlyDictionary<int, TrustedDevicePolicySummary> EffectivePolicies { get; private set; } =
+        new Dictionary<int, TrustedDevicePolicySummary>();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     public async Task OnGetAsync(int? editId, CancellationToken cancellationToken)
     {
-        Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
+        await LoadNetworksAsync(cancellationToken);
         Input = editId is null
             ? new TrustedNetwork { IsEnabled = true }
             : Networks.FirstOrDefault(x => x.Id == editId.Value) ?? new TrustedNetwork { IsEnabled = true };
@@ -65,7 +69,7 @@ public sealed class TrustedNetworksModel(
                 Input.IsEnabled,
                 User.Identity?.Name);
 
-            Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
+            await LoadNetworksAsync(cancellationToken);
             ModelState.AddModelError(string.Empty, exception.Message);
             return Page();
         }
@@ -125,6 +129,37 @@ public sealed class TrustedNetworksModel(
         return parts.Count == 0 ? "No device-specific lists" : string.Join("; ", parts);
     }
 
+    public TrustedDevicePolicySummary? GetEffectivePolicy(int trustedNetworkId)
+    {
+        return EffectivePolicies.TryGetValue(trustedNetworkId, out var summary) ? summary : null;
+    }
+
+    public static string FormatEffectivePolicy(TrustedDevicePolicySummary? summary)
+    {
+        if (summary is null)
+        {
+            return "Not available";
+        }
+
+        var parts = new List<string>
+        {
+            $"size {FormatLimit(summary.MessageSizeLimit)}",
+            $"recipients {FormatLimit(summary.RecipientLimit)}"
+        };
+
+        if (summary.RateLimitMessagesPerHour is > 0)
+        {
+            parts.Add($"{summary.RateLimitMessagesPerHour.Value:N0}/hour");
+        }
+
+        var senderRules = summary.AllowedSenderRuleCount + summary.BlockedSenderRuleCount;
+        var recipientRules = summary.AllowedRecipientDomainRuleCount + summary.BlockedRecipientDomainRuleCount;
+        parts.Add($"{senderRules:N0} sender rule(s)");
+        parts.Add($"{recipientRules:N0} domain rule(s)");
+
+        return string.Join("; ", parts);
+    }
+
     private static void AddCount(List<string> parts, string label, string? value)
     {
         var count = value?
@@ -135,5 +170,22 @@ public sealed class TrustedNetworksModel(
         {
             parts.Add($"{count:N0} {label}");
         }
+    }
+
+    private async Task LoadNetworksAsync(CancellationToken cancellationToken)
+    {
+        Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
+        var policy = await trustedDevicePolicyService.GetPolicyAsync(cancellationToken);
+        EffectivePolicies = Networks
+            .ToDictionary(
+                x => x.Id,
+                x => trustedDevicePolicyService.DescribeEffectivePolicy(x, policy));
+    }
+
+    private static string FormatLimit(EffectivePolicyLimit limit)
+    {
+        return limit.Value is null
+            ? $"not set ({limit.Source})"
+            : $"{limit.Value.Value:N0} ({limit.Source})";
     }
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Alerts;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
@@ -102,6 +103,31 @@ public sealed class RazorPageOrderingTests
         Assert.Equal(["newer", "older"], model.RecentEvents.Select(x => x.Message));
     }
 
+    [Fact]
+    public async Task QueuePageBuildsFailureGroups()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        await fixture.AddQueuedMessageAsync(
+            DateTimeOffset.UtcNow.AddMinutes(-20),
+            QueuedMessageStatus.Failed,
+            DeliveryFailureCategory.Configuration);
+        await fixture.AddQueuedMessageAsync(
+            DateTimeOffset.UtcNow.AddMinutes(-10),
+            QueuedMessageStatus.Expired,
+            DeliveryFailureCategory.Configuration);
+        await fixture.AddQueuedMessageAsync(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            QueuedMessageStatus.Failed,
+            DeliveryFailureCategory.Permanent);
+        var model = fixture.CreateQueueModel();
+
+        await model.OnGetAsync("failed", CancellationToken.None);
+
+        Assert.Equal(2, model.FailureGroups.Count);
+        var configuration = model.FailureGroups.Single(x => x.FailureCategory == DeliveryFailureCategory.Configuration);
+        Assert.Equal(2, configuration.Count);
+    }
+
     private sealed class PageFixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -129,7 +155,10 @@ public sealed class RazorPageOrderingTests
             return new PageFixture(connection, factory);
         }
 
-        public async Task<Guid> AddQueuedMessageAsync(DateTimeOffset acceptedUtc)
+        public async Task<Guid> AddQueuedMessageAsync(
+            DateTimeOffset acceptedUtc,
+            QueuedMessageStatus status = QueuedMessageStatus.Pending,
+            DeliveryFailureCategory failureCategory = DeliveryFailureCategory.None)
         {
             await using var dbContext = _dbContextFactory.CreateDbContext();
             var message = new QueuedMessage
@@ -138,7 +167,8 @@ public sealed class RazorPageOrderingTests
                 SessionId = Guid.NewGuid(),
                 EnvelopeFrom = "sender@example.test",
                 SpoolFileRelativePath = $"{Guid.NewGuid():N}.eml",
-                Status = QueuedMessageStatus.Pending,
+                Status = status,
+                FailureCategory = failureCategory,
                 AcceptedUtc = acceptedUtc,
                 CreatedUtc = acceptedUtc,
                 NextAttemptAtUtc = acceptedUtc,
@@ -192,6 +222,7 @@ public sealed class RazorPageOrderingTests
                 new StaticRuntimeStatusService(),
                 new TestDashboardMetricsService(),
                 TestDatabaseConfiguration.Sqlite,
+                new TestAlertService(),
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
@@ -246,6 +277,34 @@ public sealed class RazorPageOrderingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(new DashboardMetricsSnapshot());
+        }
+    }
+
+    private sealed class TestAlertService : IAlertService
+    {
+        public Task<IReadOnlyList<AlertRule>> GetRulesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<AlertRule>>(Array.Empty<AlertRule>());
+        }
+
+        public Task<IReadOnlyList<AlertRuleSummary>> GetRuleSummariesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<AlertRuleSummary>>(Array.Empty<AlertRuleSummary>());
+        }
+
+        public Task<IReadOnlyList<AlertResult>> GetRecentResultsAsync(int count, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<AlertResult>>(Array.Empty<AlertResult>());
+        }
+
+        public Task SaveRuleAsync(AlertRule rule, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task EvaluateAsync(CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
         }
     }
 

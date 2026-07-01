@@ -15,7 +15,7 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
     }
@@ -38,19 +38,25 @@
                     <tr>
                         <th>Rule</th>
                         <th>State</th>
+                        <th>Current</th>
                         <th>Settings</th>
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var rule in Model.Rules)
+                @foreach (var summary in Model.RuleSummaries)
                 {
+                    var rule = summary.Rule;
                     <tr>
                         <td>
                             <strong>@rule.DisplayName</strong><br />
                             <span class="muted">@rule.Description</span>
                         </td>
                         <td>
-                            <span class="status-badge @(rule.IsActive ? "severity-warning" : "status-enabled")">@(rule.IsActive ? "Active" : "Clear")</span>
+                            <span class="status-badge @(summary.IsActive ? "severity-warning" : "status-enabled")">@(summary.IsActive ? "Active now" : "Clear now")</span>
+                        </td>
+                        <td>
+                            <strong>@summary.ObservedValue:N0 / @summary.Threshold:N0</strong><br />
+                            <span class="muted">@summary.Message</span>
                         </td>
                         <td>
                             <form method="post" asp-page-handler="Save" class="inline-edit-form">

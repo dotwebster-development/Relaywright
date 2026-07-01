@@ -137,6 +137,7 @@ builder.Services.AddSingleton<IUpstreamDeliveryService, UpstreamDeliveryService>
 builder.Services.AddSingleton<IDiagnosticRunRecorder, DiagnosticRunRecorder>();
 builder.Services.AddSingleton<IUpstreamConnectivityTester, UpstreamConnectivityTester>();
 builder.Services.AddSingleton<IUpstreamTestEmailSender, UpstreamTestEmailSender>();
+builder.Services.AddSingleton<ISubmissionFlowEvaluator, SubmissionFlowEvaluator>();
 builder.Services.AddSingleton<ISubmissionFlowChecker, SubmissionFlowChecker>();
 builder.Services.AddSingleton<IConfigurationSnapshotService, ConfigurationSnapshotService>();
 builder.Services.AddSingleton<SmtpOptionsFactory>();

@@ -53,9 +53,26 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
+    }
+
+    @if (Model.FailureGroups.Count > 0)
+    {
+        <section class="panel">
+            <h2>Failure Groups</h2>
+            <div class="summary-strip">
+                @foreach (var group in Model.FailureGroups)
+                {
+                    <div class="summary-pill">
+                        <span class="status-badge status-failed">@group.FailureCategory</span>
+                        <strong>@group.Count:N0</strong>
+                        <span>oldest @TimeFormatter.FormatAge(group.OldestAcceptedUtc, Model.LoadedUtc)</span>
+                    </div>
+                }
+            </div>
+        </section>
     }
 
     <form method="post" class="stack">
@@ -77,10 +94,13 @@
                     <tr>
                         <th>Select</th>
                         <th>Accepted</th>
+                        <th>Age</th>
                         <th>Status</th>
                         <th>From</th>
                         <th>Recipients</th>
                         <th>Attempts</th>
+                        <th>Next Attempt</th>
+                        <th>Expires</th>
                         <th>Last Error</th>
                         <th></th>
                     </tr>
@@ -91,10 +111,13 @@
                     <tr>
                         <td><input type="checkbox" name="SelectedMessageIds" value="@item.Id" /></td>
                         <td>@item.AcceptedUtc.ToLocalTime()</td>
+                        <td>@Model.FormatAge(item)</td>
                         <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@item.Status</span></td>
                         <td>@item.EnvelopeFrom</td>
                         <td>@string.Join(", ", item.Recipients.Select(x => x.RecipientAddress))</td>
                         <td>@item.AttemptCount</td>
+                        <td>@Model.FormatNextAttempt(item)</td>
+                        <td>@Model.FormatExpiry(item)</td>
                         <td>@item.LastError</td>
                         <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
                     </tr>

@@ -15,7 +15,7 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
     }
@@ -49,13 +49,18 @@
     <div class="surface-grid two-up">
         <section class="panel">
             <h2>SMTP Listener</h2>
+            @{
+                var smtpHeartbeat = TimeFormatter.FormatHeartbeat(Model.Status.SmtpListener.LastHeartbeatUtc, Model.LoadedUtc);
+                var deliveryHeartbeat = TimeFormatter.FormatHeartbeat(Model.Status.DeliveryWorker.LastHeartbeatUtc, Model.LoadedUtc);
+                var maintenanceHeartbeat = TimeFormatter.FormatHeartbeat(Model.Status.MaintenanceWorker.LastHeartbeatUtc, Model.LoadedUtc);
+            }
             <dl class="kv">
                 <dt>Status</dt>
                 <dd><span class="status-badge status-@Model.Status.SmtpListener.Status.ToLowerInvariant()">@Model.Status.SmtpListener.Status</span></dd>
                 <dt>Detail</dt>
                 <dd>@Model.Status.SmtpListener.Detail</dd>
                 <dt>Heartbeat</dt>
-                <dd>@Model.Status.SmtpListener.LastHeartbeatUtc?.ToLocalTime()</dd>
+                <dd><span class="status-badge @smtpHeartbeat.BadgeClass">@smtpHeartbeat.Text</span></dd>
                 <dt>Last Error</dt>
                 <dd>@Model.Status.SmtpListener.LastError</dd>
             </dl>
@@ -69,7 +74,7 @@
                 <dt>Active Deliveries</dt>
                 <dd>@Model.Status.ActiveDeliveries</dd>
                 <dt>Heartbeat</dt>
-                <dd>@Model.Status.DeliveryWorker.LastHeartbeatUtc?.ToLocalTime()</dd>
+                <dd><span class="status-badge @deliveryHeartbeat.BadgeClass">@deliveryHeartbeat.Text</span></dd>
                 <dt>Last Error</dt>
                 <dd>@Model.Status.DeliveryWorker.LastError</dd>
             </dl>
@@ -81,6 +86,8 @@
         <dl class="kv">
             <dt>Status</dt>
             <dd><span class="status-badge @(Model.Status.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@Model.Status.MaintenanceWorker.Status</span></dd>
+            <dt>Heartbeat</dt>
+            <dd><span class="status-badge @maintenanceHeartbeat.BadgeClass">@maintenanceHeartbeat.Text</span></dd>
             <dt>Last Cleanup</dt>
             <dd>@Model.Status.LastCleanupUtc?.ToLocalTime()</dd>
             <dt>Records Removed</dt>

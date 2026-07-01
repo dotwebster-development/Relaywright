@@ -15,12 +15,12 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
     }
 
-    <form method="post" asp-page-handler="Save" class="relay-settings">
+    <form method="post" class="relay-settings">
         <div asp-validation-summary="ModelOnly" class="status error"></div>
         <input asp-for="Input.Id" type="hidden" />
 
@@ -76,10 +76,44 @@
             <p class="field-hint">Recipient rules match domains only. Block lists take precedence over allowed lists.</p>
         </section>
 
+        <section class="settings-block">
+            <div class="settings-block-title">Preview Submission</div>
+            @if (Model.PreviewResult is not null)
+            {
+                <p class="status @(Model.PreviewResult.Succeeded ? "ok" : "error")">@Model.PreviewResult.Message</p>
+                @if (!string.IsNullOrWhiteSpace(Model.PreviewResult.Recommendation))
+                {
+                    <p class="field-hint">Next action: @Model.PreviewResult.Recommendation</p>
+                }
+            }
+            <div class="compact-grid">
+                <label>
+                    <span>Source IP</span>
+                    <input asp-for="Preview.SourceIpAddress" placeholder="192.168.1.50" />
+                </label>
+                <label>
+                    <span>Envelope From</span>
+                    <input asp-for="Preview.EnvelopeFrom" placeholder="scanner@example.com" />
+                </label>
+                <label>
+                    <span>Declared Size (Bytes)</span>
+                    <input asp-for="Preview.DeclaredSizeBytes" type="number" min="0" />
+                </label>
+                <label class="span-4">
+                    <span>Recipients</span>
+                    <textarea asp-for="Preview.Recipients" rows="3" placeholder="first@example.com&#10;second@example.com"></textarea>
+                </label>
+            </div>
+            <p class="field-hint">Preview uses the current form values plus the matching trusted-device profile. It does not save settings or consume rate-limit quota.</p>
+            <div class="actions compact-actions">
+                <button type="submit" asp-page-handler="Preview" class="secondary-button">Preview Submission</button>
+            </div>
+        </section>
+
         <div class="surface-toolbar">
             <div class="toolbar-right">
                 <div class="actions compact-actions">
-                    <button type="submit">Save Policy</button>
+                    <button type="submit" asp-page-handler="Save">Save Policy</button>
                 </div>
             </div>
         </div>

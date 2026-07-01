@@ -10,12 +10,14 @@ public sealed class StatusModel(
 {
     public RuntimeStatusSnapshot Status { get; private set; } = new();
 
+    public DateTimeOffset LoadedUtc { get; private set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
-    public IActionResult OnGet()
+    public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        return RedirectToPage("/Index");
+        await LoadAsync(cancellationToken);
     }
 
     public async Task<IActionResult> OnPostPauseAsync(CancellationToken cancellationToken)
@@ -32,5 +34,11 @@ public sealed class StatusModel(
         StatusMessage = "Outbound delivery resumed.";
         logger.LogInformation("Outbound delivery resume requested from operations status page. User={UserName}", User.Identity?.Name);
         return RedirectToPage();
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        LoadedUtc = DateTimeOffset.UtcNow;
+        Status = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
     }
 }

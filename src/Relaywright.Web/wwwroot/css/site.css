@@ -1171,6 +1171,88 @@ button:hover,
     background: var(--bg-surface);
 }
 
+.surface-status.flash-status {
+    position: fixed;
+    top: 74px;
+    right: 22px;
+    z-index: 80;
+    width: min(420px, calc(100vw - 44px));
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: 0 16px 32px rgba(37, 46, 55, 0.16);
+    transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.surface-status.flash-status .status {
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.surface-status.flash-status.is-hiding {
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+}
+
+.attention-list,
+.summary-strip,
+.timeline {
+    display: grid;
+    gap: 8px;
+}
+
+.attention-item,
+.summary-pill {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-pill {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-muted);
+}
+
+.summary-pill strong {
+    font-size: 1.2rem;
+}
+
+.timeline {
+    border-left: 2px solid var(--border);
+    padding-left: 12px;
+}
+
+.timeline-item {
+    display: grid;
+    gap: 4px;
+    padding: 2px 0 10px;
+}
+
+.timeline-item > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.timeline-item time {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.timeline-item p {
+    margin: 0;
+    color: var(--text-muted);
+}
+
 .toolbar-left {
     flex: 1 1 auto;
     min-width: 0;
@@ -1455,6 +1537,7 @@ button:hover,
 
 @media (max-width: 1100px) {
     .stats-grid,
+    .summary-strip,
     .compact-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1531,6 +1614,13 @@ button:hover,
         font-size: 13px;
     }
 
+    .surface-status.flash-status {
+        top: 12px;
+        left: 14px;
+        right: 14px;
+        width: auto;
+    }
+
     .setup-panel {
         gap: 20px;
         padding: 20px;
@@ -1597,6 +1687,7 @@ button:hover,
     }
 
     .stats-grid,
+    .summary-strip,
     .compact-grid,
     .compact-grid-nested {
         grid-template-columns: 1fr;

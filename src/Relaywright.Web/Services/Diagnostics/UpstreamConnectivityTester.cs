@@ -44,6 +44,7 @@ public sealed class UpstreamConnectivityTester : IUpstreamConnectivityTester
             {
                 Succeeded = false,
                 Message = "Upstream host is not configured.",
+                Recommendation = "Configure the upstream relay host and port under Relay Settings.",
                 DiagnosticRunId = run.Id
             };
         }
@@ -100,6 +101,7 @@ public sealed class UpstreamConnectivityTester : IUpstreamConnectivityTester
             {
                 Succeeded = true,
                 Message = "Connected to the upstream relay successfully.",
+                Recommendation = "No change is needed for the upstream connection.",
                 DiagnosticRunId = run.Id
             };
         }
@@ -123,9 +125,38 @@ public sealed class UpstreamConnectivityTester : IUpstreamConnectivityTester
             {
                 Succeeded = false,
                 Message = exception.Message,
+                Recommendation = Recommend(exception),
                 DiagnosticRunId = run.Id
             };
         }
+    }
+
+    private static string Recommend(Exception exception)
+    {
+        var message = exception.Message;
+        if (message.Contains("authentication", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("credentials", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("oauth", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Review the upstream authentication mode, mailbox, credentials, and Microsoft 365 OAuth consent.";
+        }
+
+        if (message.Contains("certificate", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("ssl", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("tls", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Review the upstream TLS mode and certificate trust from this host.";
+        }
+
+        if (exception is TimeoutException
+            || message.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("actively refused", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("No such host", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Check DNS, firewall rules, routing, and whether the upstream host accepts connections on the configured port.";
+        }
+
+        return "Check the upstream relay settings and the application logs for the failed stage.";
     }
 
     private Task<DiagnosticStage> StartStageAsync(

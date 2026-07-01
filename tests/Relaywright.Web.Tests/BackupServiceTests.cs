@@ -251,6 +251,9 @@ public sealed class BackupServiceTests
         BackupRestoreService.ApplyPendingRestore(appData.Paths);
 
         Assert.True(staged.Succeeded);
+        Assert.NotNull(staged.Summary);
+        Assert.Equal(run.Id, staged.Summary.BackupId);
+        Assert.NotNull(staged.Summary.CreatedUtc);
         Assert.False(Directory.Exists(appData.Paths.RestorePendingDirectory));
         Assert.True(File.Exists(appData.Paths.DatabasePath));
         Assert.False(File.Exists(Path.Combine(appData.Paths.KeyRingDirectory, "key.xml")));

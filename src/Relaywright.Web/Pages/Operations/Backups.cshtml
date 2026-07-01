@@ -15,9 +15,31 @@
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
-        <div class="surface-status">
+        <div class="surface-status flash-status" data-flash-status role="status" aria-live="polite">
             <p class="status">@Model.StatusMessage</p>
         </div>
+    }
+
+    @if (Model.RestoreSummary is not null)
+    {
+        <section class="panel">
+            <h2>Staged Restore Impact</h2>
+            <dl class="kv">
+                <dt>Backup ID</dt>
+                <dd>@(Model.RestoreSummary.BackupId?.ToString() ?? "Not recorded")</dd>
+                <dt>Created</dt>
+                <dd>@(Model.RestoreSummary.CreatedUtc?.ToLocalTime().ToString("g") ?? "Not recorded")</dd>
+                <dt>Queued Messages</dt>
+                <dd>@Model.RestoreSummary.QueuedMessageCount:N0</dd>
+                <dt>Spool Files</dt>
+                <dd>@Model.RestoreSummary.ArchiveSpoolFileCount:N0 in archive (@Model.RestoreSummary.ManifestSpoolFileCount:N0 in manifest)</dd>
+                <dt>Certificates</dt>
+                <dd><span class="status-badge @(Model.RestoreSummary.IncludesCertificateFiles ? "status-enabled" : "status-disabled")">@(Model.RestoreSummary.IncludesCertificateFiles ? "Included" : "Not included")</span></dd>
+                <dt>Web Listener</dt>
+                <dd><span class="status-badge @(Model.RestoreSummary.IncludesAdminWebListener ? "status-enabled" : "status-disabled")">@(Model.RestoreSummary.IncludesAdminWebListener ? "Included" : "Not included")</span></dd>
+            </dl>
+            <p class="status warning">Restore is staged and will apply after restart. Admin accounts, protected relay secrets, Data Protection keys, and admin HTTPS certificate passwords will not be restored.</p>
+        </section>
     }
 
     <div class="surface-toolbar">
