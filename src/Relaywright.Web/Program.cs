@@ -17,6 +17,7 @@ using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
 using Relaywright.Web.Services.Smtp;
+using Relaywright.Web.Services.Updates;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,7 @@ builder.Host.UseSystemd();
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<BootstrapAdminOptions>(builder.Configuration.GetSection(BootstrapAdminOptions.SectionName));
 builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.SectionName));
+builder.Services.Configure<UpdateCheckOptions>(builder.Configuration.GetSection(UpdateCheckOptions.SectionName));
 
 var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var appPaths = new AppPaths(builder.Environment.ContentRootPath, storageOptions);
@@ -141,17 +143,20 @@ builder.Services.AddSingleton<IUpstreamConnectivityTester, UpstreamConnectivityT
 builder.Services.AddSingleton<IUpstreamTestEmailSender, UpstreamTestEmailSender>();
 builder.Services.AddSingleton<ISubmissionFlowChecker, SubmissionFlowChecker>();
 builder.Services.AddSingleton<IConfigurationSnapshotService, ConfigurationSnapshotService>();
+builder.Services.AddSingleton<IUpdateCheckService, UpdateCheckService>();
 builder.Services.AddSingleton<SmtpOptionsFactory>();
 builder.Services.AddSingleton<RelayMessageStore>();
 builder.Services.AddSingleton<TrustedNetworkMailboxFilter>();
 builder.Services.AddSingleton<DataSeeder>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(UpdateCheckService.HttpClientName);
 
 builder.Services.AddHostedService<SmtpRelayHostedService>();
 builder.Services.AddHostedService<QueueDeliveryWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddHostedService<AlertWorker>();
 builder.Services.AddHostedService<BackupWorker>();
+builder.Services.AddHostedService<UpdateCheckWorker>();
 
 var app = builder.Build();
 

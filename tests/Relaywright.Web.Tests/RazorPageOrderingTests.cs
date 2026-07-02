@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,7 @@ using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Services.Updates;
 using Relaywright.Web.Tests.Support;
 using Xunit;
 
@@ -122,6 +124,49 @@ public sealed class RazorPageOrderingTests
         Assert.Equal(5, model.SuspiciousLogins.FailedLast15Minutes);
     }
 
+    [Fact]
+    public async Task DashboardLoadsCachedUpdateStatus()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var updateService = new TestUpdateCheckService
+        {
+            Status = new UpdateCheckStatus(
+                UpdateCheckState.UpdateAvailable,
+                "1.0.0",
+                "dotwebster-development/Relaywright",
+                LatestVersion: "1.0.1",
+                ReleaseUrl: "https://example.test/release")
+        };
+        var model = fixture.CreateDashboardModel(updateCheckService: updateService);
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckState.UpdateAvailable, model.UpdateStatus.State);
+        Assert.Equal("1.0.1", model.UpdateStatus.LatestVersion);
+    }
+
+    [Fact]
+    public async Task DashboardManualUpdateCheckRefreshesCachedStatus()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var updateService = new TestUpdateCheckService
+        {
+            Status = new UpdateCheckStatus(
+                UpdateCheckState.UpToDate,
+                "1.0.0",
+                "dotwebster-development/Relaywright",
+                LatestVersion: "1.0.0",
+                Message: "Relaywright 1.0.0 is current.")
+        };
+        var model = fixture.CreateDashboardModel(updateCheckService: updateService);
+
+        var result = await model.OnPostCheckForUpdatesAsync(CancellationToken.None);
+
+        Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal(1, updateService.RefreshCallCount);
+        Assert.Equal("Relaywright 1.0.0 is current.", model.StatusMessage);
+    }
+
     private sealed class PageFixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -204,7 +249,9 @@ public sealed class RazorPageOrderingTests
                 NullLogger<LogsIndexModel>.Instance));
         }
 
-        public DashboardIndexModel CreateDashboardModel(SuspiciousLoginSummary? suspiciousLogins = null)
+        public DashboardIndexModel CreateDashboardModel(
+            SuspiciousLoginSummary? suspiciousLogins = null,
+            IUpdateCheckService? updateCheckService = null)
         {
             return AttachPageContext(new DashboardIndexModel(
                 _dbContextFactory,
@@ -212,6 +259,7 @@ public sealed class RazorPageOrderingTests
                 new StaticRuntimeStatusService(),
                 new TestDashboardMetricsService(),
                 new TestAdminSecurityActivityService(suspiciousLogins),
+                updateCheckService ?? new TestUpdateCheckService(),
                 TestDatabaseConfiguration.Sqlite,
                 NullLogger<DashboardIndexModel>.Instance));
         }
@@ -285,6 +333,24 @@ public sealed class RazorPageOrderingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(suspiciousLogins ?? SuspiciousLoginSummary.Empty);
+        }
+    }
+
+    private sealed class TestUpdateCheckService : IUpdateCheckService
+    {
+        public int RefreshCallCount { get; private set; }
+
+        public UpdateCheckStatus Status { get; set; } = UpdateCheckStatus.NeverChecked("1.0.0", "dotwebster-development/Relaywright");
+
+        public Task<UpdateCheckStatus> GetStatusAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Status);
+        }
+
+        public Task<UpdateCheckStatus> RefreshAsync(CancellationToken cancellationToken)
+        {
+            RefreshCallCount += 1;
+            return Task.FromResult(Status);
         }
     }
 

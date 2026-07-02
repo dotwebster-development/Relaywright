@@ -53,8 +53,17 @@ Do not tag stable `v1.0.0` until all of these are true:
 - Linux update validation passed.
 - At least one trusted/untrusted SMTP smoke passed against a local capture relay.
 - Local tests and vulnerability gates passed.
+- Website and Wiki have been reviewed against the release branch.
+- Operator-facing screenshots, install/update commands, supported platform wording, and docs links match the release.
 
 Record the tested commit/tag, artifact version, VM names, workflow run URLs, deviations, deterministic SMTP smoke result, and optional public/manual smoke result.
+
+## Documentation Review
+
+- Apply the docs impact check in [Documentation guidelines](DOCUMENTATION_GUIDELINES.md).
+- Keep repository docs as the release-reviewed source of truth.
+- Use the GitHub Wiki for practical operator pages, and sync it with the stable release before tagging.
+- Check website and Wiki links for the current release repository and public URL.
 
 ## Soak And Failure Checks
 
