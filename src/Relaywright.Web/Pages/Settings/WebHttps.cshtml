@@ -39,6 +39,36 @@
         }
     </section>
 
+    @if (Model.SecuritySummary is not null)
+    {
+        <section class="panel">
+            <h2>Admin Web Security</h2>
+            <dl class="kv">
+                <dt>Listener Source</dt>
+                <dd>@Model.SecuritySummary.ListenerSourceLabel</dd>
+                <dt>HTTPS</dt>
+                <dd>Port @Model.SecuritySummary.HttpsPort</dd>
+                <dt>HTTP</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.HttpBadgeClass">@Model.SecuritySummary.HttpStatusLabel</span></dd>
+                <dt>Certificate</dt>
+                <dd>@Model.SecuritySummary.CertificateModeLabel</dd>
+                <dt>Certificate Status</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.CertificateBadgeClass(Model.LoadedUtc)">@Model.SecuritySummary.CertificateStatusLabel(Model.LoadedUtc)</span></dd>
+                <dt>Certificate DNS</dt>
+                <dd>@Model.SecuritySummary.CertificateDnsLabel</dd>
+                <dt>Restart State</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.RestartBadgeClass">@Model.SecuritySummary.RestartStatusLabel</span></dd>
+                @if (Model.SecuritySummary.RestartRequired)
+                {
+                    <dt>Restart Reason</dt>
+                    <dd>@(Model.SecuritySummary.RestartReason ?? "Pending configuration change")</dd>
+                    <dt>Requested</dt>
+                    <dd>@(Model.SecuritySummary.RestartRequestedUtc?.ToLocalTime().ToString("g") ?? "Not available") by @(Model.SecuritySummary.RestartRequestedBy ?? "system")</dd>
+                }
+            </dl>
+        </section>
+    }
+
     <section class="panel">
         <h2>Configure Listener</h2>
         <form method="post" asp-page-handler="SaveListener" class="form-grid">

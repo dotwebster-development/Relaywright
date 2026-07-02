@@ -1,14 +1,21 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Relaywright.Web.Identity;
+using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages.Account;
 
 public sealed class ChangePasswordModel(
     UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
+    IOptions<IdentityOptions> identityOptions,
+    IOptionsMonitor<CookieAuthenticationOptions> cookieOptions,
+    IOptions<SecurityStampValidatorOptions> securityStampOptions,
     ILogger<ChangePasswordModel> logger) : PageModel
 {
     [BindProperty]
@@ -17,10 +24,21 @@ public sealed class ChangePasswordModel(
     [TempData]
     public string? StatusMessage { get; set; }
 
+    public PasswordPolicySummary PasswordPolicy { get; private set; } =
+        PasswordPolicySummary.FromOptions(new IdentityOptions());
+
+    public AdminSessionSummary? SessionSummary { get; private set; }
+
+    public async Task OnGetAsync()
+    {
+        await LoadPageStateAsync();
+    }
+
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
+            await LoadPageStateAsync();
             return Page();
         }
 
@@ -28,6 +46,7 @@ public sealed class ChangePasswordModel(
         {
             logger.LogWarning("Password change rejected because confirmation did not match. User={UserName}", User.Identity?.Name);
             ModelState.AddModelError(string.Empty, "The new password and confirmation password do not match.");
+            await LoadPageStateAsync();
             return Page();
         }
 
@@ -52,13 +71,27 @@ public sealed class ChangePasswordModel(
                 ModelState.AddModelError(string.Empty, error.Description);
             }
 
+            await LoadPageStateAsync();
             return Page();
         }
 
-        await signInManager.RefreshSignInAsync(user);
-        StatusMessage = "Password changed.";
+        await userManager.UpdateSecurityStampAsync(user);
+        await signInManager.SignOutAsync();
+        StatusMessage = "Password changed. Sign in again with the new password.";
         logger.LogInformation("Password changed successfully. UserId={UserId}; UserName={UserName}", user.Id, user.UserName);
-        return RedirectToPage();
+        return RedirectToPage("/Account/Login");
+    }
+
+    private async Task LoadPageStateAsync()
+    {
+        PasswordPolicy = PasswordPolicySummary.FromOptions(identityOptions.Value);
+
+        var authenticationResult = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        SessionSummary = AdminSessionSummary.Create(
+            User,
+            authenticationResult,
+            cookieOptions.Get(IdentityConstants.ApplicationScheme),
+            securityStampOptions.Value);
     }
 
     public sealed class InputModel
