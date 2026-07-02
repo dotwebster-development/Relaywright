@@ -108,6 +108,42 @@
         </section>
 
         <section class="panel">
+            <h2>Related Events</h2>
+            @if (Model.RelatedEvents.Count == 0)
+            {
+                <p class="muted">No related operational events found.</p>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Severity</th>
+                                <th>Category</th>
+                                <th>Message</th>
+                                <th>Detail</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var item in Model.RelatedEvents)
+                        {
+                            <tr>
+                                <td>@item.OccurredUtc.ToLocalTime()</td>
+                                <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
+                                <td><span class="badge">@item.Category</span></td>
+                                <td>@item.Message</td>
+                                <td>@(item.DetailPreview ?? "None")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel">
             <h2>Delivery Attempts</h2>
             <div class="table-wrap">
                 <table class="table">

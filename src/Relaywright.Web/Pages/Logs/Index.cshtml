@@ -23,6 +23,9 @@
                         <a asp-page="/Logs/Index"
                            asp-route-severity="@Model.Severity"
                            asp-route-search="@Model.Search"
+                           asp-route-sessionId="@Model.SessionId"
+                           asp-route-queuedMessageId="@Model.QueuedMessageId"
+                           asp-route-remoteIp="@Model.RemoteIp"
                            class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
                            aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
                     }
@@ -32,6 +35,9 @@
                            asp-route-category="@tab.CategoryValue"
                            asp-route-severity="@Model.Severity"
                            asp-route-search="@Model.Search"
+                           asp-route-sessionId="@Model.SessionId"
+                           asp-route-queuedMessageId="@Model.QueuedMessageId"
+                           asp-route-remoteIp="@Model.RemoteIp"
                            class="@(Model.IsActiveSection(tab.CategoryValue) ? "is-active" : null)"
                            aria-current="@(Model.IsActiveSection(tab.CategoryValue) ? "page" : null)">@tab.Label</a>
                     }
@@ -40,6 +46,9 @@
 
             <form method="get" class="filter-row">
                 <input asp-for="Category" type="hidden" />
+                <input asp-for="SessionId" type="hidden" />
+                <input asp-for="QueuedMessageId" type="hidden" />
+                <input asp-for="RemoteIp" type="hidden" />
                 <label>
                     <span>Severity</span>
                     <select asp-for="Severity">
@@ -77,6 +86,47 @@
         </div>
     </div>
 
+    <section class="panel">
+        <h2>Current Log View</h2>
+        <div class="summary-strip">
+            <div class="summary-pill">
+                <span class="status-badge">Events</span>
+                <strong>@Model.Summary.TotalCount:N0</strong>
+            </div>
+            <div class="summary-pill">
+                <span class="status-badge severity-information">Info</span>
+                <strong>@Model.Summary.InformationCount:N0</strong>
+                <span class="status-badge severity-warning">Warnings @Model.Summary.WarningCount:N0</span>
+                <span class="status-badge severity-error">Errors @Model.Summary.ErrorCount:N0</span>
+            </div>
+            <div class="summary-pill">
+                <span class="status-badge">Window</span>
+                <span>@(Model.Summary.NewestUtc is null ? "No events" : $"{Model.Summary.OldestUtc!.Value.ToLocalTime():g} - {Model.Summary.NewestUtc.Value.ToLocalTime():g}")</span>
+            </div>
+            <div class="summary-pill">
+                <span class="status-badge">Categories</span>
+                <span>@(Model.Summary.CategoryCounts.Count == 0 ? "None" : string.Join("; ", Model.Summary.CategoryCounts.Select(x => $"{x.Category} {x.Count:N0}")))</span>
+            </div>
+        </div>
+        @if (Model.SessionId is not null || Model.QueuedMessageId is not null || !string.IsNullOrWhiteSpace(Model.RemoteIp))
+        {
+            <div class="context-links">
+                @if (Model.SessionId is not null)
+                {
+                    <span class="badge">Session @Model.SessionId</span>
+                }
+                @if (Model.QueuedMessageId is not null)
+                {
+                    <a asp-page="/Messages/Details" asp-route-id="@Model.QueuedMessageId">Message @Model.QueuedMessageId</a>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.RemoteIp))
+                {
+                    <a asp-page="/Queue/Index" asp-route-status="all" asp-route-search="@Model.RemoteIp">Queue for @Model.RemoteIp</a>
+                }
+            </div>
+        }
+    </section>
+
     <div class="table-wrap">
         <table class="table">
             <thead>
@@ -85,6 +135,7 @@
                     <th>Severity</th>
                     <th>Category</th>
                     <th>Remote IP</th>
+                    <th>Context</th>
                     <th>Message</th>
                 </tr>
             </thead>
@@ -95,7 +146,32 @@
                     <td>@item.OccurredUtc.ToLocalTime()</td>
                     <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
                     <td><span class="badge">@item.Category</span></td>
-                    <td>@item.RemoteIpAddress</td>
+                    <td>
+                        @if (string.IsNullOrWhiteSpace(item.RemoteIpAddress))
+                        {
+                            <span class="muted">None</span>
+                        }
+                        else
+                        {
+                            <a asp-page="/Logs/Index" asp-route-remoteIp="@item.RemoteIpAddress">@item.RemoteIpAddress</a>
+                        }
+                    </td>
+                    <td>
+                        <div class="context-links">
+                            @if (item.QueuedMessageId is not null)
+                            {
+                                <a asp-page="/Messages/Details" asp-route-id="@item.QueuedMessageId">Message</a>
+                            }
+                            @if (item.SessionId is not null)
+                            {
+                                <a asp-page="/Logs/Index" asp-route-sessionId="@item.SessionId">Session</a>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.RemoteIpAddress))
+                            {
+                                <a asp-page="/Queue/Index" asp-route-status="all" asp-route-search="@item.RemoteIpAddress">Queue</a>
+                            }
+                        </div>
+                    </td>
                     <td title="@item.Detail">@item.Message</td>
                 </tr>
             }
@@ -110,11 +186,11 @@
             <div>
                 @if (Model.HasPreviousPage)
                 {
-                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a>
+                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-sessionId="@Model.SessionId" asp-route-queuedMessageId="@Model.QueuedMessageId" asp-route-remoteIp="@Model.RemoteIp" asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a>
                 }
                 @if (Model.HasNextPage)
                 {
-                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a>
+                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-sessionId="@Model.SessionId" asp-route-queuedMessageId="@Model.QueuedMessageId" asp-route-remoteIp="@Model.RemoteIp" asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a>
                 }
             </div>
         </nav>

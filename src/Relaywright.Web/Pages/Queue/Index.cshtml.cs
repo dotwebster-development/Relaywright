@@ -172,6 +172,34 @@ public sealed class IndexModel(
         return TimeFormatter.FormatRelative(message.ExpiresUtc, LoadedUtc);
     }
 
+    public QueueFailurePreview GetFailurePreview(QueuedMessage message) =>
+        BuildFailurePreview(message);
+
+    public static QueueFailurePreview BuildFailurePreview(QueuedMessage message, int maxLength = 120)
+    {
+        var detail = FirstNonEmpty(message.LastResponseText, message.LastError);
+        var hasAnyFailureSignal = message.FailureCategory != DeliveryFailureCategory.None
+            || !string.IsNullOrWhiteSpace(message.LastResponseCode)
+            || !string.IsNullOrWhiteSpace(detail);
+
+        if (!hasAnyFailureSignal)
+        {
+            return QueueFailurePreview.Empty;
+        }
+
+        var fallback = message.FailureCategory == DeliveryFailureCategory.None
+            ? "No failure detail recorded."
+            : message.FailureCategory.ToString();
+        var text = Truncate(FirstNonEmpty(detail, fallback), maxLength, out var truncated);
+
+        return new QueueFailurePreview(
+            true,
+            message.FailureCategory,
+            message.LastResponseCode,
+            text,
+            truncated);
+    }
+
     public async Task<IActionResult> OnPostBulkRetryAsync(CancellationToken cancellationToken)
     {
         var result = await messageQueueService.RetryNowAsync(SelectedMessageIds, cancellationToken);
@@ -323,9 +351,47 @@ public sealed class IndexModel(
                 x.Min(item => item.AcceptedUtc)))
             .ToList();
     }
+
+    private static string FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? string.Empty;
+    }
+
+    private static string Truncate(string value, int maxLength, out bool truncated)
+    {
+        truncated = false;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length <= maxLength)
+        {
+            return normalized;
+        }
+
+        truncated = true;
+        return normalized[..Math.Max(0, maxLength - 3)] + "...";
+    }
 }
 
 public sealed record QueueFailureGroup(
     DeliveryFailureCategory FailureCategory,
     int Count,
     DateTimeOffset OldestAcceptedUtc);
+
+public sealed record QueueFailurePreview(
+    bool HasDetail,
+    DeliveryFailureCategory FailureCategory,
+    string? ResponseCode,
+    string Text,
+    bool IsTruncated)
+{
+    public static QueueFailurePreview Empty { get; } = new(
+        false,
+        DeliveryFailureCategory.None,
+        null,
+        string.Empty,
+        false);
+}

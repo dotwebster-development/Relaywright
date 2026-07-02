@@ -5,6 +5,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Runtime;
+using Relaywright.Web.UI;
 
 namespace Relaywright.Web.Pages.Operations;
 
@@ -20,6 +21,10 @@ public sealed class BackupsModel(
     public BackupReadiness Readiness { get; private set; } = new();
 
     public BackupRestoreSummary? RestoreSummary { get; private set; }
+
+    public BackupScheduleVisibility ScheduleVisibility { get; private set; } = BackupScheduleVisibility.Empty;
+
+    public DateTimeOffset LoadedUtc { get; private set; }
 
     [BindProperty]
     public BackupScheduleState Schedule { get; set; } = new();
@@ -148,11 +153,83 @@ public sealed class BackupsModel(
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
+        LoadedUtc = DateTimeOffset.UtcNow;
         Runs = await backupService.GetRunsAsync(cancellationToken);
         Schedule = await backupService.GetScheduleAsync(cancellationToken);
         Readiness = await backupService.GetReadinessAsync(cancellationToken);
+        ScheduleVisibility = BuildScheduleVisibility(Schedule, Runs, Readiness, LoadedUtc);
         RestoreSummary = string.IsNullOrWhiteSpace(RestoreSummaryJson)
             ? null
             : JsonSerializer.Deserialize<BackupRestoreSummary>(RestoreSummaryJson);
     }
+
+    public static BackupScheduleVisibility BuildScheduleVisibility(
+        BackupScheduleState schedule,
+        IReadOnlyList<BackupRun> runs,
+        BackupReadiness readiness,
+        DateTimeOffset loadedUtc)
+    {
+        var successfulRuns = runs
+            .Where(x => x.Status == BackupRunStatus.Succeeded)
+            .OrderByDescending(x => x.StartedUtc)
+            .ToList();
+        var retentionCount = Math.Max(0, schedule.RetentionCount);
+        var nextRunUtc = schedule.IsEnabled && schedule.LastRunUtc is not null
+            ? schedule.LastRunUtc.Value.AddHours(schedule.IntervalHours)
+            : (DateTimeOffset?)null;
+        var latestValidated = successfulRuns
+            .Where(x => x.LastValidationSucceeded == true)
+            .OrderByDescending(x => x.LastValidatedUtc ?? x.StartedUtc)
+            .FirstOrDefault();
+        var validationAge = readiness.LastGoodBackupAgeHours is null
+            ? "Not available"
+            : $"{readiness.LastGoodBackupAgeHours.Value:N0} hour(s)";
+        var message = schedule.IsEnabled
+            ? nextRunUtc is null
+                ? "Waiting for first scheduled run."
+                : nextRunUtc <= loadedUtc
+                    ? "Next scheduled backup is due."
+                    : $"Next scheduled backup {TimeFormatter.FormatRelative(nextRunUtc.Value, loadedUtc)}."
+            : "Scheduled backups are disabled.";
+
+        return new BackupScheduleVisibility(
+            schedule.IsEnabled,
+            schedule.IntervalHours,
+            retentionCount,
+            schedule.LastRunUtc,
+            nextRunUtc,
+            latestValidated?.LastValidatedUtc ?? latestValidated?.StartedUtc,
+            validationAge,
+            successfulRuns.Count,
+            Math.Min(successfulRuns.Count, retentionCount),
+            Math.Max(0, successfulRuns.Count - retentionCount),
+            message);
+    }
+}
+
+public sealed record BackupScheduleVisibility(
+    bool IsEnabled,
+    int IntervalHours,
+    int RetentionCount,
+    DateTimeOffset? LastRunUtc,
+    DateTimeOffset? NextRunUtc,
+    DateTimeOffset? LastValidatedUtc,
+    string ValidationAge,
+    int SuccessfulBackupCount,
+    int RetainedBackupCount,
+    int PrunableSucceededBackupCount,
+    string Message)
+{
+    public static BackupScheduleVisibility Empty { get; } = new(
+        false,
+        0,
+        0,
+        null,
+        null,
+        null,
+        "Not available",
+        0,
+        0,
+        0,
+        "Schedule not loaded.");
 }

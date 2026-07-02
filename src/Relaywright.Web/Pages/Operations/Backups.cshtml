@@ -77,6 +77,32 @@
         </dl>
     </section>
 
+    <section class="panel">
+        <h2>Backup Schedule Summary</h2>
+        <div class="summary-strip">
+            <div class="summary-pill">
+                <span class="status-badge @(Model.ScheduleVisibility.IsEnabled ? "status-enabled" : "status-disabled")">@(Model.ScheduleVisibility.IsEnabled ? "Enabled" : "Disabled")</span>
+                <strong>@Model.ScheduleVisibility.IntervalHours:N0</strong>
+                <span>hour interval</span>
+            </div>
+            <div class="summary-pill">
+                <span class="status-badge">Next Run</span>
+                <span>@(Model.ScheduleVisibility.NextRunUtc is null ? "Waiting for first scheduled run" : Model.ScheduleVisibility.NextRunUtc.Value.ToLocalTime().ToString("g"))</span>
+            </div>
+            <div class="summary-pill">
+                <span class="status-badge">Retention</span>
+                <strong>@Model.ScheduleVisibility.RetainedBackupCount:N0</strong>
+                <span>retained of @Model.ScheduleVisibility.SuccessfulBackupCount:N0 successful</span>
+                <span class="status-badge @(Model.ScheduleVisibility.PrunableSucceededBackupCount > 0 ? "severity-warning" : "status-enabled")">@Model.ScheduleVisibility.PrunableSucceededBackupCount:N0 prunable</span>
+            </div>
+            <div class="summary-pill">
+                <span class="status-badge">Validation</span>
+                <span>@(Model.ScheduleVisibility.LastValidatedUtc is null ? "No validated backup" : $"{Model.ScheduleVisibility.ValidationAge} old")</span>
+            </div>
+        </div>
+        <p class="field-hint">@Model.ScheduleVisibility.Message</p>
+    </section>
+
     <section class="settings-block">
         <div class="settings-block-title">Schedule</div>
         <form method="post" asp-page-handler="SaveSchedule" class="compact-grid backup-action-grid">

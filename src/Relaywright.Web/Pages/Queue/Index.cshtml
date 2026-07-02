@@ -118,7 +118,28 @@
                         <td>@item.AttemptCount</td>
                         <td>@Model.FormatNextAttempt(item)</td>
                         <td>@Model.FormatExpiry(item)</td>
-                        <td>@item.LastError</td>
+                        <td>
+                            @{
+                                var preview = Model.GetFailurePreview(item);
+                            }
+                            @if (preview.HasDetail)
+                            {
+                                <div class="detail-preview">
+                                    <div>
+                                        <span class="status-badge status-failed">@preview.FailureCategory</span>
+                                        @if (!string.IsNullOrWhiteSpace(preview.ResponseCode))
+                                        {
+                                            <span class="badge">@preview.ResponseCode</span>
+                                        }
+                                    </div>
+                                    <p>@preview.Text</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="muted">None</span>
+                            }
+                        </td>
                         <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
                     </tr>
                 }

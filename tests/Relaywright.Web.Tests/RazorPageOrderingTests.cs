@@ -7,15 +7,19 @@ using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Alerts;
+using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Tests.Support;
 using Xunit;
 
+using BackupsModel = Relaywright.Web.Pages.Operations.BackupsModel;
 using DashboardIndexModel = Relaywright.Web.Pages.IndexModel;
 using LogsIndexModel = Relaywright.Web.Pages.Logs.IndexModel;
+using MessageDetailsModel = Relaywright.Web.Pages.Messages.DetailsModel;
 using QueueIndexModel = Relaywright.Web.Pages.Queue.IndexModel;
+using TrustedNetworksModel = Relaywright.Web.Pages.Settings.TrustedNetworksModel;
 
 namespace Relaywright.Web.Tests;
 
@@ -128,6 +132,171 @@ public sealed class RazorPageOrderingTests
         Assert.Equal(2, configuration.Count);
     }
 
+    [Fact]
+    public async Task QueuePageBuildsFailurePreviewFromResponseBeforeFallbackError()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var id = await fixture.AddQueuedMessageAsync(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            QueuedMessageStatus.RetryScheduled,
+            DeliveryFailureCategory.Transient,
+            lastResponseCode: "421",
+            lastResponseText: "Temporary upstream throttling response with a long diagnostic payload",
+            lastError: "Fallback exception text");
+        var model = fixture.CreateQueueModel();
+
+        await model.OnGetAsync("active", CancellationToken.None);
+
+        var message = Assert.Single(model.Messages, x => x.Id == id);
+        var preview = QueueIndexModel.BuildFailurePreview(message, maxLength: 32);
+        Assert.True(preview.HasDetail);
+        Assert.Equal(DeliveryFailureCategory.Transient, preview.FailureCategory);
+        Assert.Equal("421", preview.ResponseCode);
+        Assert.True(preview.IsTruncated);
+        Assert.DoesNotContain("Fallback", preview.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task MessageDetailsLoadsRelatedEventsByMessageAndSession()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var sessionId = Guid.NewGuid();
+        var messageId = await fixture.AddQueuedMessageAsync(DateTimeOffset.UtcNow.AddMinutes(-5), sessionId: sessionId);
+        await fixture.AddOperationalEventAsync(
+            "message event",
+            DateTimeOffset.UtcNow.AddMinutes(-2),
+            queuedMessageId: messageId);
+        await fixture.AddOperationalEventAsync(
+            "session event",
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            sessionId: sessionId);
+        await fixture.AddOperationalEventAsync("unrelated", DateTimeOffset.UtcNow);
+        var model = fixture.CreateMessageDetailsModel();
+
+        _ = await model.OnGetAsync(messageId, CancellationToken.None);
+
+        Assert.NotNull(model.Message);
+        Assert.Equal(["session event", "message event"], model.RelatedEvents.Select(x => x.Message));
+    }
+
+    [Fact]
+    public async Task LogsPageBuildsSummaryFromCurrentFilters()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        await fixture.AddOperationalEventAsync(
+            "policy accepted",
+            DateTimeOffset.UtcNow.AddMinutes(-3),
+            EventSeverity.Information,
+            OperationalEventCategory.Security);
+        await fixture.AddOperationalEventAsync(
+            "policy rejected",
+            DateTimeOffset.UtcNow.AddMinutes(-2),
+            EventSeverity.Warning,
+            OperationalEventCategory.Security);
+        await fixture.AddOperationalEventAsync(
+            "delivery failed",
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            EventSeverity.Error,
+            OperationalEventCategory.Delivery);
+        var model = fixture.CreateLogsModel();
+        model.Category = OperationalEventCategory.Security;
+        model.Search = "policy";
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(2, model.Summary.TotalCount);
+        Assert.Equal(1, model.Summary.InformationCount);
+        Assert.Equal(1, model.Summary.WarningCount);
+        Assert.Equal(0, model.Summary.ErrorCount);
+        var category = Assert.Single(model.Summary.CategoryCounts);
+        Assert.Equal(OperationalEventCategory.Security, category.Category);
+        Assert.Equal(2, category.Count);
+    }
+
+    [Fact]
+    public async Task LogsPageFiltersBySessionIdWithSqlite()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var sessionId = Guid.NewGuid();
+        await fixture.AddOperationalEventAsync("matching session", DateTimeOffset.UtcNow.AddMinutes(-1), sessionId: sessionId);
+        await fixture.AddOperationalEventAsync("other session", DateTimeOffset.UtcNow, sessionId: Guid.NewGuid());
+        var model = fixture.CreateLogsModel();
+        model.SessionId = sessionId;
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(1, model.TotalCount);
+        Assert.Equal("matching session", Assert.Single(model.Events).Message);
+    }
+
+    [Fact]
+    public void TrustedNetworkActivitySummariesMatchRemoteIpToCidr()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var summaries = TrustedNetworksModel.BuildActivitySummaries(
+            [
+                new TrustedNetwork { Id = 1, Cidr = "10.10.0.0/16", Description = "active" },
+                new TrustedNetwork { Id = 2, Cidr = "192.0.2.0/24", Description = "stale" },
+                new TrustedNetwork { Id = 3, Cidr = "203.0.113.0/24", Description = "unused" }
+            ],
+            [
+                new Relaywright.Web.Pages.Settings.TrustedNetworkActivityEvent(
+                    now.AddMinutes(-5),
+                    OperationalEventCategory.Security,
+                    "10.10.1.5",
+                    "SMTP MAIL FROM accepted from trusted device profile."),
+                new Relaywright.Web.Pages.Settings.TrustedNetworkActivityEvent(
+                    now.AddDays(-40),
+                    OperationalEventCategory.Security,
+                    "192.0.2.10",
+                    "SMTP MAIL FROM denied by submission policy.")
+            ],
+            now);
+
+        Assert.Equal("Active", summaries[1].StatusLabel);
+        Assert.Contains("Accepted", summaries[1].LastDecision);
+        Assert.Equal("Stale", summaries[2].StatusLabel);
+        Assert.Contains("Rejected", summaries[2].LastDecision);
+        Assert.Equal("Unused", summaries[3].StatusLabel);
+    }
+
+    [Fact]
+    public void BackupScheduleVisibilityShowsNextRunAndRetentionPreview()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var runs = new[]
+        {
+            new BackupRun
+            {
+                Id = Guid.NewGuid(),
+                StartedUtc = now.AddHours(-1),
+                Status = BackupRunStatus.Succeeded,
+                LastValidatedUtc = now.AddMinutes(-30),
+                LastValidationSucceeded = true
+            },
+            new BackupRun { Id = Guid.NewGuid(), StartedUtc = now.AddHours(-2), Status = BackupRunStatus.Succeeded },
+            new BackupRun { Id = Guid.NewGuid(), StartedUtc = now.AddHours(-3), Status = BackupRunStatus.Succeeded }
+        };
+
+        var visibility = BackupsModel.BuildScheduleVisibility(
+            new BackupScheduleState
+            {
+                IsEnabled = true,
+                IntervalHours = 2,
+                RetentionCount = 2,
+                LastRunUtc = now.AddHours(-1)
+            },
+            runs,
+            new BackupReadiness { LastGoodBackupAgeHours = 1 },
+            now);
+
+        Assert.Equal(now.AddHours(1), visibility.NextRunUtc);
+        Assert.Equal(3, visibility.SuccessfulBackupCount);
+        Assert.Equal(2, visibility.RetainedBackupCount);
+        Assert.Equal(1, visibility.PrunableSucceededBackupCount);
+        Assert.Equal("1 hour(s)", visibility.ValidationAge);
+    }
+
     private sealed class PageFixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -158,17 +327,26 @@ public sealed class RazorPageOrderingTests
         public async Task<Guid> AddQueuedMessageAsync(
             DateTimeOffset acceptedUtc,
             QueuedMessageStatus status = QueuedMessageStatus.Pending,
-            DeliveryFailureCategory failureCategory = DeliveryFailureCategory.None)
+            DeliveryFailureCategory failureCategory = DeliveryFailureCategory.None,
+            Guid? sessionId = null,
+            string? remoteIpAddress = null,
+            string? lastResponseCode = null,
+            string? lastResponseText = null,
+            string? lastError = null)
         {
             await using var dbContext = _dbContextFactory.CreateDbContext();
             var message = new QueuedMessage
             {
                 Id = Guid.NewGuid(),
-                SessionId = Guid.NewGuid(),
+                SessionId = sessionId ?? Guid.NewGuid(),
+                RemoteIpAddress = remoteIpAddress,
                 EnvelopeFrom = "sender@example.test",
                 SpoolFileRelativePath = $"{Guid.NewGuid():N}.eml",
                 Status = status,
                 FailureCategory = failureCategory,
+                LastResponseCode = lastResponseCode,
+                LastResponseText = lastResponseText,
+                LastError = lastError,
                 AcceptedUtc = acceptedUtc,
                 CreatedUtc = acceptedUtc,
                 NextAttemptAtUtc = acceptedUtc,
@@ -185,13 +363,27 @@ public sealed class RazorPageOrderingTests
             return message.Id;
         }
 
-        public async Task AddOperationalEventAsync(string message, DateTimeOffset occurredUtc)
+        public async Task AddOperationalEventAsync(
+            string message,
+            DateTimeOffset occurredUtc,
+            EventSeverity severity = EventSeverity.Information,
+            OperationalEventCategory category = OperationalEventCategory.System,
+            Guid? sessionId = null,
+            Guid? queuedMessageId = null,
+            string? remoteIpAddress = null,
+            string? detail = null)
         {
             await using var dbContext = _dbContextFactory.CreateDbContext();
             dbContext.OperationalEvents.Add(new OperationalEvent
             {
                 OccurredUtc = occurredUtc,
-                Message = message
+                Severity = severity,
+                Category = category,
+                SessionId = sessionId,
+                QueuedMessageId = queuedMessageId,
+                RemoteIpAddress = remoteIpAddress,
+                Message = message,
+                Detail = detail
             });
 
             await dbContext.SaveChangesAsync();
@@ -212,6 +404,15 @@ public sealed class RazorPageOrderingTests
                 _dbContextFactory,
                 TestDatabaseConfiguration.Sqlite,
                 NullLogger<LogsIndexModel>.Instance));
+        }
+
+        public MessageDetailsModel CreateMessageDetailsModel()
+        {
+            return AttachPageContext(new MessageDetailsModel(
+                _dbContextFactory,
+                new TestQueueService(),
+                new NullMetadataService(),
+                NullLogger<MessageDetailsModel>.Instance));
         }
 
         public DashboardIndexModel CreateDashboardModel()
@@ -327,5 +528,13 @@ public sealed class RazorPageOrderingTests
         public Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class NullMetadataService : IMessageMetadataService
+    {
+        public Task<MessageMetadataSummary?> ReadAsync(string relativePath, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<MessageMetadataSummary?>(null);
+        }
     }
 }

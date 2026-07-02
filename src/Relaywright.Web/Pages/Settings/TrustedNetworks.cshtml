@@ -113,6 +113,7 @@
                         <th>Limits</th>
                         <th>Rules</th>
                         <th>Effective Policy</th>
+                        <th>Activity</th>
                         <th>Enabled</th>
                         <th></th>
                     </tr>
@@ -127,6 +128,29 @@
                         <td>@TrustedNetworksModel.FormatLimits(item)</td>
                         <td>@TrustedNetworksModel.FormatPolicySummary(item)</td>
                         <td>@TrustedNetworksModel.FormatEffectivePolicy(Model.GetEffectivePolicy(item.Id))</td>
+                        <td>
+                            @{
+                                var activity = Model.GetActivitySummary(item.Id);
+                            }
+                            @if (activity is null)
+                            {
+                                <span class="muted">Not available</span>
+                            }
+                            else
+                            {
+                                <div class="detail-preview">
+                                    <div>
+                                        <span class="status-badge @activity.BadgeClass">@activity.StatusLabel</span>
+                                        @if (!string.IsNullOrWhiteSpace(activity.LastRemoteIpAddress))
+                                        {
+                                            <a asp-page="/Logs/Index" asp-route-remoteIp="@activity.LastRemoteIpAddress">@activity.LastRemoteIpAddress</a>
+                                        }
+                                    </div>
+                                    <p>@(activity.LastSeenUtc is null ? "No activity found." : $"Last seen {TimeFormatter.FormatAge(activity.LastSeenUtc.Value, Model.LoadedUtc)}")</p>
+                                    <p>@activity.LastDecision</p>
+                                </div>
+                            }
+                        </td>
                         <td><span class="status-badge @(item.IsEnabled ? "status-enabled" : "status-disabled")">@(item.IsEnabled ? "Enabled" : "Disabled")</span></td>
                         <td class="row-actions">
                             <a asp-page="/Settings/TrustedNetworks" asp-route-editId="@item.Id">Edit</a>

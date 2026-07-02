@@ -27,6 +27,15 @@ public sealed class IndexModel(
     public string? Search { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    public Guid? SessionId { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public Guid? QueuedMessageId { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? RemoteIp { get; set; }
+
+    [BindProperty(SupportsGet = true)]
     public int PageNumber { get; set; } = 1;
 
     public int TotalCount { get; private set; }
@@ -51,6 +60,8 @@ public sealed class IndexModel(
     ];
 
     public IReadOnlyList<OperationalEvent> Events { get; private set; } = Array.Empty<OperationalEvent>();
+
+    public LogFilterSummary Summary { get; private set; } = LogFilterSummary.Empty;
 
     public bool IsActiveSection(string? categoryValue)
     {
@@ -85,20 +96,56 @@ public sealed class IndexModel(
                 || (x.RemoteIpAddress != null && x.RemoteIpAddress.Contains(search)));
         }
 
+        if (SessionId is not null)
+        {
+            query = query.Where(x => x.SessionId == SessionId.Value);
+        }
+
+        if (QueuedMessageId is not null)
+        {
+            query = query.Where(x => x.QueuedMessageId == QueuedMessageId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(RemoteIp))
+        {
+            var remoteIp = RemoteIp.Trim();
+            query = query.Where(x => x.RemoteIpAddress == remoteIp);
+        }
+
         TotalCount = await query.CountAsync(cancellationToken);
+        Summary = await BuildSummaryAsync(query, TotalCount, cancellationToken);
         if (PageNumber > TotalPages)
         {
             PageNumber = TotalPages;
         }
 
         var offset = (PageNumber - 1) * PageSize;
-        Events = databaseConfiguration.IsSqlite
-            ? await GetSqlitePagedEventsAsync(dbContext, Severity, Category, Search?.Trim(), offset, PageSize, cancellationToken)
-            : await query
+        if (databaseConfiguration.IsSqlite && (SessionId is not null || QueuedMessageId is not null))
+        {
+            Events = await GetClientOrderedPagedEventsAsync(query, offset, PageSize, cancellationToken);
+        }
+        else if (databaseConfiguration.IsSqlite)
+        {
+            Events = await GetSqlitePagedEventsAsync(
+                dbContext,
+                Severity,
+                Category,
+                Search?.Trim(),
+                SessionId,
+                QueuedMessageId,
+                RemoteIp?.Trim(),
+                offset,
+                PageSize,
+                cancellationToken);
+        }
+        else
+        {
+            Events = await query
                 .OrderByDescending(x => x.OccurredUtc)
                 .Skip(offset)
                 .Take(PageSize)
                 .ToListAsync(cancellationToken);
+        }
 
         logger.LogDebug(
             "Logs page loaded. Severity={Severity}; Category={Category}; SearchPresent={SearchPresent}; PageNumber={PageNumber}; TotalCount={TotalCount}; ReturnedCount={ReturnedCount}; User={UserName}",
@@ -111,10 +158,65 @@ public sealed class IndexModel(
             User.Identity?.Name);
     }
 
+    private static async Task<IReadOnlyList<OperationalEvent>> GetClientOrderedPagedEventsAsync(
+        IQueryable<OperationalEvent> query,
+        int offset,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var events = await query
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return events
+            .OrderByDescending(x => x.OccurredUtc)
+            .Skip(offset)
+            .Take(pageSize)
+            .ToList();
+    }
+
+    private static async Task<LogFilterSummary> BuildSummaryAsync(
+        IQueryable<OperationalEvent> query,
+        int totalCount,
+        CancellationToken cancellationToken)
+    {
+        if (totalCount == 0)
+        {
+            return LogFilterSummary.Empty;
+        }
+
+        var summaryRows = await query
+            .Select(x => new { x.Severity, x.Category, x.OccurredUtc })
+            .ToListAsync(cancellationToken);
+        var severityCounts = summaryRows
+            .GroupBy(x => x.Severity)
+            .ToDictionary(x => x.Key, x => x.Count());
+        var categoryCounts = summaryRows
+            .GroupBy(x => x.Category)
+            .Select(x => new LogCategoryCount(x.Key, x.Count()))
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Category)
+            .ToList();
+        var oldestUtc = summaryRows.Min(x => x.OccurredUtc);
+        var newestUtc = summaryRows.Max(x => x.OccurredUtc);
+
+        return new LogFilterSummary(
+            totalCount,
+            severityCounts.GetValueOrDefault(EventSeverity.Information),
+            severityCounts.GetValueOrDefault(EventSeverity.Warning),
+            severityCounts.GetValueOrDefault(EventSeverity.Error),
+            oldestUtc,
+            newestUtc,
+            categoryCounts);
+    }
+
     private static (string Sql, object[] Parameters) BuildPagedEventsSql(
         EventSeverity? severity,
         OperationalEventCategory? category,
         string? search,
+        Guid? sessionId,
+        Guid? queuedMessageId,
+        string? remoteIp,
         int offset,
         int pageSize)
     {
@@ -147,6 +249,24 @@ public sealed class IndexModel(
             parameters.Add(new SqliteParameter("$search", search));
         }
 
+        if (sessionId is not null)
+        {
+            filters.Add(@"oe.""SessionId"" = $sessionId");
+            parameters.Add(new SqliteParameter("$sessionId", sessionId.Value.ToString()));
+        }
+
+        if (queuedMessageId is not null)
+        {
+            filters.Add(@"oe.""QueuedMessageId"" = $queuedMessageId");
+            parameters.Add(new SqliteParameter("$queuedMessageId", queuedMessageId.Value.ToString()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(remoteIp))
+        {
+            filters.Add(@"oe.""RemoteIpAddress"" = $remoteIp");
+            parameters.Add(new SqliteParameter("$remoteIp", remoteIp));
+        }
+
         var whereSql = filters.Count == 0
             ? string.Empty
             : $"{Environment.NewLine}WHERE {string.Join($"{Environment.NewLine}    AND ", filters)}";
@@ -174,14 +294,48 @@ public sealed class IndexModel(
         EventSeverity? severity,
         OperationalEventCategory? category,
         string? search,
+        Guid? sessionId,
+        Guid? queuedMessageId,
+        string? remoteIp,
         int offset,
         int pageSize,
         CancellationToken cancellationToken)
     {
-        var (sql, parameters) = BuildPagedEventsSql(severity, category, search, offset, pageSize);
+        var (sql, parameters) = BuildPagedEventsSql(
+            severity,
+            category,
+            search,
+            sessionId,
+            queuedMessageId,
+            remoteIp,
+            offset,
+            pageSize);
         return await dbContext.OperationalEvents
             .FromSqlRaw(sql, parameters)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
+}
+
+public sealed record LogCategoryCount(
+    OperationalEventCategory Category,
+    int Count);
+
+public sealed record LogFilterSummary(
+    int TotalCount,
+    int InformationCount,
+    int WarningCount,
+    int ErrorCount,
+    DateTimeOffset? OldestUtc,
+    DateTimeOffset? NewestUtc,
+    IReadOnlyList<LogCategoryCount> CategoryCounts)
+{
+    public static LogFilterSummary Empty { get; } = new(
+        0,
+        0,
+        0,
+        0,
+        null,
+        null,
+        Array.Empty<LogCategoryCount>());
 }

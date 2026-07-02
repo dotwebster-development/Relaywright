@@ -19,6 +19,8 @@ public sealed class DetailsModel(
 
     public IReadOnlyList<MessageTimelineItem> Timeline { get; private set; } = Array.Empty<MessageTimelineItem>();
 
+    public IReadOnlyList<MessageRelatedEvent> RelatedEvents { get; private set; } = Array.Empty<MessageRelatedEvent>();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -101,7 +103,40 @@ public sealed class DetailsModel(
         {
             Metadata = await messageMetadataService.ReadAsync(Message.SpoolFileRelativePath, cancellationToken);
             Timeline = BuildTimeline(Message);
+            RelatedEvents = await LoadRelatedEventsAsync(dbContext, Message, cancellationToken);
         }
+    }
+
+    private static async Task<IReadOnlyList<MessageRelatedEvent>> LoadRelatedEventsAsync(
+        ApplicationDbContext dbContext,
+        QueuedMessage message,
+        CancellationToken cancellationToken)
+    {
+        var events = await dbContext.OperationalEvents
+            .AsNoTracking()
+            .Where(x => x.QueuedMessageId == message.Id || x.SessionId == message.SessionId)
+            .OrderByDescending(x => x.Id)
+            .Take(50)
+            .Select(x => new
+            {
+                x.OccurredUtc,
+                x.Severity,
+                x.Category,
+                x.Message,
+                x.Detail
+            })
+            .ToListAsync(cancellationToken);
+
+        return events
+            .OrderByDescending(x => x.OccurredUtc)
+            .Take(25)
+            .Select(x => new MessageRelatedEvent(
+                x.OccurredUtc,
+                x.Severity,
+                x.Category,
+                x.Message,
+                Truncate(x.Detail, 160)))
+            .ToList();
     }
 
     private static IReadOnlyList<MessageTimelineItem> BuildTimeline(QueuedMessage message)
@@ -179,6 +214,19 @@ public sealed class DetailsModel(
     {
         return values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? string.Empty;
     }
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..Math.Max(0, maxLength - 3)] + "...";
+    }
 }
 
 public sealed record MessageTimelineItem(
@@ -186,3 +234,10 @@ public sealed record MessageTimelineItem(
     string Label,
     string Detail,
     string BadgeClass);
+
+public sealed record MessageRelatedEvent(
+    DateTimeOffset OccurredUtc,
+    EventSeverity Severity,
+    OperationalEventCategory Category,
+    string Message,
+    string? DetailPreview);
