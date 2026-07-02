@@ -5,6 +5,11 @@ repo="${RELAYWRIGHT_GITHUB_REPOSITORY:-relaywright/relaywright}"
 version="1.0.0"
 install_root="/opt/relaywright"
 data_directory="/var/lib/relaywright"
+database_provider="${RELAYWRIGHT_DATABASE_PROVIDER:-}"
+database_provider_was_supplied=false
+[[ -n "$database_provider" ]] && database_provider_was_supplied=true
+database_connection_string="${RELAYWRIGHT_DATABASE_CONNECTION_STRING:-}"
+database_connection_string_file=""
 service_name="relaywright"
 display_name="Relaywright"
 environment_name="Production"
@@ -27,6 +32,7 @@ remove_data=false
 update=false
 health_timeout_seconds=90
 sudo_password="${RELAYWRIGHT_SUDO_PASSWORD:-}"
+runtime_identifier="${RELAYWRIGHT_LINUX_RUNTIME:-}"
 
 usage() {
     cat <<'USAGE'
@@ -38,8 +44,13 @@ Usage:
 Options:
   --version VERSION               Release version to install, for example 1.0.0 or latest.
   --repo OWNER/REPO               GitHub repository that hosts Relaywright releases.
+  --runtime RID                   Linux runtime package: auto, linux-x64, linux-arm64, or linux-arm.
   --install-root PATH             Install root. Default: /opt/relaywright
   --data-directory PATH           Runtime data directory. Default: /var/lib/relaywright
+  --database-provider PROVIDER    Database provider: Sqlite, SqlServer, or MySql. Default: Sqlite.
+  --database-connection-string CS Connection string for SqlServer/MySql.
+  --database-connection-string-file PATH
+                                  Read the database connection string from a local file.
   --service-name NAME             systemd service name. Default: relaywright
   --https-port PORT               Admin HTTPS port. Default: 5443
   --http-port PORT                Admin HTTP port. Use 0 to disable HTTP. Disabled by default.
@@ -59,8 +70,12 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --version) version="$2"; shift 2 ;;
         --repo) repo="$2"; shift 2 ;;
+        --runtime) runtime_identifier="$2"; shift 2 ;;
         --install-root) install_root="$2"; shift 2 ;;
         --data-directory) data_directory="$2"; shift 2 ;;
+        --database-provider) database_provider="$2"; database_provider_was_supplied=true; shift 2 ;;
+        --database-connection-string) database_connection_string="$2"; shift 2 ;;
+        --database-connection-string-file) database_connection_string_file="$2"; shift 2 ;;
         --service-name) service_name="$2"; shift 2 ;;
         --display-name) display_name="$2"; shift 2 ;;
         --environment-name) environment_name="$2"; shift 2 ;;
@@ -134,11 +149,80 @@ prompt_yes_no() {
     is_yes "$value"
 }
 
+prompt_secret() {
+    local prompt="$1"
+    if "$non_interactive"; then
+        printf ''
+        return
+    fi
+
+    local value
+    read -r -s -p "$prompt: " value
+    printf '\n' >&2
+    printf '%s' "$value"
+}
+
 validate_port() {
     local port="$1"
     local name="$2"
     [[ "$port" =~ ^[0-9]+$ ]] || die "$name port '$port' is not a valid TCP port."
     (( port >= 1 && port <= 65535 )) || die "$name port '$port' is not a valid TCP port."
+}
+
+normalize_database_provider() {
+    local value="${1:-}"
+    value="${value,,}"
+    value="${value//[[:space:]]/}"
+    case "$value" in
+        ""|sqlite) printf '%s' "Sqlite" ;;
+        sqlserver|mssql) printf '%s' "SqlServer" ;;
+        mysql) printf '%s' "MySql" ;;
+        *) die "Unsupported database provider '$1'. Use Sqlite, SqlServer, or MySql." ;;
+    esac
+}
+
+read_database_connection_string_file() {
+    [[ -n "$database_connection_string_file" ]] || return 0
+    [[ -f "$database_connection_string_file" ]] || die "Database connection string file '$database_connection_string_file' was not found."
+    database_connection_string="$(< "$database_connection_string_file")"
+    database_connection_string="${database_connection_string//$'\r'/}"
+    database_connection_string="${database_connection_string//$'\n'/}"
+}
+
+read_service_env_value() {
+    local key="$1"
+    local env_path="/etc/${service_name}.env"
+    "${SUDO[@]}" test -f "$env_path" >/dev/null 2>&1 || return 0
+
+    local line
+    line="$("${SUDO[@]}" awk -v key="$key" 'index($0, key "=") == 1 { sub(key "=", ""); print; exit }' "$env_path" 2>/dev/null || true)"
+    [[ -n "$line" ]] || return 0
+    line="${line%$'\r'}"
+    if [[ "$line" == \"*\" && "$line" == *\" ]]; then
+        line="${line:1:${#line}-2}"
+        line="${line//\\\"/\"}"
+        line="${line//\\\\/\\}"
+    fi
+
+    printf '%s' "$line"
+}
+
+resolve_database_settings() {
+    read_database_connection_string_file
+
+    if [[ -z "${database_provider:-}" ]]; then
+        database_provider="$(read_service_env_value "Database__Provider")"
+    fi
+    database_provider="$(normalize_database_provider "$database_provider")"
+
+    if [[ -z "$database_connection_string"
+        && ( "$database_provider" != "Sqlite" || "$database_provider_was_supplied" == "false" ) ]]; then
+        database_connection_string="$(read_service_env_value "Database__ConnectionString")"
+    fi
+
+    if [[ "$database_provider" != "Sqlite" && -z "$database_connection_string" ]]; then
+        die "$database_provider requires a database connection string. Provide --database-connection-string or --database-connection-string-file."
+    fi
 }
 
 run_sudo_with_password() {
@@ -202,6 +286,32 @@ resolve_version() {
     version="${effective_url##*/}"
     version="${version#v}"
     [[ -n "$version" && "$version" != "latest" ]] || die "Could not resolve the latest Relaywright release."
+}
+
+normalize_runtime_identifier() {
+    local value="${1,,}"
+    case "$value" in
+        ""|auto) detect_runtime_identifier ;;
+        linux-x64|x64|amd64|x86_64) printf '%s' "linux-x64" ;;
+        linux-arm64|arm64|aarch64) printf '%s' "linux-arm64" ;;
+        linux-arm|arm|armhf|armv7|armv7l|armv6l) printf '%s' "linux-arm" ;;
+        *) die "Unsupported Linux runtime '$1'. Use linux-x64, linux-arm64, or linux-arm." ;;
+    esac
+}
+
+detect_runtime_identifier() {
+    local os_name
+    local machine
+    os_name="$(uname -s 2>/dev/null || true)"
+    machine="$(uname -m 2>/dev/null || true)"
+    [[ "${os_name,,}" == "linux" ]] || die "The Linux installer can only auto-detect runtime packages on Linux hosts."
+
+    case "${machine,,}" in
+        x86_64|amd64) printf '%s' "linux-x64" ;;
+        aarch64|arm64) printf '%s' "linux-arm64" ;;
+        armv7l|armv6l|armhf|arm) printf '%s' "linux-arm" ;;
+        *) die "Unsupported Linux machine architecture '$machine'. Use --runtime linux-x64, linux-arm64, or linux-arm if you know the correct package." ;;
+    esac
 }
 
 write_env_line() {
@@ -409,6 +519,17 @@ if ! "$non_interactive" && ! "$uninstall"; then
     version="$(prompt_default "Release version" "$version")"
     install_root="$(prompt_default "Install directory" "$install_root")"
     data_directory="$(prompt_default "Data directory" "$data_directory")"
+    existing_database_provider="$(read_service_env_value "Database__Provider")"
+    [[ -n "$existing_database_provider" ]] || existing_database_provider="Sqlite"
+    database_provider="$(prompt_default "Database provider (Sqlite, SqlServer, MySql)" "$existing_database_provider")"
+    database_provider_was_supplied=true
+    database_provider="$(normalize_database_provider "$database_provider")"
+    if [[ "$database_provider" != "Sqlite"
+        && -z "$database_connection_string"
+        && -z "$database_connection_string_file"
+        && -z "$(read_service_env_value "Database__ConnectionString")" ]]; then
+        database_connection_string="$(prompt_secret "$database_provider connection string")"
+    fi
     https_port="$(prompt_default "Admin HTTPS port" "$https_port")"
     if prompt_yes_no "Enable admin HTTP listener" "$enable_http"; then
         enable_http=true
@@ -436,15 +557,17 @@ if "$uninstall"; then
 fi
 
 resolve_version
+runtime_identifier="$(normalize_runtime_identifier "$runtime_identifier")"
+resolve_database_settings
 urls="$(get_urls)"
 health_url="https://127.0.0.1:${https_port}/health"
 tag="v${version}"
-artifact_name="relaywright-${version}-linux-x64.tar.gz"
+artifact_name="relaywright-${version}-${runtime_identifier}.tar.gz"
 base_url="https://github.com/${repo}/releases/download/${tag}"
 temp_directory="$(mktemp -d)"
 trap 'rm -rf "$temp_directory"' EXIT
 
-write_step "Downloading Relaywright $version from $repo"
+write_step "Downloading Relaywright $version $runtime_identifier from $repo"
 curl --fail --location --show-error --output "$temp_directory/$artifact_name" "$base_url/$artifact_name"
 curl --fail --location --show-error --output "$temp_directory/SHA256SUMS.txt" "$base_url/SHA256SUMS.txt"
 
@@ -489,6 +612,8 @@ env_temp="$(mktemp)"
     write_env_line "ASPNETCORE_ENVIRONMENT" "$environment_name"
     write_env_line "ASPNETCORE_URLS" "$urls"
     write_env_line "Storage__DataDirectory" "$data_directory"
+    write_env_line "Database__Provider" "$database_provider"
+    write_env_line "Database__ConnectionString" "$database_connection_string"
     write_env_line "BootstrapAdmin__UserName" "$bootstrap_user_name"
     write_env_line "BootstrapAdmin__Email" "$bootstrap_email"
     [[ -n "$bootstrap_password" ]] && write_env_line "BootstrapAdmin__Password" "$bootstrap_password"
@@ -562,6 +687,7 @@ done
 write_step "Relaywright installation complete"
 echo "Service: $service_name"
 echo "Version: $version"
+echo "Runtime: $runtime_identifier"
 echo "Install root: $install_root"
 echo "Data: $data_directory"
 echo "Urls: $urls"

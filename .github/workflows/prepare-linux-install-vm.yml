@@ -2,12 +2,21 @@ name: Prepare Linux Install VM
 
 on:
   workflow_dispatch:
+    inputs:
+      runner_architecture:
+        description: "Self-hosted runner architecture label"
+        required: true
+        default: "X64"
+        type: choice
+        options:
+          - X64
+          - ARM64
 
 permissions:
   contents: read
 
 concurrency:
-  group: linux-install-vm-prep
+  group: linux-install-vm-prep-${{ inputs.runner_architecture }}
   cancel-in-progress: false
 
 jobs:
@@ -15,7 +24,7 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - X64
+      - ${{ inputs.runner_architecture }}
       - relaywright
       - test
     environment: linux-installer-test
@@ -108,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: linux-install-vm-prep
+          name: linux-install-vm-prep-${{ inputs.runner_architecture }}
           path: artifacts/linux-install-vm-prep
           if-no-files-found: warn
           retention-days: 14

@@ -38,6 +38,7 @@ public sealed class EndToEndSmtpDeliveryIntegrationTests
             new ImmediateBackupCoordinator(),
             events,
             signal,
+            TestDatabaseConfiguration.Sqlite,
             NullLogger<MessageQueueService>.Instance);
         var configuration = new RelayConfigurationSnapshot
         {

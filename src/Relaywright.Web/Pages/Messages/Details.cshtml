@@ -42,7 +42,7 @@
                 <dt>ID</dt>
                 <dd>@Model.Message.Id</dd>
                 <dt>Status</dt>
-                <dd><span class="status-badge status-@(Model.Message.Status.ToString().ToLowerInvariant())">@Model.Message.Status</span></dd>
+                <dd><span class="status-badge status-@(Model.Message.Status.ToString().ToLowerInvariant())">@StatusLabels.For(Model.Message.Status)</span></dd>
                 <dt>Accepted</dt>
                 <dd>@Model.Message.AcceptedUtc.ToLocalTime()</dd>
                 <dt>Envelope From</dt>
@@ -106,16 +106,25 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @foreach (var item in Model.Message.DeliveryAttempts.OrderByDescending(x => x.AttemptNumber))
+                    @if (Model.Message.DeliveryAttempts.Count == 0)
                     {
-                        <tr>
-                            <td>@item.AttemptNumber</td>
-                            <td>@item.StartedUtc.ToLocalTime()</td>
-                            <td>@item.CompletedUtc?.ToLocalTime()</td>
-                            <td><span class="status-badge @(item.Succeeded ? "status-delivered" : "status-failed")">@(item.Succeeded ? "Yes" : "No")</span></td>
-                            <td><span class="badge">@item.FailureCategory</span></td>
-                            <td>@(item.ResponseCode) @item.ResponseText</td>
+                        <tr class="empty-row">
+                            <td colspan="6" class="table-empty">No delivery attempts recorded</td>
                         </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Message.DeliveryAttempts.OrderByDescending(x => x.AttemptNumber))
+                        {
+                            <tr>
+                                <td>@item.AttemptNumber</td>
+                                <td>@item.StartedUtc.ToLocalTime()</td>
+                                <td>@item.CompletedUtc?.ToLocalTime()</td>
+                                <td><span class="status-badge @(item.Succeeded ? "status-delivered" : "status-failed")">@(item.Succeeded ? "Succeeded" : "Failed")</span></td>
+                                <td><span class="badge">@item.FailureCategory</span></td>
+                                <td>@(item.ResponseCode) @item.ResponseText</td>
+                            </tr>
+                        }
                     }
                     </tbody>
                 </table>

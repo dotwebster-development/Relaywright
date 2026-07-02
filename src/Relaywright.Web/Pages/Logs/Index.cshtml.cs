@@ -4,11 +4,13 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Options;
 
 namespace Relaywright.Web.Pages.Logs;
 
 public sealed class IndexModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
     private const int PageSize = 50;
@@ -89,17 +91,14 @@ public sealed class IndexModel(
             PageNumber = TotalPages;
         }
 
-        var (sql, parameters) = BuildPagedEventsSql(
-            Severity,
-            Category,
-            Search?.Trim(),
-            (PageNumber - 1) * PageSize,
-            PageSize);
-
-        Events = await dbContext.OperationalEvents
-            .FromSqlRaw(sql, parameters)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        var offset = (PageNumber - 1) * PageSize;
+        Events = databaseConfiguration.IsSqlite
+            ? await GetSqlitePagedEventsAsync(dbContext, Severity, Category, Search?.Trim(), offset, PageSize, cancellationToken)
+            : await query
+                .OrderByDescending(x => x.OccurredUtc)
+                .Skip(offset)
+                .Take(PageSize)
+                .ToListAsync(cancellationToken);
 
         logger.LogDebug(
             "Logs page loaded. Severity={Severity}; Category={Category}; SearchPresent={SearchPresent}; PageNumber={PageNumber}; TotalCount={TotalCount}; ReturnedCount={ReturnedCount}; User={UserName}",
@@ -168,5 +167,21 @@ public sealed class IndexModel(
         {
             Value = value
         };
+    }
+
+    private static async Task<IReadOnlyList<OperationalEvent>> GetSqlitePagedEventsAsync(
+        ApplicationDbContext dbContext,
+        EventSeverity? severity,
+        OperationalEventCategory? category,
+        string? search,
+        int offset,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = BuildPagedEventsSql(severity, category, search, offset, pageSize);
+        return await dbContext.OperationalEvents
+            .FromSqlRaw(sql, parameters)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
     }
 }

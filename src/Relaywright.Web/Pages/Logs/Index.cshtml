@@ -89,15 +89,24 @@
                 </tr>
             </thead>
             <tbody>
-            @foreach (var item in Model.Events)
+            @if (Model.Events.Count == 0)
             {
-                <tr>
-                    <td>@item.OccurredUtc.ToLocalTime()</td>
-                    <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
-                    <td><span class="badge">@item.Category</span></td>
-                    <td>@item.RemoteIpAddress</td>
-                    <td title="@item.Detail">@item.Message</td>
+                <tr class="empty-row">
+                    <td colspan="5" class="table-empty">No events match this view</td>
                 </tr>
+            }
+            else
+            {
+                @foreach (var item in Model.Events)
+                {
+                    <tr>
+                        <td>@item.OccurredUtc.ToLocalTime()</td>
+                        <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
+                        <td><span class="badge">@item.Category</span></td>
+                        <td>@item.RemoteIpAddress</td>
+                        <td title="@item.Detail">@item.Message</td>
+                    </tr>
+                }
             }
             </tbody>
         </table>

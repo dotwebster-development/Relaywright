@@ -63,7 +63,7 @@
         <input type="hidden" name="ReturnSearch" value="@Model.Search" />
         <input type="hidden" name="ReturnPageNumber" value="@Model.PageNumber" />
         <div class="surface-toolbar">
-            <div class="toolbar-left">
+            <div class="toolbar-right">
                 <div class="actions compact-actions">
                     <button type="submit" asp-page-handler="BulkRetry" class="secondary-button">Retry Selected</button>
                     <button type="submit" asp-page-handler="BulkPurge" class="secondary-button" onclick="return confirm('Purge selected queued messages and remove their spool files where allowed?');">Purge Selected</button>
@@ -86,18 +86,27 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var item in Model.Messages)
+                @if (Model.Messages.Count == 0)
                 {
-                    <tr>
-                        <td><input type="checkbox" name="SelectedMessageIds" value="@item.Id" /></td>
-                        <td>@item.AcceptedUtc.ToLocalTime()</td>
-                        <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@item.Status</span></td>
-                        <td>@item.EnvelopeFrom</td>
-                        <td>@string.Join(", ", item.Recipients.Select(x => x.RecipientAddress))</td>
-                        <td>@item.AttemptCount</td>
-                        <td>@item.LastError</td>
-                        <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
+                    <tr class="empty-row">
+                        <td colspan="8" class="table-empty">No queued messages</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.Messages)
+                    {
+                        <tr>
+                            <td><input type="checkbox" name="SelectedMessageIds" value="@item.Id" /></td>
+                            <td>@item.AcceptedUtc.ToLocalTime()</td>
+                            <td><span class="status-badge status-@(item.Status.ToString().ToLowerInvariant())">@StatusLabels.For(item.Status)</span></td>
+                            <td>@item.EnvelopeFrom</td>
+                            <td>@string.Join(", ", item.Recipients.Select(x => x.RecipientAddress))</td>
+                            <td>@item.AttemptCount</td>
+                            <td>@item.LastError</td>
+                            <td><a asp-page="/Messages/Details" asp-route-id="@item.Id">Details</a></td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

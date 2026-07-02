@@ -10,6 +10,8 @@ namespace Relaywright.Web.Pages.Settings;
 
 public sealed class WebCertificateModel(
     IAdminHttpsCertificateService adminHttpsCertificateService,
+    IAdminWebListenerConfigurationService adminWebListenerConfigurationService,
+    IRuntimeStatusService runtimeStatusService,
     IApplicationRestartService applicationRestartService,
     IOperationalEventService eventService,
     ILogger<WebCertificateModel> logger) : PageModel
@@ -23,6 +25,10 @@ public sealed class WebCertificateModel(
     public AdminHttpsCertificateConfiguration? CurrentCertificate { get; private set; }
 
     public bool HasCurrentCertificate => CurrentCertificate is not null;
+
+    public AdminWebSecuritySummary? SecuritySummary { get; private set; }
+
+    public DateTimeOffset LoadedUtc { get; private set; } = DateTimeOffset.UtcNow;
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -88,7 +94,11 @@ public sealed class WebCertificateModel(
 
     private async Task LoadPageStateAsync(CancellationToken cancellationToken)
     {
+        LoadedUtc = DateTimeOffset.UtcNow;
         CurrentCertificate = await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
+        var listener = await adminWebListenerConfigurationService.GetConfigurationAsync(cancellationToken);
+        var runtimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
+        SecuritySummary = AdminWebSecuritySummary.Create(listener, CurrentCertificate, runtimeStatus, LoadedUtc);
     }
 
     private static IFormFile RequireFile(IFormFile? file, string message)

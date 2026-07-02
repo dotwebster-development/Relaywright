@@ -9,6 +9,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
+using Relaywright.Web.Services.Security;
 using Relaywright.Web.Tests.Support;
 using Xunit;
 
@@ -102,6 +103,25 @@ public sealed class RazorPageOrderingTests
         Assert.Equal(["newer", "older"], model.RecentEvents.Select(x => x.Message));
     }
 
+    [Fact]
+    public async Task DashboardLoadsSuspiciousLoginSummary()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var summary = new SuspiciousLoginSummary(
+            true,
+            FailedLast15Minutes: 5,
+            FailedLast24Hours: 5,
+            MostActiveRemoteIpAddress: "203.0.113.10",
+            MostActiveRemoteIpFailureCount: 3,
+            [new SuspiciousLoginFinding("Failed logins", "5 failed admin sign-ins in the last 15 minutes.", "severity-warning")]);
+        var model = fixture.CreateDashboardModel(summary);
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.True(model.SuspiciousLogins.IsSuspicious);
+        Assert.Equal(5, model.SuspiciousLogins.FailedLast15Minutes);
+    }
+
     private sealed class PageFixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -172,6 +192,7 @@ public sealed class RazorPageOrderingTests
             return AttachPageContext(new QueueIndexModel(
                 _dbContextFactory,
                 new TestQueueService(),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<QueueIndexModel>.Instance));
         }
 
@@ -179,16 +200,19 @@ public sealed class RazorPageOrderingTests
         {
             return AttachPageContext(new LogsIndexModel(
                 _dbContextFactory,
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<LogsIndexModel>.Instance));
         }
 
-        public DashboardIndexModel CreateDashboardModel()
+        public DashboardIndexModel CreateDashboardModel(SuspiciousLoginSummary? suspiciousLogins = null)
         {
             return AttachPageContext(new DashboardIndexModel(
                 _dbContextFactory,
                 new TestRelayConfigurationService(),
                 new StaticRuntimeStatusService(),
                 new TestDashboardMetricsService(),
+                new TestAdminSecurityActivityService(suspiciousLogins),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
@@ -243,6 +267,24 @@ public sealed class RazorPageOrderingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(new DashboardMetricsSnapshot());
+        }
+    }
+
+    private sealed class TestAdminSecurityActivityService(SuspiciousLoginSummary? suspiciousLogins = null) : IAdminSecurityActivityService
+    {
+        public Task<AdminLoginActivitySummary> GetLoginActivityAsync(
+            string? userName,
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new AdminLoginActivitySummary(userName, null, null, 0, 0));
+        }
+
+        public Task<SuspiciousLoginSummary> GetSuspiciousLoginSummaryAsync(
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(suspiciousLogins ?? SuspiciousLoginSummary.Empty);
         }
     }
 

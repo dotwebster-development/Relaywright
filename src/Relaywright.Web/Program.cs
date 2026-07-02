@@ -25,11 +25,17 @@ builder.Host.UseSystemd();
 
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<BootstrapAdminOptions>(builder.Configuration.GetSection(BootstrapAdminOptions.SectionName));
+builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.SectionName));
 
 var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var appPaths = new AppPaths(builder.Environment.ContentRootPath, storageOptions);
 appPaths.EnsureCreated();
-BackupRestoreService.ApplyPendingRestore(appPaths);
+var databaseOptions = builder.Configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
+var databaseConfiguration = DatabaseConfiguration.Create(databaseOptions, appPaths);
+if (databaseConfiguration.IsSqlite)
+{
+    BackupRestoreService.ApplyPendingRestore(appPaths);
+}
 
 var startupDataProtectionProvider = DataProtectionProvider.Create(
     new DirectoryInfo(appPaths.KeyRingDirectory),
@@ -57,11 +63,12 @@ if (configuredAdminHttpsCertificate is not null)
 }
 
 builder.Services.AddSingleton(appPaths);
+builder.Services.AddSingleton(databaseConfiguration);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(appPaths.KeyRingDirectory))
     .SetApplicationName("Relaywright");
 
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite($"Data Source={appPaths.DatabasePath}"));
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options => databaseConfiguration.Configure(options));
 builder.Services.AddScoped(serviceProvider =>
     serviceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 
@@ -92,6 +99,7 @@ builder.Services.ConfigureApplicationCookie(options =>
         : CookieSecurePolicy.Always;
     options.SlidingExpiration = true;
 });
+builder.Services.Configure<SecurityStampValidatorOptions>(AdminSecurityDefaults.ConfigureSecurityStampValidator);
 
 builder.Services.AddRazorPages(options =>
 {
@@ -104,6 +112,7 @@ builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>()
 builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
 builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
+builder.Services.AddSingleton<IAdminSecurityActivityService, AdminSecurityActivityService>();
 builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
 builder.Services.AddSingleton<IApplicationRestartService, ApplicationRestartService>();
 builder.Services.AddSingleton<IOutboundRouteProbe, OutboundRouteProbe>();
@@ -147,11 +156,12 @@ builder.Services.AddHostedService<BackupWorker>();
 var app = builder.Build();
 
 app.Logger.LogInformation(
-    "Starting Relaywright. Environment={Environment}; ContentRoot={ContentRoot}; DataDirectory={DataDirectory}; DatabasePath={DatabasePath}; SpoolRoot={SpoolRoot}; KeyRing={KeyRing}",
+    "Starting Relaywright. Environment={Environment}; ContentRoot={ContentRoot}; DataDirectory={DataDirectory}; DatabaseProvider={DatabaseProvider}; Database={Database}; SpoolRoot={SpoolRoot}; KeyRing={KeyRing}",
     app.Environment.EnvironmentName,
     app.Environment.ContentRootPath,
     appPaths.DataDirectory,
-    appPaths.DatabasePath,
+    databaseConfiguration.Provider,
+    databaseConfiguration.Description,
     appPaths.SpoolRootDirectory,
     appPaths.KeyRingDirectory);
 
@@ -161,6 +171,17 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
     app.UseHttpsRedirection();
 }
+
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers.TryAdd("X-Content-Type-Options", "nosniff");
+    headers.TryAdd("X-Frame-Options", "DENY");
+    headers.TryAdd("Referrer-Policy", "no-referrer");
+    headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+    await next();
+});
 
 app.Use(async (context, next) =>
 {

@@ -31,6 +31,8 @@ On the Linux VM:
 
 The current active deployment VM is `deploy-linux01`. Runner names are for humans; workflow routing uses the project label `relaywright` plus the role label `deploy`.
 
+For ARM validation, use separate ARM64 hardware, a cloud ARM64 VM, or a Raspberry Pi class device with a self-hosted runner. Keep it separate from the x64 deployment VM and label it with `self-hosted`, `Linux`, `ARM64`, `relaywright`, and a role label such as `deploy` or `test`.
+
 Default deployment values:
 
 - install root: `/opt/relaywright-test`

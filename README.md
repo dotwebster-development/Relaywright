@@ -2,7 +2,7 @@
 
 Relaywright is a self-hosted SMTP relay gateway for trusted devices, apps, and internal systems that need a controlled path to an upstream smart host.
 
-It is built with ASP.NET Core, SQLite, SmtpServer, and MailKit. Release builds are self-contained for Windows and Linux, so the target machine does not need a separate .NET runtime.
+It is built with ASP.NET Core, EF Core, SmtpServer, and MailKit. Release builds are self-contained for Windows and Linux, so the target machine does not need a separate .NET runtime.
 
 ## Status
 
@@ -30,7 +30,7 @@ The relay uses:
 
 - trusted-network checks for SMTP submissions;
 - submission policy before DATA is accepted;
-- SQLite for configuration and queue metadata;
+- SQLite, SQL Server, or MySQL for configuration and queue metadata;
 - a disk spool for raw message content;
 - ASP.NET Core Data Protection for persisted secrets;
 - operational events for visible configuration, queue, delivery, diagnostics, and system activity.
@@ -43,7 +43,7 @@ Relaywright supports:
 
 - Windows service hosting;
 - Linux systemd hosting;
-- self-contained `win-x64` and `linux-x64` release artifacts.
+- self-contained `win-x64`, `linux-x64`, and `linux-arm64` release artifacts, with a best-effort `linux-arm` package for older 32-bit ARM hosts.
 
 The admin UI is HTTPS-first for production installs. The admin HTTP listener is disabled by default unless explicitly enabled. Firewall handling is scoped by default on Windows and opt-in on Linux.
 
@@ -68,6 +68,8 @@ curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/downlo
 
 Replace `<version>` with a published version such as `1.0.0-rc.7`.
 
+The Linux installer auto-selects the matching package for x64, ARM64, or 32-bit ARMv7 hosts. For Raspberry Pi class devices, prefer a 64-bit OS so the installer selects the validated `linux-arm64` package; `linux-arm` is best-effort until dedicated ARMv7 validation is available.
+
 ## Runtime Data
 
 Default runtime data locations depend on how Relaywright is started:
@@ -78,11 +80,13 @@ Default runtime data locations depend on how Relaywright is started:
 
 Runtime data includes:
 
-- `relay.db` for SQLite data;
+- `relay.db` for SQLite data when the default local database is used;
 - `spool` for accepted message files;
 - `keys` for Data Protection keys;
 - `backups` for backup bundles;
 - `certs` for generated/admin certificate material.
+
+SQL Server and MySQL are installer-time choices for new installs with pre-created empty databases. Existing SQLite installs stay on SQLite unless a future migration tool is introduced. In SQL Server/MySQL mode, database backups are managed outside Relaywright with the database platform's normal backup tooling.
 
 Do not commit runtime data, Data Protection keys, certificates, or backups to source control.
 
@@ -118,6 +122,7 @@ See:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development guidelines](docs/DEVELOPMENT_GUIDELINES.md)
+- [Branch workflow](docs/BRANCH_WORKFLOW.md)
 - [Release process](docs/RELEASE_PROCESS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [Windows release validation](docs/WINDOWS_RELEASE_VALIDATION.md)
