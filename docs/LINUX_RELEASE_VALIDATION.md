@@ -96,3 +96,58 @@ test
 ```
 
 Use `--runtime linux-arm64` only when intentionally overriding auto-detection. Treat `linux-arm` as unvalidated best-effort unless a real 32-bit ARMv7 runner or device has passed the same clean-install checks.
+
+## Ugly-Path Validation
+
+Run `Validate Linux Ugly Paths` from GitHub Actions after the release install/update gates pass.
+
+Use a disposable Linux install VM with the same runner labels as the release validation lane:
+
+```text
+self-hosted
+Linux
+X64
+relaywright
+test
+```
+
+The workflow installs the selected release into an isolated service and data root:
+
+```text
+Service: relaywright-ugly
+Install root: /opt/relaywright-ugly
+Data root: /var/lib/relaywright-ugly
+Admin HTTPS: 5743
+SMTP listener: 2529
+Capture SMTP: 2530
+```
+
+Modes:
+
+- `ugly-paths`: installs the release, runs the destructive failure-path checks, uploads artifacts, and cleans the VM after success by default.
+- `cleanup-only`: removes the isolated ugly-path service, install root, and data root.
+
+The current Linux ugly-path gate covers:
+
+- obstructed spool path: SMTP DATA is rejected, no queue metadata is created, and the service recovers after the path is restored;
+- SQLite lock contention: SMTP DATA is not falsely accepted while the database is locked, and the service recovers afterward;
+- upstream outage: SMTP intake still queues durably, delivery retries, and the message delivers after the capture relay returns;
+- bad HTTPS certificate password: the service fails health/startup, then recovers after restoring the original environment file;
+- restart during active delivery: an in-progress message is recovered through stale-claim behavior after restart;
+- cold data-directory backup/restore: marker files and service health survive a stopped-service tar/restore cycle.
+
+The workflow does not upload the restored data backup because it may contain Data Protection keys or certificates. It records fingerprints, counts, health output, queue counts, service status, and journal excerpts instead.
+
+## Soak Validation Runner
+
+Long-running soak validation uses the same project label but a different role label so it can run on `soak-linux01` without occupying the destructive installer VM:
+
+```text
+self-hosted
+Linux
+X64
+relaywright
+soak
+```
+
+The role labels are intentionally generic. A future project can reuse the same machines by adding that project's label and routing its workflows with `project-name` plus `deploy`, `test`, or `soak`.

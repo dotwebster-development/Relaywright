@@ -11,12 +11,19 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Tests.Support;
 using Xunit;
 
 namespace Relaywright.Web.Tests;
 
 public sealed class DataSeederTests
 {
+    private static readonly Guid BetaQueuedMessageId = Guid.Parse("6c8d3f5b-9a4d-4a8b-96c5-6f07e5ef58b1");
+
+    private static readonly Guid BetaSessionId = Guid.Parse("da94cb44-c81a-46c7-ad42-201aa845c746");
+
+    private static readonly Guid BetaBackupRunId = Guid.Parse("90c50a9c-229e-4d6f-87c1-7f9399252c0c");
+
     [Fact]
     public async Task DevelopmentAllowsDefaultBootstrapPassword()
     {
@@ -119,9 +126,18 @@ public sealed class DataSeederTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task InitializeUpgradesBetaShapedDatabaseWithoutLosingExistingConfiguration()
+    public async Task InitializeUpgradesBetaShapedDatabaseWithoutLosingExistingData()
     {
         await using var fixture = await SeederFixture.CreateAsync();
+        using var appData = TempAppData.Create();
+        var preservedSpoolPath = appData.Paths.GetSpoolAbsolutePath(Path.Combine("beta", "preserve.eml"));
+        Directory.CreateDirectory(Path.GetDirectoryName(preservedSpoolPath)!);
+        await File.WriteAllTextAsync(preservedSpoolPath, "Subject: beta preserve\r\n\r\nqueued");
+        var preservedBackupPath = Path.Combine(appData.Paths.BackupDirectory, "beta-preserve.zip");
+        await File.WriteAllTextAsync(preservedBackupPath, "backup marker");
+        var preservedKeyPath = Path.Combine(appData.Paths.KeyRingDirectory, "key-beta.xml");
+        await File.WriteAllTextAsync(preservedKeyPath, "<key id=\"beta\" />");
+
         await fixture.CreateBetaShapedDatabaseAsync();
         var seeder = fixture.CreateSeeder(
             Environments.Production,
@@ -137,6 +153,9 @@ public sealed class DataSeederTests
         var relayConfiguration = await fixture.GetRelayConfigurationAsync();
         Assert.Equal("beta.smtp.example.test", relayConfiguration.UpstreamHost);
         Assert.Equal(1, await fixture.GetTrustedNetworkCountAsync());
+        var trustedNetwork = await fixture.GetTrustedNetworkAsync();
+        Assert.Equal("192.168.10.0/24", trustedNetwork.Cidr);
+        Assert.Equal("Beta lab subnet", trustedNetwork.Description);
         Assert.Equal(0, await fixture.GetUserCountAsync());
         Assert.Equal(1, await fixture.GetRuntimeControlStateCountAsync());
         Assert.Equal(1, await fixture.GetSubmissionPolicyCountAsync());
@@ -153,6 +172,31 @@ public sealed class DataSeederTests
         AssertContainsColumn(await fixture.GetColumnNamesAsync("TrustedNetworks"), "RateLimitMessagesPerHour");
         AssertContainsColumn(await fixture.GetColumnNamesAsync("RuntimeControlStates"), "RestartRequired");
         AssertContainsColumn(await fixture.GetColumnNamesAsync("BackupRuns"), "IsEncrypted");
+
+        var queuedMessage = await fixture.GetQueuedMessageAsync(BetaQueuedMessageId);
+        Assert.Equal(BetaSessionId, queuedMessage.SessionId);
+        Assert.Equal(QueuedMessageStatus.RetryScheduled, queuedMessage.Status);
+        Assert.Equal("sender@beta.example.test", queuedMessage.EnvelopeFrom);
+        Assert.Equal("192.168.10.45", queuedMessage.RemoteIpAddress);
+        Assert.Equal(Path.Combine("beta", "preserve.eml"), queuedMessage.SpoolFileRelativePath);
+        Assert.Equal("451", queuedMessage.LastResponseCode);
+        Assert.Equal(DeliveryFailureCategory.Transient, queuedMessage.FailureCategory);
+        var recipient = Assert.Single(queuedMessage.Recipients);
+        Assert.Equal("recipient@beta.example.test", recipient.RecipientAddress);
+        var attempt = Assert.Single(queuedMessage.DeliveryAttempts);
+        Assert.Equal(1, attempt.AttemptNumber);
+        Assert.False(attempt.Succeeded);
+        Assert.Equal(DeliveryFailureCategory.Transient, attempt.FailureCategory);
+
+        var backupRun = await fixture.GetBackupRunByFileNameAsync("beta-preserve.zip");
+        Assert.Equal(BetaBackupRunId, backupRun.Id);
+        Assert.Equal("beta-preserve.zip", backupRun.FileName);
+        Assert.False(backupRun.IsEncrypted);
+        Assert.Equal("beta operator", backupRun.CreatedBy);
+
+        Assert.True(File.Exists(preservedSpoolPath));
+        Assert.True(File.Exists(preservedBackupPath));
+        Assert.True(File.Exists(preservedKeyPath));
     }
 
     private static void AssertContainsColumn(ISet<string> columns, string columnName)
@@ -215,6 +259,52 @@ public sealed class DataSeederTests
             await EnsureCreatedAsync();
             await using var scope = _serviceProvider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            dbContext.QueuedMessages.Add(new QueuedMessage
+            {
+                Id = BetaQueuedMessageId,
+                SessionId = BetaSessionId,
+                CorrelationId = "beta-correlation",
+                RemoteIpAddress = "192.168.10.45",
+                EnvelopeFrom = "sender@beta.example.test",
+                MessageSizeBytes = 39,
+                SpoolFileRelativePath = Path.Combine("beta", "preserve.eml"),
+                Status = QueuedMessageStatus.RetryScheduled,
+                AttemptCount = 1,
+                LastResponseCode = "451",
+                LastResponseText = "try again later",
+                LastError = "upstream unavailable",
+                FailureCategory = DeliveryFailureCategory.Transient,
+                AcceptedUtc = DateTimeOffset.Parse("2026-01-01T00:00:00+00:00"),
+                CreatedUtc = DateTimeOffset.Parse("2026-01-01T00:00:00+00:00"),
+                NextAttemptAtUtc = DateTimeOffset.Parse("2026-01-01T00:10:00+00:00"),
+                LastAttemptStartedUtc = DateTimeOffset.Parse("2026-01-01T00:01:00+00:00"),
+                LastAttemptCompletedUtc = DateTimeOffset.Parse("2026-01-01T00:01:05+00:00"),
+                ExpiresUtc = DateTimeOffset.Parse("2026-01-02T00:00:00+00:00"),
+                Recipients =
+                [
+                    new QueuedMessageRecipient
+                    {
+                        RecipientAddress = "recipient@beta.example.test"
+                    }
+                ],
+                DeliveryAttempts =
+                [
+                    new DeliveryAttempt
+                    {
+                        AttemptNumber = 1,
+                        StartedUtc = DateTimeOffset.Parse("2026-01-01T00:01:00+00:00"),
+                        CompletedUtc = DateTimeOffset.Parse("2026-01-01T00:01:05+00:00"),
+                        Succeeded = false,
+                        FailureCategory = DeliveryFailureCategory.Transient,
+                        ResponseCode = "451",
+                        ResponseText = "try again later",
+                        ExceptionType = "SmtpCommandException",
+                        ExceptionMessage = "upstream unavailable"
+                    }
+                ]
+            });
+            await dbContext.SaveChangesAsync();
 
             await dbContext.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF;");
             await dbContext.Database.ExecuteSqlRawAsync("DROP TABLE IF EXISTS \"DiagnosticStages\";");
@@ -368,6 +458,33 @@ public sealed class DataSeederTests
                     "LastValidationMessage" TEXT NULL
                 );
                 """);
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO "BackupRuns" (
+                    "Id",
+                    "StartedUtc",
+                    "CompletedUtc",
+                    "Status",
+                    "FileName",
+                    "FileSizeBytes",
+                    "CreatedBy",
+                    "Message",
+                    "LastValidatedUtc",
+                    "LastValidationSucceeded",
+                    "LastValidationMessage")
+                VALUES (
+                    '90c50a9c-229e-4d6f-87c1-7f9399252c0c',
+                    '2026-01-01T00:00:00+00:00',
+                    '2026-01-01T00:00:10+00:00',
+                    1,
+                    'beta-preserve.zip',
+                    12,
+                    'beta operator',
+                    'completed',
+                    '2026-01-01T00:00:20+00:00',
+                    1,
+                    'valid');
+                """);
             await dbContext.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = ON;");
         }
 
@@ -412,6 +529,30 @@ public sealed class DataSeederTests
             await using var scope = _serviceProvider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             return await dbContext.RelayConfigurations.SingleAsync();
+        }
+
+        public async Task<TrustedNetwork> GetTrustedNetworkAsync()
+        {
+            await using var scope = _serviceProvider.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            return await dbContext.TrustedNetworks.SingleAsync();
+        }
+
+        public async Task<QueuedMessage> GetQueuedMessageAsync(Guid id)
+        {
+            await using var scope = _serviceProvider.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            return await dbContext.QueuedMessages
+                .Include(x => x.Recipients)
+                .Include(x => x.DeliveryAttempts)
+                .SingleAsync(x => x.Id == id);
+        }
+
+        public async Task<BackupRun> GetBackupRunByFileNameAsync(string fileName)
+        {
+            await using var scope = _serviceProvider.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            return await dbContext.BackupRuns.SingleAsync(x => x.FileName == fileName);
         }
 
         public async Task<int> GetRuntimeControlStateCountAsync()
