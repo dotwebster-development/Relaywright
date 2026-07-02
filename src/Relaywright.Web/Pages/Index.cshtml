@@ -1,5 +1,6 @@
 @page
 @model Relaywright.Web.Pages.IndexModel
+@using Relaywright.Web.Services.Updates
 @{
     ViewData["Title"] = "Dashboard";
 }
@@ -31,6 +32,20 @@
                     <span>Requested @Model.RuntimeStatus.RestartRequestedUtc.Value.ToLocalTime().ToString("g") by @(Model.RuntimeStatus.RestartRequestedBy ?? "system").</span>
                 }
                 <span>@(Model.RuntimeStatus.RestartSupported ? "A graceful restart has been requested." : "Restart Relaywright from the host service manager to apply the change.")</span>
+            </section>
+        </div>
+    }
+
+    @if (Model.UpdateStatus.State == UpdateCheckState.UpdateAvailable)
+    {
+        <div class="surface-status">
+            <section class="status warning">
+                <strong>Update available.</strong>
+                <span>@Model.UpdateStatus.Message</span>
+                @if (!string.IsNullOrWhiteSpace(Model.UpdateStatus.ReleaseUrl))
+                {
+                    <a href="@Model.UpdateStatus.ReleaseUrl">View release</a>
+                }
             </section>
         </div>
     }
@@ -111,6 +126,49 @@
                 <dt>Backup Readiness</dt>
                 <dd><span class="status-badge @(Model.Metrics.BackupReadiness.IsReady ? "status-enabled" : "severity-warning")">@(Model.Metrics.BackupReadiness.IsReady ? "Ready" : "Needs attention")</span> @Model.Metrics.BackupReadiness.Message</dd>
             </dl>
+        </section>
+
+        <section class="panel">
+            <h2>Version</h2>
+            <dl class="kv">
+                <dt>Current</dt>
+                <dd>@Model.UpdateStatus.CurrentVersion</dd>
+                <dt>Latest Release</dt>
+                <dd>
+                    @if (!string.IsNullOrWhiteSpace(Model.UpdateStatus.ReleaseUrl))
+                    {
+                        <a href="@Model.UpdateStatus.ReleaseUrl">@Model.UpdateStatus.LatestVersion</a>
+                    }
+                    else
+                    {
+                        <span>@(Model.UpdateStatus.LatestVersion ?? "Not available")</span>
+                    }
+                </dd>
+                <dt>Status</dt>
+                <dd><span class="status-badge @Model.UpdateStatus.BadgeClass">@Model.UpdateStatus.Label</span> @Model.UpdateStatus.Message</dd>
+                <dt>Last Checked</dt>
+                <dd>@(Model.UpdateStatus.LastCheckedUtc is null ? "Never" : Model.UpdateStatus.LastCheckedUtc.Value.ToLocalTime().ToString("g"))</dd>
+                <dt>Next Check</dt>
+                <dd>@(Model.UpdateStatus.NextCheckUtc is null ? "Not scheduled" : Model.UpdateStatus.NextCheckUtc.Value.ToLocalTime().ToString("g"))</dd>
+                <dt>Release Source</dt>
+                <dd>@Model.UpdateStatus.Repository</dd>
+            </dl>
+            <form method="post" asp-page-handler="CheckForUpdates" class="actions">
+                <button type="submit" class="secondary-button">Check Now</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h2>Documentation</h2>
+            <dl class="kv">
+                <dt>Operator Manual</dt>
+                <dd>GitHub Wiki</dd>
+                <dt>Scope</dt>
+                <dd>Install, setup, trusted devices, queue review, diagnostics, backups, updates, and recovery.</dd>
+            </dl>
+            <div class="actions">
+                <a class="secondary-button" href="https://github.com/dotwebster-development/Relaywright/wiki">Open Wiki</a>
+            </div>
         </section>
     </div>
 

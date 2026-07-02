@@ -94,6 +94,44 @@ public sealed class ReleaseDefaultsTests
         Assert.DoesNotContain("beta.1", props, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void WebsiteUsesCurrentReleaseRepositoryAndLatestLinks()
+    {
+        var site = ReadRepositoryFile("site", "index.html");
+
+        Assert.Contains("https://github.com/dotwebster-development/Relaywright/releases/latest", site, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/dotwebster-development/Relaywright/wiki", site, StringComparison.Ordinal);
+        Assert.Contains("--repo dotwebster-development/Relaywright --version latest", site, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.com/relaywright/relaywright", site, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void WebsiteMentionsArm64AndUsesDashboardScreenshot()
+    {
+        var site = ReadRepositoryFile("site", "index.html");
+        var screenshotPath = Path.Combine(RepositoryRoot, "site", "assets", "dashboard-preview.png");
+
+        Assert.Contains("Linux ARM64", site, StringComparison.Ordinal);
+        Assert.Contains("dashboard-preview.png", site, StringComparison.Ordinal);
+        Assert.True(File.Exists(screenshotPath));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DocumentationGuidelinesAndDashboardWikiLinkAreTracked()
+    {
+        var guidelines = ReadRepositoryFile("docs", "DOCUMENTATION_GUIDELINES.md");
+        var checklist = ReadRepositoryFile("docs", "RELEASE_CHECKLIST.md");
+        var dashboard = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Index.cshtml");
+
+        Assert.Contains("Repository docs are the source of truth", guidelines, StringComparison.Ordinal);
+        Assert.Contains("GitHub Wiki is the operator manual", guidelines, StringComparison.Ordinal);
+        Assert.Contains("Website and Wiki have been reviewed", checklist, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/dotwebster-development/Relaywright/wiki", dashboard, StringComparison.Ordinal);
+    }
+
     private static string ReadRepositoryFile(params string[] segments)
     {
         return File.ReadAllText(Path.Combine([RepositoryRoot, .. segments]));

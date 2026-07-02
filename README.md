@@ -122,6 +122,7 @@ See:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development guidelines](docs/DEVELOPMENT_GUIDELINES.md)
+- [Documentation guidelines](docs/DOCUMENTATION_GUIDELINES.md)
 - [Branch workflow](docs/BRANCH_WORKFLOW.md)
 - [Release process](docs/RELEASE_PROCESS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)

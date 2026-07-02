@@ -203,6 +203,16 @@ textarea {
     font-weight: 700;
 }
 
+.rail-version-update {
+    margin: -6px 0 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.rail-version-update a {
+    color: var(--warning);
+}
+
 .rail-account {
     display: grid;
     gap: 8px;
