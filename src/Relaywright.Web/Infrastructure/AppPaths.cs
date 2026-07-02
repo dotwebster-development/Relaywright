@@ -17,6 +17,11 @@ public sealed class AppPaths
         DatabasePath = Path.Combine(DataDirectory, options.DatabaseFileName);
         SpoolRootDirectory = Path.Combine(DataDirectory, options.SpoolDirectoryName);
         KeyRingDirectory = Path.Combine(DataDirectory, options.KeyDirectoryName);
+        BackupDirectory = Path.Combine(DataDirectory, options.BackupDirectoryName);
+        RestorePendingDirectory = Path.Combine(DataDirectory, options.RestorePendingDirectoryName);
+        CertificateDirectory = Path.Combine(DataDirectory, options.CertificateDirectoryName);
+        AdminHttpsCertificateConfigurationPath = Path.Combine(DataDirectory, options.AdminHttpsCertificateFileName);
+        AdminWebListenerConfigurationPath = Path.Combine(DataDirectory, options.AdminWebListenerFileName);
     }
 
     public string ContentRootPath { get; }
@@ -29,11 +34,23 @@ public sealed class AppPaths
 
     public string KeyRingDirectory { get; }
 
+    public string BackupDirectory { get; }
+
+    public string RestorePendingDirectory { get; }
+
+    public string CertificateDirectory { get; }
+
+    public string AdminHttpsCertificateConfigurationPath { get; }
+
+    public string AdminWebListenerConfigurationPath { get; }
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(SpoolRootDirectory);
         Directory.CreateDirectory(KeyRingDirectory);
+        Directory.CreateDirectory(BackupDirectory);
+        Directory.CreateDirectory(CertificateDirectory);
     }
 
     public string CreateSpoolRelativePath(Guid messageId, DateTimeOffset timestampUtc)
@@ -53,8 +70,9 @@ public sealed class AppPaths
             throw new InvalidOperationException("Spool path is required.");
         }
 
+        var normalizedRelativePath = NormalizeSpoolRelativePath(relativePath);
         var root = Path.GetFullPath(SpoolRootDirectory);
-        var candidate = Path.GetFullPath(Path.Combine(root, relativePath));
+        var candidate = Path.GetFullPath(Path.Combine(root, normalizedRelativePath));
         var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
             ? root
             : root + Path.DirectorySeparatorChar;
@@ -69,6 +87,26 @@ public sealed class AppPaths
         }
 
         return candidate;
+    }
+
+    private static string NormalizeSpoolRelativePath(string relativePath)
+    {
+        var normalized = relativePath
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+
+        if (Path.IsPathRooted(normalized))
+        {
+            throw new InvalidOperationException("Spool path must be relative.");
+        }
+
+        var segments = normalized.Split(Path.DirectorySeparatorChar, StringSplitOptions.None);
+        if (segments.Any(segment => segment is "." or ".." || string.IsNullOrWhiteSpace(segment)))
+        {
+            throw new InvalidOperationException("Spool path contains invalid path segments.");
+        }
+
+        return normalized;
     }
 
     private static string Resolve(string contentRootPath, string configuredPath)

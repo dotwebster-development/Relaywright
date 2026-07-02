@@ -32,14 +32,15 @@ public sealed class RelayMessageStore(
             var messageId = Guid.NewGuid();
             var acceptedUtc = DateTimeOffset.UtcNow;
             var remoteIp = context.GetRemoteIpAddress()?.ToString();
-            var recipients = transaction.To.Select(x => x.ToString() ?? string.Empty).ToArray();
+            var envelopeFrom = SmtpMailboxFormatter.Format(transaction.From);
+            var recipients = transaction.To.Select(SmtpMailboxFormatter.Format).ToArray();
 
             logger.LogInformation(
                 "SMTP DATA received. MessageId={MessageId}; SessionId={SessionId}; RemoteIp={RemoteIp}; EnvelopeFrom={EnvelopeFrom}; RecipientCount={RecipientCount}; Bytes={Bytes}",
                 messageId,
                 sessionId,
                 remoteIp,
-                transaction.From?.ToString() ?? string.Empty,
+                envelopeFrom,
                 recipients.Length,
                 buffer.Length);
 
@@ -50,7 +51,7 @@ public sealed class RelayMessageStore(
                 MessageId = messageId,
                 SessionId = sessionId,
                 RemoteIpAddress = remoteIp,
-                EnvelopeFrom = transaction.From?.ToString() ?? string.Empty,
+                EnvelopeFrom = envelopeFrom,
                 Recipients = recipients,
                 SpoolFileRelativePath = spoolRelativePath,
                 MessageSizeBytes = buffer.Length,

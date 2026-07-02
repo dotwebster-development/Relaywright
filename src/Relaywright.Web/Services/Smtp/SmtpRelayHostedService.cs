@@ -3,6 +3,7 @@ using Relaywright.Web.Configuration;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Services.Runtime;
 
 namespace Relaywright.Web.Services.Smtp;
 
@@ -13,6 +14,7 @@ public sealed class SmtpRelayHostedService(
     RelayMessageStore relayMessageStore,
     TrustedNetworkMailboxFilter trustedNetworkMailboxFilter,
     IOperationalEventService eventService,
+    IRuntimeStatusService runtimeStatusService,
     ILogger<SmtpRelayHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -36,7 +38,14 @@ public sealed class SmtpRelayHostedService(
                     configuration.MaxMessageSizeBytes,
                     knownVersion);
 
+                runtimeStatusService.ReportSmtpListenerState(
+                    "Starting",
+                    $"{configuration.ListenerBindAddress}:{configuration.ListenerPort}");
+
                 var runTask = smtpServer.StartAsync(runCts.Token);
+                runtimeStatusService.ReportSmtpListenerState(
+                    "Running",
+                    $"{configuration.ListenerBindAddress}:{configuration.ListenerPort}");
                 var restartTask = runtimeConfigurationNotifier.WaitForSmtpSettingsChangeAsync(knownVersion, stoppingToken);
 
                 var completedTask = await Task.WhenAny(runTask, restartTask);
@@ -55,11 +64,13 @@ public sealed class SmtpRelayHostedService(
                     runCts.Cancel();
 
                     await AwaitServerStopAsync(runTask);
+                    runtimeStatusService.ReportSmtpListenerState("Restarting", "Configuration changed.");
                     logger.LogInformation("SMTP listener stopped for configuration restart. ConfigVersion={ConfigVersion}", knownVersion);
                     continue;
                 }
 
                 await runTask;
+                runtimeStatusService.ReportSmtpListenerState("Stopped", "SMTP listener stopped.");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -67,6 +78,7 @@ public sealed class SmtpRelayHostedService(
             }
             catch (Exception exception)
             {
+                runtimeStatusService.ReportSmtpListenerState("Faulted", "SMTP listener terminated unexpectedly.", exception);
                 logger.LogError(exception, "SMTP listener terminated unexpectedly.");
 
                 await eventService.WriteAsync(new OperationalEventRequest
@@ -80,6 +92,8 @@ public sealed class SmtpRelayHostedService(
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
+
+        runtimeStatusService.ReportSmtpListenerState("Stopped", "Application is stopping.");
     }
 
     private static async Task AwaitServerStopAsync(Task runTask)

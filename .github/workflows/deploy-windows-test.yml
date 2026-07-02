@@ -1,0 +1,146 @@
+name: Deploy Windows Test
+
+on:
+  push:
+    branches:
+      - development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-test-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        run: dotnet build Relaywright.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --configuration Release --no-build
+
+      - name: Publish self-contained Windows package
+        run: >
+          dotnet publish src/Relaywright.Web/Relaywright.Web.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifacts/relaywright-win-x64
+          /p:PublishSingleFile=false
+          /p:PublishTrimmed=false
+          /p:DebugType=None
+          /p:DebugSymbols=false
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v7
+        with:
+          name: relaywright-win-x64
+          path: artifacts/relaywright-win-x64
+          if-no-files-found: error
+
+  deploy-windows-test:
+    needs: build-publish
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - relaywright
+      - deploy
+    environment: windows-test
+
+    env:
+      RELAYWRIGHT_TEST_INSTALL_ROOT: ${{ vars.RELAYWRIGHT_TEST_INSTALL_ROOT }}
+      RELAYWRIGHT_TEST_SERVICE_NAME: ${{ vars.RELAYWRIGHT_TEST_SERVICE_NAME }}
+      RELAYWRIGHT_TEST_DISPLAY_NAME: ${{ vars.RELAYWRIGHT_TEST_DISPLAY_NAME }}
+      RELAYWRIGHT_TEST_ENVIRONMENT: ${{ vars.RELAYWRIGHT_TEST_ENVIRONMENT }}
+      RELAYWRIGHT_TEST_URLS: ${{ vars.RELAYWRIGHT_TEST_URLS }}
+      RELAYWRIGHT_TEST_HEALTH_URL: ${{ vars.RELAYWRIGHT_TEST_HEALTH_URL }}
+      RELAYWRIGHT_TEST_DATA_DIRECTORY: ${{ vars.RELAYWRIGHT_TEST_DATA_DIRECTORY }}
+      RELAYWRIGHT_TEST_BOOTSTRAP_USERNAME: ${{ vars.RELAYWRIGHT_TEST_BOOTSTRAP_USERNAME }}
+      RELAYWRIGHT_TEST_BOOTSTRAP_EMAIL: ${{ vars.RELAYWRIGHT_TEST_BOOTSTRAP_EMAIL }}
+      RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PATH: ${{ vars.RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PATH }}
+      RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_DNS_NAME: ${{ vars.RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_DNS_NAME }}
+      RELAYWRIGHT_TEST_FIREWALL_RULE_PREFIX: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_RULE_PREFIX }}
+      RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS }}
+      RELAYWRIGHT_TEST_FIREWALL_PROFILES: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_PROFILES }}
+      RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS: ${{ vars.RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS }}
+      RELAYWRIGHT_TEST_CONFIGURE_FIREWALL: ${{ vars.RELAYWRIGHT_TEST_CONFIGURE_FIREWALL }}
+      RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD: ${{ secrets.RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD }}
+      RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD: ${{ secrets.RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD }}
+
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v7
+
+      - name: Download Windows package
+        uses: actions/download-artifact@v8
+        with:
+          name: relaywright-win-x64
+          path: artifact/relaywright-win-x64
+
+      - name: Deploy Windows service
+        shell: powershell
+        run: |
+          function ValueOrDefault([string]$Value, [string]$Default) {
+            if ([string]::IsNullOrWhiteSpace($Value)) {
+              return $Default
+            }
+
+            return $Value
+          }
+
+          function IsEnabled([string]$Value, [bool]$Default) {
+            if ([string]::IsNullOrWhiteSpace($Value)) {
+              return $Default
+            }
+
+            switch -Regex ($Value.Trim().ToLowerInvariant()) {
+              '^(1|true|yes|y|on)$' { return $true }
+              '^(0|false|no|n|off)$' { return $false }
+              default { throw "Invalid boolean value '$Value'." }
+            }
+          }
+
+          $arguments = @{
+            PackagePath = Join-Path $PWD 'artifact\relaywright-win-x64'
+            InstallRoot = ValueOrDefault $env:RELAYWRIGHT_TEST_INSTALL_ROOT 'C:\Relaywright\Test'
+            ServiceName = ValueOrDefault $env:RELAYWRIGHT_TEST_SERVICE_NAME 'RelaywrightTest'
+            DisplayName = ValueOrDefault $env:RELAYWRIGHT_TEST_DISPLAY_NAME 'Relaywright Test'
+            EnvironmentName = ValueOrDefault $env:RELAYWRIGHT_TEST_ENVIRONMENT 'Production'
+            Urls = ValueOrDefault $env:RELAYWRIGHT_TEST_URLS 'https://*:5443'
+            HealthUrl = ValueOrDefault $env:RELAYWRIGHT_TEST_HEALTH_URL 'https://127.0.0.1:5443/health'
+            DataDirectory = ValueOrDefault $env:RELAYWRIGHT_TEST_DATA_DIRECTORY 'C:\Relaywright\Test\App_Data'
+            BootstrapUserName = ValueOrDefault $env:RELAYWRIGHT_TEST_BOOTSTRAP_USERNAME 'admin'
+            BootstrapEmail = ValueOrDefault $env:RELAYWRIGHT_TEST_BOOTSTRAP_EMAIL 'admin@localhost'
+            BootstrapPassword = $env:RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD
+            HttpsCertificatePath = $env:RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PATH
+            HttpsCertificatePassword = $env:RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_PASSWORD
+            CertificateDnsName = ValueOrDefault $env:RELAYWRIGHT_TEST_HTTPS_CERTIFICATE_DNS_NAME 'localhost'
+            FirewallRulePrefix = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_RULE_PREFIX 'Relaywright Test'
+            FirewallRemoteAddress = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_REMOTE_ADDRESS 'LocalSubnet'
+            FirewallProfiles = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_PROFILES 'Any'
+            FirewallSmtpPorts = ValueOrDefault $env:RELAYWRIGHT_TEST_FIREWALL_SMTP_PORTS '2525'
+          }
+
+          if (IsEnabled $env:RELAYWRIGHT_TEST_CONFIGURE_FIREWALL $true) {
+            .\scripts\windows\Deploy-RelaywrightTest.ps1 @arguments -GenerateSelfSignedCertificate -ConfigureFirewall
+          }
+          else {
+            .\scripts\windows\Deploy-RelaywrightTest.ps1 @arguments -GenerateSelfSignedCertificate
+          }

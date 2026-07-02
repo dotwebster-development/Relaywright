@@ -10,5 +10,5 @@ public sealed class BootstrapAdminOptions
 
     public string Email { get; set; } = "admin@localhost";
 
-    public string Password { get; set; } = DefaultDevelopmentPassword;
+    public string Password { get; set; } = string.Empty;
 }

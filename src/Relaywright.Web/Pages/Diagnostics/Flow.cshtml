@@ -1,0 +1,125 @@
+@page
+@model Relaywright.Web.Pages.Diagnostics.FlowModel
+@{
+    ViewData["Title"] = "Flow Checker";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Diagnostics</p>
+            <h1>Flow Checker</h1>
+            <p class="page-summary">Preview whether a trusted device submission would pass IP, sender, size, recipient, and rate-limit checks before SMTP DATA is accepted.</p>
+        </div>
+    </header>
+
+    @if (Model.Result is not null)
+    {
+        <p class="status @(Model.Result.Succeeded ? "ok" : "error")">@Model.Result.Message</p>
+    }
+
+    <section class="panel">
+        <h2>Check Submission Flow</h2>
+        <form method="post" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+            <div class="compact-grid">
+                <label>
+                    <span>Source IP</span>
+                    <input asp-for="Input.SourceIpAddress" placeholder="192.168.1.50" />
+                    <span asp-validation-for="Input.SourceIpAddress"></span>
+                </label>
+                <label>
+                    <span>Envelope From</span>
+                    <input asp-for="Input.EnvelopeFrom" placeholder="scanner@example.com" />
+                    <span asp-validation-for="Input.EnvelopeFrom"></span>
+                </label>
+                <label>
+                    <span>Declared Size (Bytes)</span>
+                    <input asp-for="Input.DeclaredSizeBytes" type="number" min="0" />
+                    <span asp-validation-for="Input.DeclaredSizeBytes"></span>
+                </label>
+                <label class="span-4">
+                    <span>Recipients</span>
+                    <textarea asp-for="Input.Recipients" rows="4" placeholder="first@example.com&#10;second@example.com"></textarea>
+                    <span asp-validation-for="Input.Recipients"></span>
+                </label>
+            </div>
+            <div class="actions">
+                <button type="submit">Check Flow</button>
+            </div>
+        </form>
+    </section>
+
+    @if (Model.Result?.Stages.Count > 0)
+    {
+        <section class="panel">
+            <h2>Latest Flow</h2>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Result</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var stage in Model.Result.Stages)
+                    {
+                        <tr>
+                            <td>@stage.Name</td>
+                            <td><span class="status-badge @(stage.Succeeded ? "status-delivered" : "status-failed")">@(stage.Succeeded ? "Succeeded" : "Failed")</span></td>
+                            <td>@stage.Message</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+
+    <section class="panel">
+        <h2>Recent Flow Runs</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Started</th>
+                        <th>Result</th>
+                        <th>Message</th>
+                        <th>Stages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.RecentRuns.Count == 0)
+                {
+                    <tr class="empty-row">
+                        <td colspan="4" class="table-empty">No flow checks recorded</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var run in Model.RecentRuns)
+                    {
+                        <tr>
+                            <td>@run.StartedUtc.ToLocalTime()</td>
+                            <td><span class="status-badge @(run.Succeeded == true ? "status-delivered" : run.Succeeded == false ? "status-failed" : "status-inprogress")">@(run.Succeeded is null ? "Running" : run.Succeeded.Value ? "Succeeded" : "Failed")</span></td>
+                            <td>@run.Message</td>
+                            <td>
+                                @foreach (var stage in run.Stages.OrderBy(x => x.Sequence))
+                                {
+                                    <div class="stage-line">
+                                        <span class="status-badge status-@(stage.Status == DiagnosticStageStatus.Succeeded ? "delivered" : stage.Status == DiagnosticStageStatus.Failed ? "failed" : stage.Status == DiagnosticStageStatus.Skipped ? "disabled" : "inprogress")">@StatusLabels.For(stage.Status)</span>
+                                        <strong>@stage.Name</strong>
+                                        <span>@stage.Message</span>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

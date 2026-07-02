@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages.Settings;
 
 public sealed class TrustedNetworksModel(
     ITrustedNetworkService trustedNetworkService,
+    IConfigurationSnapshotService configurationSnapshotService,
     ILogger<TrustedNetworksModel> logger) : PageModel
 {
     [BindProperty]
@@ -35,6 +37,11 @@ public sealed class TrustedNetworksModel(
     {
         try
         {
+            await configurationSnapshotService.CaptureAsync(
+                ConfigurationSnapshotService.TrustedNetworksArea,
+                User.Identity?.Name,
+                "Snapshot before trusted network save.",
+                cancellationToken);
             await trustedNetworkService.AddOrUpdateAsync(Input, cancellationToken);
             StatusMessage = "Trusted network saved.";
             logger.LogInformation(
@@ -66,9 +73,67 @@ public sealed class TrustedNetworksModel(
 
     public async Task<IActionResult> OnPostDeleteAsync(int id, CancellationToken cancellationToken)
     {
+        await configurationSnapshotService.CaptureAsync(
+            ConfigurationSnapshotService.TrustedNetworksArea,
+            User.Identity?.Name,
+            "Snapshot before trusted network delete.",
+            cancellationToken);
         await trustedNetworkService.DeleteAsync(id, cancellationToken);
         StatusMessage = "Trusted network deleted.";
         logger.LogInformation("Trusted network delete requested from admin page. Id={TrustedNetworkId}; User={UserName}", id, User.Identity?.Name);
         return RedirectToPage();
+    }
+
+    public static string FormatProfile(TrustedNetwork network)
+    {
+        var parts = new[] { network.Owner, network.Location }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+
+        return parts.Length == 0 ? "Unassigned" : string.Join(" / ", parts);
+    }
+
+    public static string FormatLimits(TrustedNetwork network)
+    {
+        var parts = new List<string>();
+        if (network.MaxMessageSizeBytes is > 0)
+        {
+            parts.Add($"size {network.MaxMessageSizeBytes.Value:N0} B");
+        }
+
+        if (network.MaxRecipientsPerMessage is > 0)
+        {
+            parts.Add($"{network.MaxRecipientsPerMessage.Value:N0} recipients");
+        }
+
+        if (network.RateLimitMessagesPerHour is > 0)
+        {
+            parts.Add($"{network.RateLimitMessagesPerHour.Value:N0}/hour");
+        }
+
+        return parts.Count == 0 ? "Global defaults" : string.Join("; ", parts);
+    }
+
+    public static string FormatPolicySummary(TrustedNetwork network)
+    {
+        var parts = new List<string>();
+        AddCount(parts, "allowed senders", network.AllowedSenderAddresses);
+        AddCount(parts, "blocked senders", network.BlockedSenderAddresses);
+        AddCount(parts, "allowed domains", network.AllowedRecipientDomains);
+        AddCount(parts, "blocked domains", network.BlockedRecipientDomains);
+
+        return parts.Count == 0 ? "No device-specific lists" : string.Join("; ", parts);
+    }
+
+    private static void AddCount(List<string> parts, string label, string? value)
+    {
+        var count = value?
+            .Split([',', ';', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Length ?? 0;
+
+        if (count > 0)
+        {
+            parts.Add($"{count:N0} {label}");
+        }
     }
 }

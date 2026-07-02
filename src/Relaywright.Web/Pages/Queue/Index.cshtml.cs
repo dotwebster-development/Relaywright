@@ -1,13 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Options;
+using Relaywright.Web.Services.Queueing;
 
 namespace Relaywright.Web.Pages.Queue;
 
 public sealed class IndexModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    IMessageQueueService messageQueueService,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
     private const int PageSize = 50;
@@ -19,6 +24,21 @@ public sealed class IndexModel(
 
     [BindProperty(SupportsGet = true)]
     public int PageNumber { get; set; } = 1;
+
+    [BindProperty]
+    public List<Guid> SelectedMessageIds { get; set; } = [];
+
+    [BindProperty]
+    public string? ReturnStatus { get; set; }
+
+    [BindProperty]
+    public string? ReturnSearch { get; set; }
+
+    [BindProperty]
+    public int ReturnPageNumber { get; set; } = 1;
+
+    [TempData]
+    public string? StatusMessage { get; set; }
 
     public int TotalCount { get; private set; }
 
@@ -64,15 +84,40 @@ public sealed class IndexModel(
             PageNumber = TotalPages;
         }
 
-        var messages = await query
-            .Include(x => x.Recipients)
-            .ToListAsync(cancellationToken);
+        var offset = (PageNumber - 1) * PageSize;
+        IReadOnlyList<QueuedMessage> messages;
+        if (databaseConfiguration.IsSqlite)
+        {
+            var orderedIds = await GetSqliteOrderedIdsAsync(dbContext, SelectedStatus, Search?.Trim(), offset, PageSize, cancellationToken);
+            var messageOrder = orderedIds
+                .Select((id, index) => new { id, index })
+                .ToDictionary(x => x.id, x => x.index);
 
-        Messages = messages
-            .OrderByDescending(x => x.AcceptedUtc)
-            .Skip((PageNumber - 1) * PageSize)
-            .Take(PageSize)
-            .ToList();
+            messages = orderedIds.Length == 0
+                ? []
+                : await dbContext.QueuedMessages
+                    .AsNoTracking()
+                    .AsSplitQuery()
+                    .Include(x => x.Recipients)
+                    .Where(x => orderedIds.Contains(x.Id))
+                    .ToListAsync(cancellationToken);
+
+            messages = messages
+                .OrderBy(x => messageOrder[x.Id])
+                .ToList();
+        }
+        else
+        {
+            messages = await query
+                .AsSplitQuery()
+                .Include(x => x.Recipients)
+                .OrderByDescending(x => x.AcceptedUtc)
+                .Skip(offset)
+                .Take(PageSize)
+                .ToListAsync(cancellationToken);
+        }
+
+        Messages = messages;
 
         logger.LogDebug(
             "Queue page loaded. Status={Status}; SearchPresent={SearchPresent}; PageNumber={PageNumber}; TotalCount={TotalCount}; ReturnedCount={ReturnedCount}; User={UserName}",
@@ -86,4 +131,135 @@ public sealed class IndexModel(
 
     public bool IsStatusActive(string status) =>
         string.Equals(SelectedStatus, status, StringComparison.OrdinalIgnoreCase);
+
+    public async Task<IActionResult> OnPostBulkRetryAsync(CancellationToken cancellationToken)
+    {
+        var result = await messageQueueService.RetryNowAsync(SelectedMessageIds, cancellationToken);
+        StatusMessage = result.Message;
+        logger.LogInformation(
+            "Bulk queue retry requested. Requested={Requested}; Succeeded={Succeeded}; Rejected={Rejected}; Missing={Missing}; User={UserName}",
+            result.Requested,
+            result.Succeeded,
+            result.Rejected,
+            result.Missing,
+            User.Identity?.Name);
+        return RedirectToQueue();
+    }
+
+    public async Task<IActionResult> OnPostBulkPurgeAsync(CancellationToken cancellationToken)
+    {
+        var result = await messageQueueService.PurgeAsync(SelectedMessageIds, cancellationToken);
+        StatusMessage = result.Message;
+        logger.LogInformation(
+            "Bulk queue purge requested. Requested={Requested}; Succeeded={Succeeded}; Rejected={Rejected}; Missing={Missing}; SpoolDeleteFailures={SpoolDeleteFailures}; User={UserName}",
+            result.Requested,
+            result.Succeeded,
+            result.Rejected,
+            result.Missing,
+            result.SpoolDeleteFailures,
+            User.Identity?.Name);
+        return RedirectToQueue();
+    }
+
+    private IActionResult RedirectToQueue()
+    {
+        return RedirectToPage(new
+        {
+            status = string.IsNullOrWhiteSpace(ReturnStatus) ? "active" : ReturnStatus,
+            search = ReturnSearch,
+            pageNumber = Math.Max(1, ReturnPageNumber)
+        });
+    }
+
+    private static (string Sql, object[] Parameters) BuildPagedMessagesSql(
+        string selectedStatus,
+        string? search,
+        int offset,
+        int pageSize)
+    {
+        var filters = new List<string>();
+        var parameters = new List<object>
+        {
+            IntegerParameter("$limit", pageSize),
+            IntegerParameter("$offset", offset)
+        };
+
+        switch (selectedStatus)
+        {
+            case "failed":
+                filters.Add(@"qm.""Status"" IN ($failedStatus, $expiredStatus)");
+                parameters.Add(IntegerParameter("$failedStatus", (int)QueuedMessageStatus.Failed));
+                parameters.Add(IntegerParameter("$expiredStatus", (int)QueuedMessageStatus.Expired));
+                break;
+
+            case "delivered":
+                filters.Add(@"qm.""Status"" = $deliveredStatus");
+                parameters.Add(IntegerParameter("$deliveredStatus", (int)QueuedMessageStatus.Delivered));
+                break;
+
+            case "all":
+                break;
+
+            default:
+                filters.Add(@"qm.""Status"" IN ($pendingStatus, $retryStatus, $inProgressStatus)");
+                parameters.Add(IntegerParameter("$pendingStatus", (int)QueuedMessageStatus.Pending));
+                parameters.Add(IntegerParameter("$retryStatus", (int)QueuedMessageStatus.RetryScheduled));
+                parameters.Add(IntegerParameter("$inProgressStatus", (int)QueuedMessageStatus.InProgress));
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            filters.Add("""
+                (instr(qm."CorrelationId", $search) > 0
+                    OR instr(qm."EnvelopeFrom", $search) > 0
+                    OR (qm."RemoteIpAddress" IS NOT NULL AND instr(qm."RemoteIpAddress", $search) > 0)
+                    OR EXISTS (
+                        SELECT 1
+                        FROM "QueuedMessageRecipients" AS qmr
+                        WHERE qmr."QueuedMessageId" = qm."Id"
+                            AND instr(qmr."RecipientAddress", $search) > 0
+                    ))
+                """);
+            parameters.Add(new SqliteParameter("$search", search));
+        }
+
+        var whereSql = filters.Count == 0
+            ? string.Empty
+            : $"{Environment.NewLine}WHERE {string.Join($"{Environment.NewLine}    AND ", filters)}";
+
+        var sql = $"""
+            SELECT qm.*
+            FROM "QueuedMessages" AS qm{whereSql}
+            ORDER BY qm."AcceptedUtc" DESC
+            LIMIT $limit OFFSET $offset
+            """;
+
+        return (sql, parameters.ToArray());
+    }
+
+    private static SqliteParameter IntegerParameter(string name, int value)
+    {
+        return new SqliteParameter(name, SqliteType.Integer)
+        {
+            Value = value
+        };
+    }
+
+    private static async Task<Guid[]> GetSqliteOrderedIdsAsync(
+        ApplicationDbContext dbContext,
+        string selectedStatus,
+        string? search,
+        int offset,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = BuildPagedMessagesSql(selectedStatus, search, offset, pageSize);
+        var orderedPage = await dbContext.QueuedMessages
+            .FromSqlRaw(sql, parameters)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return orderedPage.Select(x => x.Id).ToArray();
+    }
 }

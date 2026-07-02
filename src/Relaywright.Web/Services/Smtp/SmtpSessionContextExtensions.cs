@@ -7,6 +7,8 @@ namespace Relaywright.Web.Services.Smtp;
 public static class SmtpSessionContextExtensions
 {
     private const string SessionIdKey = "Relaywright.SessionId";
+    private const string TrustedNetworkIdKey = "Relaywright.TrustedNetworkId";
+    private const string RecipientCountKey = "Relaywright.RecipientCount";
 
     public static IPAddress? GetRemoteIpAddress(this ISessionContext context)
     {
@@ -36,5 +38,24 @@ public static class SmtpSessionContextExtensions
         var created = Guid.NewGuid();
         context.Properties[SessionIdKey] = created;
         return created;
+    }
+
+    public static void SetTrustedNetworkId(this ISessionContext context, int trustedNetworkId)
+    {
+        context.Properties[TrustedNetworkIdKey] = trustedNetworkId;
+        context.Properties[RecipientCountKey] = 0;
+    }
+
+    public static int GetNextRecipientNumber(this ISessionContext context)
+    {
+        var current = context.Properties.TryGetValue(RecipientCountKey, out var value) && value is int count
+            ? count
+            : 0;
+        return current + 1;
+    }
+
+    public static void CommitRecipientAccepted(this ISessionContext context)
+    {
+        context.Properties[RecipientCountKey] = GetNextRecipientNumber(context);
     }
 }

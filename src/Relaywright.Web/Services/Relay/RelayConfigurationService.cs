@@ -1,4 +1,5 @@
 using System.Net;
+using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
@@ -276,6 +277,11 @@ public sealed class RelayConfigurationService(
         if (!model.UseUpstreamAuthentication)
         {
             return;
+        }
+
+        if (model.UpstreamSecureSocketOptions is not (SecureSocketOptions.StartTls or SecureSocketOptions.SslOnConnect))
+        {
+            throw new InvalidOperationException("Upstream authentication requires a guaranteed TLS mode: StartTls or SslOnConnect.");
         }
 
         if (string.IsNullOrWhiteSpace(model.UpstreamUserName))

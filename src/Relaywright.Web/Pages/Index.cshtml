@@ -9,9 +9,51 @@
         <div class="page-header-copy">
             <p class="page-eyebrow">Overview</p>
             <h1>Dashboard</h1>
-            <p class="page-summary">Monitor relay health, review the active upstream configuration, and keep an eye on recent operational events without leaving the main workspace.</p>
+            <p class="page-summary">Monitor relay health, control outbound delivery, review the active upstream configuration, and keep an eye on recent operational events without leaving the main workspace.</p>
         </div>
     </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    @if (Model.RuntimeStatus.RestartRequired)
+    {
+        <div class="surface-status">
+            <section class="status warning">
+                <strong>Restart required.</strong>
+                <span>@Model.RuntimeStatus.RestartReason</span>
+                @if (Model.RuntimeStatus.RestartRequestedUtc is not null)
+                {
+                    <span>Requested @Model.RuntimeStatus.RestartRequestedUtc.Value.ToLocalTime().ToString("g") by @(Model.RuntimeStatus.RestartRequestedBy ?? "system").</span>
+                }
+                <span>@(Model.RuntimeStatus.RestartSupported ? "A graceful restart has been requested." : "Restart Relaywright from the host service manager to apply the change.")</span>
+            </section>
+        </div>
+    }
+
+    @if (Model.SuspiciousLogins.IsSuspicious)
+    {
+        <div class="surface-status">
+            <section class="status warning">
+                <strong>Admin login attention.</strong>
+                <span>@Model.SuspiciousLogins.FailedLast15Minutes failed in 15 minutes; @Model.SuspiciousLogins.FailedLast24Hours failed in 24 hours.</span>
+                <a asp-page="/Logs/Index" asp-route-category="Security" asp-route-search="Admin sign-in">Review security logs</a>
+            </section>
+            <div class="security-checklist">
+                @foreach (var finding in Model.SuspiciousLogins.Findings)
+                {
+                    <div>
+                        <span class="status-badge @finding.BadgeClass">@finding.Label</span>
+                        <p>@finding.Detail</p>
+                    </div>
+                }
+            </div>
+        </div>
+    }
 
     <div class="stats-grid">
         <article class="stat">
@@ -34,6 +76,88 @@
             <strong>@Model.DeliveredTodayCount</strong>
             <p>Successful deliveries recorded since midnight.</p>
         </article>
+    </div>
+
+    <div class="surface-grid two-up">
+        <section class="panel">
+            <h2>Traffic Metrics</h2>
+            <dl class="kv">
+                <dt>Accepted 24h</dt>
+                <dd>@Model.Metrics.AcceptedLast24Hours</dd>
+                <dt>Delivered 24h</dt>
+                <dd>@Model.Metrics.DeliveredLast24Hours</dd>
+                <dt>Failed Attempts 24h</dt>
+                <dd>@Model.Metrics.FailedLast24Hours</dd>
+                <dt>Oldest Active</dt>
+                <dd>@(Model.Metrics.OldestActiveAgeMinutes is null ? "None" : $"{Model.Metrics.OldestActiveAgeMinutes} minute(s)")</dd>
+                <dt>Last Upstream Failure</dt>
+                <dd>@(Model.Metrics.LastUpstreamFailureUtc is null ? "None" : $"{Model.Metrics.LastUpstreamFailureUtc.Value.ToLocalTime():g} - {Model.Metrics.LastUpstreamFailureMessage}")</dd>
+            </dl>
+        </section>
+
+        <section class="panel">
+            <h2>Storage And Route</h2>
+            <dl class="kv">
+                <dt>Outgoing Source IP</dt>
+                <dd>@(Model.Metrics.OutboundRoute.Succeeded ? Model.Metrics.OutboundRoute.LocalIpAddress : Model.Metrics.OutboundRoute.Message)</dd>
+                <dt>Route Target</dt>
+                <dd>@(Model.Metrics.OutboundRoute.RemoteAddress ?? "Not available")</dd>
+                <dt>Database</dt>
+                <dd>@(Model.Metrics.IsDatabaseExternallyManaged ? Model.Metrics.DatabaseDescription : IndexModel.FormatBytes(Model.Metrics.DatabaseSizeBytes))</dd>
+                <dt>Spool</dt>
+                <dd>@IndexModel.FormatBytes(Model.Metrics.SpoolSizeBytes)</dd>
+                <dt>Backups</dt>
+                <dd>@IndexModel.FormatBytes(Model.Metrics.BackupSizeBytes)</dd>
+                <dt>Backup Readiness</dt>
+                <dd><span class="status-badge @(Model.Metrics.BackupReadiness.IsReady ? "status-enabled" : "severity-warning")">@(Model.Metrics.BackupReadiness.IsReady ? "Ready" : "Needs attention")</span> @Model.Metrics.BackupReadiness.Message</dd>
+            </dl>
+        </section>
+    </div>
+
+    <div class="surface-grid two-up">
+        <section class="panel">
+            <h2>Delivery Control</h2>
+            <dl class="kv">
+                <dt>Outbound Delivery</dt>
+                <dd><span class="status-badge @(Model.RuntimeStatus.IsDeliveryPaused ? "status-disabled" : "status-enabled")">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : "Running")</span></dd>
+                <dt>Paused By</dt>
+                <dd>@Model.RuntimeStatus.DeliveryPausedBy</dd>
+                <dt>Paused At</dt>
+                <dd>@Model.RuntimeStatus.DeliveryPausedUtc?.ToLocalTime()</dd>
+            </dl>
+            <div class="actions">
+                @if (Model.RuntimeStatus.IsDeliveryPaused)
+                {
+                    <form method="post" asp-page-handler="Resume" class="inline-form">
+                        <button type="submit">Resume Delivery</button>
+                    </form>
+                }
+                else
+                {
+                    <form method="post" asp-page-handler="Pause" class="inline-form">
+                        <button type="submit">Pause Delivery</button>
+                    </form>
+                }
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Runtime Status</h2>
+            <dl class="kv">
+                <dt>SMTP Listener</dt>
+                <dd><span class="status-badge status-@Model.RuntimeStatus.SmtpListener.Status.ToLowerInvariant()">@StatusLabels.ForRuntime(Model.RuntimeStatus.SmtpListener.Status)</span></dd>
+                <dt>Listener Detail</dt>
+                <dd>@Model.RuntimeStatus.SmtpListener.Detail</dd>
+                <dt>Delivery Worker</dt>
+                <dd><span class="status-badge @(Model.RuntimeStatus.IsDeliveryPaused ? "status-disabled" : Model.RuntimeStatus.DeliveryWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : StatusLabels.ForRuntime(Model.RuntimeStatus.DeliveryWorker.Status))</span></dd>
+                <dt>Active Deliveries</dt>
+                <dd>@Model.RuntimeStatus.ActiveDeliveries</dd>
+                <dt>Maintenance</dt>
+                <dd><span class="status-badge @(Model.RuntimeStatus.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@StatusLabels.ForRuntime(Model.RuntimeStatus.MaintenanceWorker.Status)</span></dd>
+                <dt>Last Cleanup</dt>
+                <dd>@Model.RuntimeStatus.LastCleanupUtc?.ToLocalTime()</dd>
+            </dl>
+        </section>
     </div>
 
     <div class="surface-grid two-up">
@@ -79,14 +203,23 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var item in Model.RecentEvents)
+                @if (Model.RecentEvents.Count == 0)
                 {
-                    <tr>
-                        <td>@item.OccurredUtc.ToLocalTime()</td>
-                        <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
-                        <td><span class="badge">@item.Category</span></td>
-                        <td>@item.Message</td>
+                    <tr class="empty-row">
+                        <td colspan="4" class="table-empty">No recent events</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.RecentEvents)
+                    {
+                        <tr>
+                            <td>@item.OccurredUtc.ToLocalTime()</td>
+                            <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
+                            <td><span class="badge">@item.Category</span></td>
+                            <td>@item.Message</td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

@@ -38,6 +38,8 @@ The vulnerability report must not contain any project with vulnerable packages.
 - Confirm the systemd service starts and `/health` returns `ok`.
 - Confirm HTTPS is enabled and HTTP is disabled unless a non-zero `--http-port` is supplied.
 - Upgrade an existing `0.1.0-beta.1` data directory with `--update`.
+- Clean install on at least one ARM64 Linux runner or device with `runner_architecture=ARM64` before advertising ARM support for the release.
+- Treat ARMv7 as best-effort unless a real 32-bit ARMv7 runner or device is validated.
 - Verify firewall behavior on active `firewalld` or `ufw` hosts when `--configure-firewall` is used.
 - Confirm Linux firewall configuration remains optional and defaults to scoped `local-subnet` rules when enabled.
 

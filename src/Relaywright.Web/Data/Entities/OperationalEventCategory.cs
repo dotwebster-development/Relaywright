@@ -8,6 +8,6 @@ public enum OperationalEventCategory
     SmtpSession = 3,
     Queue = 4,
     Delivery = 5,
-    Diagnostics = 6
+    Diagnostics = 6,
+    Alert = 7
 }
-

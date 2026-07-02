@@ -1,0 +1,294 @@
+@page
+@model Relaywright.Web.Pages.Account.SetupModel
+@using Relaywright.Web.Services.Security
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "First Run Setup";
+}
+
+<section class="page setup-page">
+    <div class="setup-panel">
+        <div class="setup-brand">
+            <img src="~/brand/relaywright-mark.svg" alt="" />
+            <div>
+                <p class="page-eyebrow">First Run</p>
+                <h1>Set Up Relaywright</h1>
+            </div>
+        </div>
+
+        <ol class="setup-progress" aria-label="Setup progress">
+            <li class="@(Model.IsWelcomeStep ? "is-active" : Model.IsAdminAccountStep || Model.IsCertificateStep || Model.IsCompleteStep ? "is-complete" : null)">
+                <span>1</span>
+                <strong>Welcome</strong>
+            </li>
+            <li class="@(Model.IsAdminAccountStep ? "is-active" : Model.IsCertificateStep || Model.IsCompleteStep ? "is-complete" : null)">
+                <span>2</span>
+                <strong>Admin</strong>
+            </li>
+            <li class="@(Model.IsCertificateStep ? "is-active" : Model.IsCompleteStep ? "is-complete" : null)">
+                <span>3</span>
+                <strong>HTTPS</strong>
+            </li>
+            <li class="@(Model.IsCompleteStep ? "is-active" : null)">
+                <span>4</span>
+                <strong>Overview</strong>
+            </li>
+        </ol>
+
+        <div class="setup-callout">
+            <strong>Security checklist</strong>
+            <div class="security-checklist">
+                @foreach (var item in Model.HardeningChecklist.Items)
+                {
+                    <div>
+                        <span class="status-badge @item.BadgeClass">@item.Status</span>
+                        <strong>@item.Label</strong>
+                        <p>@item.Detail</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (Model.IsWelcomeStep)
+        {
+            <div class="setup-step">
+                <div class="setup-copy">
+                    <h2>Welcome to your relay console</h2>
+                    <p>Relaywright is ready for its initial setup. The first account you create becomes the local administrator for queue review, relay settings, diagnostics, and trusted network management.</p>
+                </div>
+
+                <div class="setup-callout">
+                    <strong>Before you continue</strong>
+                    <p>Use a unique admin password. Relaywright stores credentials with ASP.NET Core Identity and will not keep the plain text password.</p>
+                </div>
+
+                <form method="post" asp-page-handler="Start" class="actions">
+                    <button type="submit">Start Setup</button>
+                </form>
+            </div>
+        }
+        else if (Model.IsAdminAccountStep)
+        {
+            <form method="post" asp-page-handler="Create" class="setup-step form-grid">
+                <div class="setup-copy">
+                    <h2>Create the administrator</h2>
+                    <p>This account is required before the web interface, relay settings, and diagnostics can be used.</p>
+                </div>
+
+                <div class="auth-panel">
+                    <strong>Password Requirements</strong>
+                    <ul class="compact-list">
+                        @foreach (var requirement in Model.PasswordPolicy.Requirements)
+                        {
+                            <li>@requirement</li>
+                        }
+                    </ul>
+                </div>
+
+                <div asp-validation-summary="ModelOnly" class="status error"></div>
+                <label>
+                    <span>User Name</span>
+                    <input asp-for="Input.UserName" autocomplete="username" autofocus />
+                    <span asp-validation-for="Input.UserName"></span>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input asp-for="Input.Password" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="Input.Password"></span>
+                </label>
+                <label>
+                    <span>Confirm Password</span>
+                    <input asp-for="Input.ConfirmPassword" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="Input.ConfirmPassword"></span>
+                </label>
+                <div class="actions split-actions">
+                    <button type="submit">Create Admin</button>
+                    <button type="submit" class="secondary-button" form="setup-back-form">Back</button>
+                </div>
+            </form>
+
+            <form id="setup-back-form" method="post" asp-page-handler="Back"></form>
+        }
+        else if (Model.IsCertificateStep)
+        {
+            <form method="post" asp-page-handler="ConfigureCertificate" enctype="multipart/form-data" class="setup-step form-grid">
+                <div class="setup-copy">
+                    <h2>Configure HTTPS</h2>
+                    <p>Choose the certificate Relaywright should use for the admin web interface. The saved certificate is loaded by HTTPS listeners after the service restarts.</p>
+                </div>
+
+                <div asp-validation-summary="ModelOnly" class="status error"></div>
+
+                <div class="certificate-choice-grid" data-certificate-modes>
+                    <label class="certificate-choice">
+                        <input asp-for="CertificateInput.Mode" type="radio" value="@AdminHttpsCertificateMode.SelfSigned" data-certificate-mode="selfsigned" />
+                        <span>
+                            <strong>Self-signed</strong>
+                            <small>Generate a local certificate for lab and test machines.</small>
+                        </span>
+                    </label>
+                    <label class="certificate-choice">
+                        <input asp-for="CertificateInput.Mode" type="radio" value="@AdminHttpsCertificateMode.Pfx" data-certificate-mode="pfx" />
+                        <span>
+                            <strong>PFX</strong>
+                            <small>Upload a `.pfx` or `.p12` certificate bundle.</small>
+                        </span>
+                    </label>
+                    <label class="certificate-choice">
+                        <input asp-for="CertificateInput.Mode" type="radio" value="@AdminHttpsCertificateMode.Pem" data-certificate-mode="pem" />
+                        <span>
+                            <strong>Cert + key</strong>
+                            <small>Upload PEM certificate and private key files.</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="certificate-panel" data-certificate-panel="selfsigned">
+                    <label>
+                        <span>DNS Names</span>
+                        <input asp-for="CertificateInput.SelfSignedDnsNames" />
+                    </label>
+                    <label>
+                        <span>Valid Years</span>
+                        <input asp-for="CertificateInput.SelfSignedValidYears" type="number" min="1" max="10" />
+                        <span asp-validation-for="CertificateInput.SelfSignedValidYears"></span>
+                    </label>
+                </div>
+
+                <div class="certificate-panel" data-certificate-panel="pfx" hidden>
+                    <label>
+                        <span>PFX File</span>
+                        <input asp-for="CertificateInput.PfxFile" type="file" accept=".pfx,.p12,application/x-pkcs12" />
+                    </label>
+                    <label>
+                        <span>PFX Password</span>
+                        <input asp-for="CertificateInput.PfxPassword" type="password" autocomplete="new-password" />
+                    </label>
+                </div>
+
+                <div class="certificate-panel" data-certificate-panel="pem" hidden>
+                    <label>
+                        <span>Certificate File</span>
+                        <input asp-for="CertificateInput.CertificateFile" type="file" accept=".crt,.cer,.pem,application/x-pem-file" />
+                    </label>
+                    <label>
+                        <span>Private Key File</span>
+                        <input asp-for="CertificateInput.KeyFile" type="file" accept=".key,.pem,application/x-pem-file" />
+                    </label>
+                    <label>
+                        <span>Private Key Password</span>
+                        <input asp-for="CertificateInput.KeyPassword" type="password" autocomplete="new-password" />
+                    </label>
+                </div>
+
+                <div class="setup-callout">
+                    <strong>Certificate privacy</strong>
+                    <p>Uploaded files are stored under the Relaywright data directory. Passwords are protected with the local Data Protection key ring and are never shown again.</p>
+                </div>
+
+                <div class="actions split-actions">
+                    <button type="submit">Save Certificate</button>
+                    <button type="submit" class="secondary-button" form="setup-skip-certificate-form">Skip for Now</button>
+                </div>
+            </form>
+
+            <form id="setup-skip-certificate-form" method="post" asp-page-handler="SkipCertificate"></form>
+        }
+        else if (Model.IsCompleteStep)
+        {
+            <div class="setup-step">
+                <div class="setup-copy">
+                    <h2>Setup complete</h2>
+                    <p>The initial administrator has been created and signed in. You can continue to the dashboard and start configuring the relay.</p>
+                </div>
+
+                <dl class="setup-summary">
+                    <div>
+                        <dt>Admin account</dt>
+                        <dd>@Model.DisplayAdminUserName</dd>
+                    </div>
+                    <div>
+                        <dt>HTTPS certificate</dt>
+                        <dd>
+                            @if (Model.ConfiguredCertificate is not null)
+                            {
+                                <span>@Model.ConfiguredCertificate.Mode certificate saved. Restart the service to make HTTPS listeners use it.</span>
+                            }
+                            else
+                            {
+                                <span>Skipped for now. The current deployment certificate remains in use.</span>
+                            }
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Completed steps</dt>
+                        <dd>Welcome, administrator account, HTTPS certificate, setup overview</dd>
+                    </div>
+                    <div>
+                        <dt>Next recommended step</dt>
+                        <dd>Review relay settings and trusted networks.</dd>
+                    </div>
+                </dl>
+
+                <ol class="setup-overview">
+                    <li class="is-complete">
+                        <span></span>
+                        <div>
+                            <strong>Welcome</strong>
+                            <p>Confirmed this is a new Relaywright instance.</p>
+                        </div>
+                    </li>
+                    <li class="is-complete">
+                        <span></span>
+                        <div>
+                            <strong>Admin account</strong>
+                            <p>Created the first local administrator.</p>
+                        </div>
+                    </li>
+                    <li class="@(Model.ConfiguredCertificate is not null ? "is-complete" : "is-active")">
+                        <span></span>
+                        <div>
+                            <strong>HTTPS certificate</strong>
+                            <p>@(Model.ConfiguredCertificate is not null ? "Saved a web interface certificate for the next service restart." : "Left the current deployment certificate in place.")</p>
+                        </div>
+                    </li>
+                    <li class="is-active">
+                        <span></span>
+                        <div>
+                            <strong>Overview</strong>
+                            <p>Reviewed the first-run setup result.</p>
+                        </div>
+                    </li>
+                </ol>
+
+                <div class="actions">
+                    <a class="button-link" asp-page="/Index">Open Dashboard</a>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const modeInputs = Array.from(document.querySelectorAll('[data-certificate-mode]'));
+            const panels = Array.from(document.querySelectorAll('[data-certificate-panel]'));
+
+            if (!modeInputs.length || !panels.length) {
+                return;
+            }
+
+            const syncPanels = () => {
+                const selected = modeInputs.find((input) => input.checked)?.dataset.certificateMode ?? 'selfsigned';
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.certificatePanel !== selected;
+                });
+            };
+
+            modeInputs.forEach((input) => input.addEventListener('change', syncPanels));
+            syncPanels();
+        })();
+    </script>
+}

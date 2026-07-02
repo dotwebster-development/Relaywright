@@ -11,6 +11,9 @@ message_rate_per_minute="10"
 restart_interval_minutes="5"
 upstream_outage_seconds="15"
 cleanup_after="true"
+smtp_timeout_seconds="30"
+submission_retry_count="3"
+max_retryable_submit_failures="20"
 sudo_password="${RELAYWRIGHT_LINUX_SOAK_VALIDATION_SUDO_PASSWORD:-${RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD:-${RELAYWRIGHT_SUDO_PASSWORD:-}}}"
 
 service_name="relaywright-soak"
@@ -23,6 +26,8 @@ capture_host="127.0.0.1"
 capture_port="2528"
 
 capture_pid=""
+retryable_submit_failures=0
+fatal_submit_failures=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -35,6 +40,9 @@ while [[ $# -gt 0 ]]; do
         --restart-interval-minutes) restart_interval_minutes="$2"; shift 2 ;;
         --upstream-outage-seconds) upstream_outage_seconds="$2"; shift 2 ;;
         --cleanup-after) cleanup_after="$2"; shift 2 ;;
+        --smtp-timeout-seconds) smtp_timeout_seconds="$2"; shift 2 ;;
+        --submission-retry-count) submission_retry_count="$2"; shift 2 ;;
+        --max-retryable-submit-failures) max_retryable_submit_failures="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -155,6 +163,8 @@ reset_soak_artifacts() {
         "$artifacts_directory"/queue-counts-*.txt \
         "$artifacts_directory"/queue-status-raw-*.txt \
         "$artifacts_directory"/service-*.txt \
+        "$artifacts_directory"/smtp-readiness-*.txt \
+        "$artifacts_directory"/submission-retries.log \
         "$artifacts_directory"/traffic-summary.txt \
         "$artifacts_directory"/validation-input-final.txt \
         "$artifacts_directory"/validation-input-failure.txt \
@@ -294,6 +304,61 @@ assert_http_disabled() {
     fi
 }
 
+assert_smtp_ready() {
+    local label="$1"
+    local transcript="$artifacts_directory/smtp-readiness-${label}.txt"
+    local deadline=$((SECONDS + 60))
+    local last_error=""
+    local output=""
+
+    while (( SECONDS < deadline )); do
+        if output="$(python3 - "$relay_smtp_port" "$smtp_timeout_seconds" "$transcript" <<'PY' 2>&1
+import pathlib
+import socket
+import sys
+
+port = int(sys.argv[1])
+timeout = float(sys.argv[2])
+transcript_path = pathlib.Path(sys.argv[3])
+transcript = []
+
+try:
+    with socket.create_connection(("127.0.0.1", port), timeout=timeout) as sock:
+        sock.settimeout(timeout)
+        smtp = sock.makefile("rwb", buffering=0)
+        greeting = smtp.readline()
+        if not greeting:
+            raise RuntimeError("connection closed before SMTP greeting")
+        greeting_text = greeting.decode("utf-8", "replace").rstrip("\r\n")
+        transcript.append(f"S: {greeting_text}")
+        if not greeting_text.startswith("220"):
+            raise RuntimeError(f"unexpected SMTP greeting: {greeting_text}")
+
+        transcript.append("C: QUIT")
+        smtp.write(b"QUIT\r\n")
+        smtp.flush()
+        response = smtp.readline()
+        if response:
+            transcript.append(f"S: {response.decode('utf-8', 'replace').rstrip(chr(13) + chr(10))}")
+except Exception as exc:
+    transcript.append(f"ERROR: {exc}")
+    transcript_path.write_text("\n".join(transcript) + "\n", encoding="utf-8")
+    print(exc, file=sys.stderr)
+    sys.exit(1)
+
+transcript_path.write_text("\n".join(transcript) + "\n", encoding="utf-8")
+PY
+)"; then
+            return
+        fi
+
+        last_error="$output"
+        sleep 2
+    done
+
+    die "SMTP listener on port $relay_smtp_port did not become ready after $label. Last error: $last_error"
+}
+
 run_installer() {
     local script_path
     script_path="$(installer_script_path)"
@@ -351,6 +416,7 @@ SQL
     "${SUDO[@]}" systemctl start "$service_name"
     wait_service_running
     assert_health
+    assert_smtp_ready "after-configure"
 }
 
 write_capture_server() {
@@ -447,16 +513,20 @@ write_smtp_client() {
     local script_path="$artifacts_directory/send_smtp.py"
     cat > "$script_path" <<'PY'
 import argparse
+import json
 import socket
 import sys
 from pathlib import Path
+
+class FatalSmtpError(RuntimeError):
+    pass
 
 def read_response(file, transcript):
     lines = []
     while True:
         line = file.readline()
         if not line:
-            raise RuntimeError("connection closed while waiting for SMTP response")
+            raise ConnectionError("connection closed while waiting for SMTP response")
         text = line.decode("utf-8", "replace").rstrip("\r\n")
         lines.append(text)
         transcript.append(f"S: {text}")
@@ -471,7 +541,26 @@ def send_command(file, transcript, command):
 
 def require(code, expected, step):
     if code not in expected:
-        raise RuntimeError(f"{step} returned SMTP {code}, expected {expected}")
+        expected_text = ", ".join(str(value) for value in sorted(expected))
+        raise FatalSmtpError(f"{step} returned SMTP {code}, expected {expected_text}")
+
+def write_result(path, status, stage, error, body_submitted):
+    if not path:
+        return
+
+    Path(path).write_text(
+        json.dumps(
+            {
+                "status": status,
+                "stage": stage,
+                "error": error,
+                "body_submitted": body_submitted,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 def main():
     parser = argparse.ArgumentParser()
@@ -480,23 +569,36 @@ def main():
     parser.add_argument("--subject", required=True)
     parser.add_argument("--body", required=True)
     parser.add_argument("--transcript", required=True)
+    parser.add_argument("--result", required=True)
+    parser.add_argument("--timeout", required=True, type=float)
     args = parser.parse_args()
 
     transcript = []
+    stage = "connect"
+    body_submitted = False
+    status = "fatal"
+    error = ""
+
     try:
-        with socket.create_connection((args.host, args.port), timeout=10) as sock:
-            sock.settimeout(10)
+        with socket.create_connection((args.host, args.port), timeout=args.timeout) as sock:
+            sock.settimeout(args.timeout)
             file = sock.makefile("rwb", buffering=0)
+            stage = "greeting"
             code, _ = read_response(file, transcript)
             require(code, {220}, "greeting")
+            stage = "ehlo"
             code, _ = send_command(file, transcript, "EHLO relaywright-soak.local")
             require(code, {250}, "EHLO")
+            stage = "mail_from"
             code, _ = send_command(file, transcript, "MAIL FROM:<soak-sender@example.test>")
             require(code, {250}, "MAIL FROM")
+            stage = "rcpt_to"
             code, _ = send_command(file, transcript, "RCPT TO:<soak-recipient@example.test>")
             require(code, {250}, "RCPT TO")
+            stage = "data_command"
             code, _ = send_command(file, transcript, "DATA")
             require(code, {354}, "DATA")
+            stage = "message_body"
             message = (
                 f"Subject: {args.subject}\r\n"
                 "From: soak-sender@example.test\r\n"
@@ -506,21 +608,34 @@ def main():
                 ".\r\n"
             )
             transcript.append("C: <message body>")
+            body_submitted = True
             file.write(message.encode("utf-8"))
             file.flush()
+            stage = "final_acceptance"
             code, _ = read_response(file, transcript)
             require(code, {250}, "message body")
+            status = "accepted"
+            stage = "quit"
             try:
                 send_command(file, transcript, "QUIT")
             except Exception:
                 pass
+    except FatalSmtpError as exc:
+        error = str(exc)
     except Exception as exc:
+        status = "fatal" if body_submitted else "retryable"
+        error = str(exc)
         transcript.append(f"ERROR: {exc}")
         Path(args.transcript).write_text("\n".join(transcript) + "\n", encoding="utf-8")
+        write_result(args.result, status, stage, error, body_submitted)
         return 1
 
     Path(args.transcript).write_text("\n".join(transcript) + "\n", encoding="utf-8")
-    return 0
+    if error:
+        transcript.append(f"ERROR: {error}")
+        Path(args.transcript).write_text("\n".join(transcript) + "\n", encoding="utf-8")
+    write_result(args.result, status, stage, error, body_submitted)
+    return 0 if status == "accepted" else 1
 
 if __name__ == "__main__":
     sys.exit(main())
@@ -571,17 +686,121 @@ PY
     die "Capture SMTP server did not start."
 }
 
+smtp_result_value() {
+    local result_path="$1"
+    local key="$2"
+    python3 - "$result_path" "$key" <<'PY'
+import json
+import sys
+
+result_path = sys.argv[1]
+key = sys.argv[2]
+
+try:
+    with open(result_path, encoding="utf-8") as result_file:
+        result = json.load(result_file)
+    print(result.get(key, ""))
+except Exception as exc:
+    if key == "status":
+        print("fatal")
+    elif key == "stage":
+        print("unknown")
+    elif key == "error":
+        print(f"missing or invalid result file: {exc}")
+    else:
+        print("")
+PY
+}
+
+retry_backoff_seconds() {
+    local retry_number="$1"
+    case "$retry_number" in
+        1) printf '5' ;;
+        2) printf '10' ;;
+        *) printf '20' ;;
+    esac
+}
+
+merge_smtp_transcripts() {
+    local final_transcript="$1"
+    local sequence="$2"
+    local kind="$3"
+    local last_attempt="$4"
+
+    {
+        local attempt
+        for (( attempt = 1; attempt <= last_attempt; attempt++ )); do
+            local attempt_transcript="$artifacts_directory/transcripts/${sequence}-${kind}-attempt${attempt}.txt"
+            [[ -f "$attempt_transcript" ]] || continue
+            echo "=== attempt $attempt ==="
+            cat "$attempt_transcript"
+        done
+    } > "$final_transcript"
+}
+
 send_message() {
     local sequence="$1"
     local kind="$2"
-    local transcript="$artifacts_directory/transcripts/${sequence}-${kind}.txt"
+    local final_transcript="$artifacts_directory/transcripts/${sequence}-${kind}.txt"
+    local max_attempts=$((submission_retry_count + 1))
+    local attempt=1
+
     mkdir -p "$artifacts_directory/transcripts"
-    python3 "$artifacts_directory/send_smtp.py" \
-        --host "127.0.0.1" \
-        --port "$relay_smtp_port" \
-        --subject "Relaywright soak $kind $sequence" \
-        --body "Relaywright soak validation message $sequence ($kind)." \
-        --transcript "$transcript"
+
+    while (( attempt <= max_attempts )); do
+        local attempt_transcript="$artifacts_directory/transcripts/${sequence}-${kind}-attempt${attempt}.txt"
+        local result_path="$artifacts_directory/transcripts/${sequence}-${kind}-attempt${attempt}.json"
+        rm -f "$result_path"
+
+        if python3 "$artifacts_directory/send_smtp.py" \
+            --host "127.0.0.1" \
+            --port "$relay_smtp_port" \
+            --subject "Relaywright soak $kind $sequence" \
+            --body "Relaywright soak validation message $sequence ($kind)." \
+            --transcript "$attempt_transcript" \
+            --result "$result_path" \
+            --timeout "$smtp_timeout_seconds"; then
+            merge_smtp_transcripts "$final_transcript" "$sequence" "$kind" "$attempt"
+            return 0
+        fi
+
+        local status
+        local stage
+        local error
+        status="$(smtp_result_value "$result_path" status)"
+        stage="$(smtp_result_value "$result_path" stage)"
+        error="$(smtp_result_value "$result_path" error)"
+
+        printf 'sequence=%s kind=%s attempt=%s status=%s stage=%s error=%s\n' \
+            "$sequence" "$kind" "$attempt" "$status" "$stage" "$error" \
+            >> "$artifacts_directory/submission-retries.log"
+
+        if [[ "$status" == "retryable" ]]; then
+            retryable_submit_failures=$((retryable_submit_failures + 1))
+            if (( retryable_submit_failures > max_retryable_submit_failures )); then
+                fatal_submit_failures=$((fatal_submit_failures + 1))
+                merge_smtp_transcripts "$final_transcript" "$sequence" "$kind" "$attempt"
+                return 1
+            fi
+
+            if (( attempt < max_attempts )); then
+                local backoff
+                backoff="$(retry_backoff_seconds "$attempt")"
+                write_step "Retryable SMTP submit failure for $kind message $sequence at $stage; retrying in ${backoff}s"
+                sleep "$backoff"
+                attempt=$((attempt + 1))
+                continue
+            fi
+        fi
+
+        fatal_submit_failures=$((fatal_submit_failures + 1))
+        merge_smtp_transcripts "$final_transcript" "$sequence" "$kind" "$attempt"
+        return 1
+    done
+
+    fatal_submit_failures=$((fatal_submit_failures + 1))
+    merge_smtp_transcripts "$final_transcript" "$sequence" "$kind" "$max_attempts"
+    return 1
 }
 
 count_captured_messages() {
@@ -638,6 +857,26 @@ restart_relaywright() {
     "${SUDO[@]}" systemctl restart "$service_name"
     wait_service_running
     assert_health
+    assert_smtp_ready "after-restart-${SECONDS}"
+}
+
+write_traffic_summary() {
+    local attempted="$1"
+    local accepted="$2"
+
+    write_artifact traffic-summary.txt "attempted_logical_messages=$attempted
+accepted_messages=$accepted
+retryable_pre_accept_failures=$retryable_submit_failures
+fatal_failures=$fatal_submit_failures
+attempted=$attempted
+accepted=$accepted
+duration_minutes=$duration_minutes
+message_rate_per_minute=$message_rate_per_minute
+restart_interval_minutes=$restart_interval_minutes
+upstream_outage_seconds=$upstream_outage_seconds
+smtp_timeout_seconds=$smtp_timeout_seconds
+submission_retry_count=$submission_retry_count
+max_retryable_submit_failures=$max_retryable_submit_failures"
 }
 
 run_traffic() {
@@ -645,9 +884,15 @@ run_traffic() {
     validate_positive_integer "$message_rate_per_minute" "message_rate_per_minute"
     validate_positive_integer "$restart_interval_minutes" "restart_interval_minutes"
     validate_positive_integer "$upstream_outage_seconds" "upstream_outage_seconds"
+    validate_positive_integer "$smtp_timeout_seconds" "smtp_timeout_seconds"
+    validate_positive_integer "$submission_retry_count" "submission_retry_count"
+    validate_positive_integer "$max_retryable_submit_failures" "max_retryable_submit_failures"
     (( duration_minutes > 0 )) || die "duration_minutes must be greater than zero."
     (( message_rate_per_minute > 0 )) || die "message_rate_per_minute must be greater than zero."
+    (( smtp_timeout_seconds > 0 )) || die "smtp_timeout_seconds must be greater than zero."
 
+    retryable_submit_failures=0
+    fatal_submit_failures=0
     write_smtp_client
 
     local duration_seconds=$((duration_minutes * 60))
@@ -678,6 +923,7 @@ run_traffic() {
             if send_message "$sequence" "upstream-outage"; then
                 accepted=$((accepted + 1))
             else
+                write_traffic_summary "$sequence" "$accepted"
                 die "Relaywright did not accept message during upstream outage. See transcript $sequence-upstream-outage.txt."
             fi
             sleep "$upstream_outage_seconds"
@@ -689,23 +935,19 @@ run_traffic() {
         if send_message "$sequence" "normal"; then
             accepted=$((accepted + 1))
         else
+            write_traffic_summary "$sequence" "$accepted"
             die "Relaywright did not accept normal soak message $sequence."
         fi
 
         sleep "$sleep_interval"
     done
 
-    write_artifact traffic-summary.txt "attempted=$sequence
-accepted=$accepted
-duration_minutes=$duration_minutes
-message_rate_per_minute=$message_rate_per_minute
-restart_interval_minutes=$restart_interval_minutes
-upstream_outage_seconds=$upstream_outage_seconds"
+    write_traffic_summary "$sequence" "$accepted"
     write_queue_counts "queue-counts-after-traffic.txt"
 }
 
 accepted_message_count() {
-    awk -F= '$1 == "accepted" {print $2}' "$artifacts_directory/traffic-summary.txt"
+    awk -F= '$1 == "accepted_messages" {print $2; exit} $1 == "accepted" {accepted=$2} END { if (accepted != "") print accepted }' "$artifacts_directory/traffic-summary.txt"
 }
 
 wait_for_queue_to_drain() {
@@ -730,7 +972,7 @@ wait_for_queue_to_drain() {
         expired="$(queue_count_for_status 5)"
         captured="$(count_captured_messages)"
 
-        if (( delivered >= accepted && captured >= accepted && pending == 0 && in_progress == 0 && retry_scheduled == 0 && failed == 0 && expired == 0 )); then
+        if (( delivered == accepted && captured == accepted && pending == 0 && in_progress == 0 && retry_scheduled == 0 && failed == 0 && expired == 0 )); then
             write_queue_counts "queue-counts-final.txt"
             return
         fi
@@ -751,6 +993,11 @@ save_diagnostics() {
         echo "message_rate_per_minute=$message_rate_per_minute"
         echo "restart_interval_minutes=$restart_interval_minutes"
         echo "upstream_outage_seconds=$upstream_outage_seconds"
+        echo "smtp_timeout_seconds=$smtp_timeout_seconds"
+        echo "submission_retry_count=$submission_retry_count"
+        echo "max_retryable_submit_failures=$max_retryable_submit_failures"
+        echo "retryable_pre_accept_failures=$retryable_submit_failures"
+        echo "fatal_failures=$fatal_submit_failures"
         echo "service_name=$service_name"
         echo "install_root=$install_root"
         echo "data_directory=$data_directory"
@@ -797,6 +1044,9 @@ duration_minutes=$duration_minutes
 message_rate_per_minute=$message_rate_per_minute
 restart_interval_minutes=$restart_interval_minutes
 upstream_outage_seconds=$upstream_outage_seconds
+smtp_timeout_seconds=$smtp_timeout_seconds
+submission_retry_count=$submission_retry_count
+max_retryable_submit_failures=$max_retryable_submit_failures
 cleanup_after=$cleanup_after"
 
 case "$mode" in

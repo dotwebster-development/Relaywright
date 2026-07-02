@@ -6,7 +6,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Services.Runtime;
+using Relaywright.Web.Services.Security;
+using Relaywright.Web.Tests.Support;
 using Xunit;
 
 using DashboardIndexModel = Relaywright.Web.Pages.IndexModel;
@@ -32,6 +36,27 @@ public sealed class RazorPageOrderingTests
     }
 
     [Fact]
+    public async Task QueuePagePaginatesInSqliteOrder()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var ids = new List<Guid>();
+        var start = DateTimeOffset.UtcNow.AddHours(-1);
+        for (var i = 0; i < 55; i++)
+        {
+            ids.Add(await fixture.AddQueuedMessageAsync(start.AddMinutes(i)));
+        }
+
+        var model = fixture.CreateQueueModel();
+        model.PageNumber = 2;
+
+        await model.OnGetAsync(null, CancellationToken.None);
+
+        Assert.Equal(55, model.TotalCount);
+        Assert.Equal(2, model.TotalPages);
+        Assert.Equal(ids.Take(5).Reverse(), model.Messages.Select(x => x.Id));
+    }
+
+    [Fact]
     public async Task LogsPageOrdersEventsByOccurredUtcWithSqlite()
     {
         await using var fixture = await PageFixture.CreateAsync();
@@ -46,6 +71,26 @@ public sealed class RazorPageOrderingTests
     }
 
     [Fact]
+    public async Task LogsPagePaginatesInSqliteOrder()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var start = DateTimeOffset.UtcNow.AddHours(-1);
+        for (var i = 0; i < 55; i++)
+        {
+            await fixture.AddOperationalEventAsync($"event-{i}", start.AddMinutes(i));
+        }
+
+        var model = fixture.CreateLogsModel();
+        model.PageNumber = 2;
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal(55, model.TotalCount);
+        Assert.Equal(2, model.TotalPages);
+        Assert.Equal(Enumerable.Range(0, 5).Reverse().Select(x => $"event-{x}"), model.Events.Select(x => x.Message));
+    }
+
+    [Fact]
     public async Task DashboardOrdersRecentEventsByOccurredUtcWithSqlite()
     {
         await using var fixture = await PageFixture.CreateAsync();
@@ -56,6 +101,25 @@ public sealed class RazorPageOrderingTests
         await model.OnGetAsync(CancellationToken.None);
 
         Assert.Equal(["newer", "older"], model.RecentEvents.Select(x => x.Message));
+    }
+
+    [Fact]
+    public async Task DashboardLoadsSuspiciousLoginSummary()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var summary = new SuspiciousLoginSummary(
+            true,
+            FailedLast15Minutes: 5,
+            FailedLast24Hours: 5,
+            MostActiveRemoteIpAddress: "203.0.113.10",
+            MostActiveRemoteIpFailureCount: 3,
+            [new SuspiciousLoginFinding("Failed logins", "5 failed admin sign-ins in the last 15 minutes.", "severity-warning")]);
+        var model = fixture.CreateDashboardModel(summary);
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.True(model.SuspiciousLogins.IsSuspicious);
+        Assert.Equal(5, model.SuspiciousLogins.FailedLast15Minutes);
     }
 
     private sealed class PageFixture : IAsyncDisposable
@@ -127,6 +191,8 @@ public sealed class RazorPageOrderingTests
         {
             return AttachPageContext(new QueueIndexModel(
                 _dbContextFactory,
+                new TestQueueService(),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<QueueIndexModel>.Instance));
         }
 
@@ -134,14 +200,19 @@ public sealed class RazorPageOrderingTests
         {
             return AttachPageContext(new LogsIndexModel(
                 _dbContextFactory,
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<LogsIndexModel>.Instance));
         }
 
-        public DashboardIndexModel CreateDashboardModel()
+        public DashboardIndexModel CreateDashboardModel(SuspiciousLoginSummary? suspiciousLogins = null)
         {
             return AttachPageContext(new DashboardIndexModel(
                 _dbContextFactory,
                 new TestRelayConfigurationService(),
+                new StaticRuntimeStatusService(),
+                new TestDashboardMetricsService(),
+                new TestAdminSecurityActivityService(suspiciousLogins),
+                TestDatabaseConfiguration.Sqlite,
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
@@ -187,5 +258,54 @@ public sealed class RazorPageOrderingTests
         {
             throw new NotSupportedException();
         }
+    }
+
+    private sealed class TestDashboardMetricsService : IDashboardMetricsService
+    {
+        public Task<DashboardMetricsSnapshot> GetSnapshotAsync(
+            RelayConfigurationSnapshot configuration,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new DashboardMetricsSnapshot());
+        }
+    }
+
+    private sealed class TestAdminSecurityActivityService(SuspiciousLoginSummary? suspiciousLogins = null) : IAdminSecurityActivityService
+    {
+        public Task<AdminLoginActivitySummary> GetLoginActivityAsync(
+            string? userName,
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new AdminLoginActivitySummary(userName, null, null, 0, 0));
+        }
+
+        public Task<SuspiciousLoginSummary> GetSuspiciousLoginSummaryAsync(
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(suspiciousLogins ?? SuspiciousLoginSummary.Empty);
+        }
+    }
+
+    private sealed class TestQueueService : IMessageQueueService
+    {
+        public Task EnqueueAsync(NewQueuedMessageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<DeliveryWorkItem?> TryClaimNextAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task MarkDeliveredAsync(DeliveryWorkItem workItem, DeliveryResult result, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task MarkFailedAsync(DeliveryWorkItem workItem, DeliveryResult result, RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueActionResult> RetryNowAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

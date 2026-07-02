@@ -1,0 +1,163 @@
+@page
+@model Relaywright.Web.Pages.Operations.BackupsModel
+@{
+    ViewData["Title"] = "Backups";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">System</p>
+            <h1>Backups</h1>
+            <p class="page-summary">Create, validate, and restore backup bundles for the database, spool, certificates, and listener configuration.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    <section class="panel">
+        <h2>Restore Readiness</h2>
+        <dl class="kv">
+            <dt>Status</dt>
+            <dd><span class="status-badge @(Model.Readiness.IsReady ? "status-delivered" : "severity-warning")">@(Model.Readiness.IsReady ? "Ready" : "Needs attention")</span></dd>
+            <dt>Last Good Backup</dt>
+            <dd>@(Model.Readiness.LastGoodBackupUtc?.ToLocalTime().ToString("g") ?? "None")</dd>
+            <dt>Age</dt>
+            <dd>@(Model.Readiness.LastGoodBackupAgeHours is null ? "Not available" : $"{Model.Readiness.LastGoodBackupAgeHours} hour(s)")</dd>
+            <dt>Stale After</dt>
+            <dd>@Model.Readiness.StaleAfterHours hour(s)</dd>
+            <dt>Backup Storage</dt>
+            <dd>@Relaywright.Web.Pages.IndexModel.FormatBytes(Model.Readiness.BackupStorageBytes)</dd>
+            <dt>Message</dt>
+            <dd>@Model.Readiness.Message</dd>
+        </dl>
+    </section>
+
+    <section class="settings-block">
+        <div class="settings-block-title">Manual Backup</div>
+        <form method="post" asp-page-handler="Create" class="compact-grid">
+            <label class="span-2">
+                <span>Encryption Password</span>
+                <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional one-time password" />
+            </label>
+            <div class="actions compact-actions">
+                <button type="submit">Create Backup</button>
+            </div>
+        </form>
+        <p class="field-hint">Creates a backup file in the configured backup storage. Use the history table to download, validate, or delete it.</p>
+    </section>
+
+    <section class="settings-block">
+        <div class="settings-block-title">Schedule</div>
+        <form method="post" asp-page-handler="SaveSchedule" class="compact-grid">
+            <div class="toggle-field">
+                <label class="switch-control">
+                    <input asp-for="Schedule.IsEnabled" type="checkbox" />
+                    <span class="switch-control-track" aria-hidden="true"></span>
+                    <span>Scheduled Backups</span>
+                </label>
+            </div>
+            <label>
+                <span>Interval (Hours)</span>
+                <input asp-for="Schedule.IntervalHours" type="number" />
+            </label>
+            <label>
+                <span>Retention Count</span>
+                <input asp-for="Schedule.RetentionCount" type="number" />
+            </label>
+            <div class="actions compact-actions">
+                <button type="submit">Save Schedule</button>
+            </div>
+        </form>
+        <p class="field-hint">Manual backups can be encrypted with a one-time password. The password is not stored, so scheduled backups remain unencrypted.</p>
+    </section>
+
+    <section class="settings-block">
+        <div class="settings-block-title">Restore</div>
+        <form method="post" asp-page-handler="StageRestore" enctype="multipart/form-data" class="compact-grid">
+            <label>
+                <span>Backup File</span>
+                <input asp-for="RestoreBackupFile" type="file" accept=".zip,.rwbak,application/zip,application/octet-stream" />
+            </label>
+            <label>
+                <span>Encryption Password</span>
+                <input asp-for="RestoreEncryptionPassword" type="password" autocomplete="new-password" placeholder="Required for encrypted backups" />
+            </label>
+            <div class="actions compact-actions">
+                <button type="submit">Stage Restore</button>
+            </div>
+        </form>
+        <p class="status warning">Restore replaces the database, spool, certificates, and listener settings after restart. Admin accounts, admin passwords, protected relay secrets, Data Protection keys, and admin HTTPS certificate passwords are not restored.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Backup History</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Started</th>
+                        <th>Status</th>
+                        <th>File</th>
+                        <th>Protection</th>
+                        <th>Size</th>
+                        <th>Validation</th>
+                        <th>Message</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.Runs.Count == 0)
+                {
+                    <tr class="empty-row">
+                        <td colspan="8" class="table-empty">No backups recorded</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var run in Model.Runs)
+                    {
+                        <tr>
+                            <td>@run.StartedUtc.ToLocalTime()</td>
+                            <td><span class="status-badge status-@(run.Status == BackupRunStatus.Succeeded ? "delivered" : run.Status == BackupRunStatus.Failed ? "failed" : run.Status == BackupRunStatus.Deleted ? "disabled" : "inprogress")">@StatusLabels.For(run.Status)</span></td>
+                            <td>@run.FileName</td>
+                            <td><span class="status-badge @(run.IsEncrypted ? "status-enabled" : "status-disabled")">@(run.IsEncrypted ? "Encrypted" : "Unencrypted")</span></td>
+                            <td>@(run.FileSizeBytes is null ? null : $"{run.FileSizeBytes / 1024} KB")</td>
+                            <td>
+                                @if (run.LastValidationSucceeded is not null)
+                                {
+                                    <span class="status-badge @(run.LastValidationSucceeded.Value ? "status-delivered" : "status-failed")">@(run.LastValidationSucceeded.Value ? "Valid" : "Invalid")</span>
+                                }
+                            </td>
+                            <td>@(run.LastValidationMessage ?? run.Message)</td>
+                            <td>
+                                <div class="row-actions">
+                                    @if (run.Status == BackupRunStatus.Succeeded)
+                                    {
+                                        <a asp-page-handler="Download" asp-route-id="@run.Id">Download</a>
+                                        <form method="post" asp-page-handler="Validate" asp-route-id="@run.Id" class="inline-form">
+                                            @if (run.IsEncrypted)
+                                            {
+                                                <input name="ValidationPassword" type="password" autocomplete="new-password" placeholder="Password" />
+                                            }
+                                            <button type="submit" class="secondary-button">Validate</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="Delete" asp-route-id="@run.Id" class="inline-form" onsubmit="return confirm('Delete this backup file?');">
+                                            <button type="submit" class="secondary-button">Delete</button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

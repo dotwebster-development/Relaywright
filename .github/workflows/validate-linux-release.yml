@@ -21,6 +21,14 @@ on:
         description: "Baseline version for update-package/full-release mode, without leading v"
         required: false
         default: ""
+      runner_architecture:
+        description: "Self-hosted runner architecture label"
+        required: true
+        default: "X64"
+        type: choice
+        options:
+          - X64
+          - ARM64
 
 permissions:
   contents: read
@@ -34,7 +42,7 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
-      - X64
+      - ${{ inputs.runner_architecture }}
       - relaywright
       - test
     environment: linux-installer-test

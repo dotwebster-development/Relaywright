@@ -2,6 +2,7 @@
 @{
     var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
     var navState = isAuthenticated ? AppNavigation.Resolve(Context.Request.Path) : null;
+    var appVersion = Relaywright.Web.Infrastructure.ApplicationVersion.DisplayVersion;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -9,6 +10,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Relaywright</title>
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
     <link rel="stylesheet" href="~/css/site.css" />
 </head>
 <body>
@@ -18,7 +20,9 @@
             <div class="app-overlay" data-nav-dismiss></div>
             <aside class="app-rail" id="app-rail">
                 <div class="rail-brand">
-                    <a class="rail-brand-mark" asp-page="/Index" aria-label="Relaywright home">RW</a>
+                    <a class="rail-brand-mark" asp-page="/Index" aria-label="Relaywright home">
+                        <img src="~/brand/relaywright-mark.svg" alt="" />
+                    </a>
                     <div class="rail-brand-copy">
                         <p class="rail-brand-kicker">Relaywright</p>
                         <p class="rail-brand-note">Local forwarding console</p>
@@ -38,8 +42,14 @@
                 </nav>
 
                 <div class="rail-footer">
-                    <p class="rail-footer-title">Single-upstream relay</p>
-                    <p class="rail-footer-copy">Stable routing, IP filtering, queue visibility, and diagnostics in one workspace.</p>
+                    <p class="rail-version">Relaywright v@appVersion</p>
+                    <div class="rail-account">
+                        <p class="rail-account-label">Signed in</p>
+                        <p class="rail-account-user">@User.Identity?.Name</p>
+                        <form method="post" asp-page="/Account/Logout" class="rail-account-form">
+                            <button type="submit" class="secondary-button">Logout</button>
+                        </form>
+                    </div>
                 </div>
             </aside>
         }
@@ -47,27 +57,13 @@
         <div class="workspace">
             @if (isAuthenticated && navState is not null)
             {
-                <header class="utility-bar">
-                    <div class="utility-context">
+                <nav class="section-nav" aria-label="@($"{navState.ActiveSection.Label} pages")">
+                    <div class="section-nav-heading">
                         <button type="button" class="nav-toggle" data-nav-toggle aria-controls="app-rail" aria-expanded="false">
                             Menu
                         </button>
-                        <div>
-                            <p class="utility-kicker">@navState.ActiveSection.Label</p>
-                            <p class="utility-copy">@navState.ActiveSection.Description</p>
-                        </div>
+                        <div class="section-nav-label">@navState.ActiveSection.Label</div>
                     </div>
-                    <div class="utility-actions">
-                        <span class="utility-user">@User.Identity?.Name</span>
-                        <a class="utility-link" asp-page="/Account/ChangePassword">Password</a>
-                        <form method="post" asp-page="/Account/Logout" class="inline-form">
-                            <button type="submit" class="secondary-button">Logout</button>
-                        </form>
-                    </div>
-                </header>
-
-                <nav class="section-nav" aria-label="@($"{navState.ActiveSection.Label} pages")">
-                    <div class="section-nav-label">@navState.ActiveSection.Label</div>
                     <div class="section-nav-items">
                         @foreach (var item in navState.ActiveSection.Items)
                         {
@@ -76,12 +72,30 @@
                                aria-current="@(navState.IsItemActive(item) ? "page" : null)">@item.Label</a>
                         }
                     </div>
+                    <div class="settings-search" data-settings-search>
+                        <input type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off" data-settings-search-input />
+                        <div class="settings-search-results" data-settings-search-results hidden>
+                            @foreach (var item in navState.SettingsSearchItems)
+                            {
+                                <a asp-page="@item.Page"
+                                   data-settings-search-item
+                                   data-settings-search-text="@($"{item.Label} {item.Group} {item.Keywords}")">
+                                    <span>@item.Label</span>
+                                    <small>@item.Group</small>
+                                </a>
+                            }
+                            <div class="settings-search-empty" data-settings-search-empty hidden>No matching settings</div>
+                        </div>
+                    </div>
                 </nav>
             }
             else
             {
                 <header class="public-header">
-                    <a class="public-brand" asp-page="/Index">Relaywright</a>
+                    <a class="public-brand" asp-page="/Index">
+                        <img src="~/brand/relaywright-mark.svg" alt="" />
+                        <span>Relaywright</span>
+                    </a>
                 </header>
             }
 
@@ -142,6 +156,89 @@
             } else {
                 desktopMedia.addListener(handleDesktopChange);
             }
+        })();
+
+        (() => {
+            const root = document.querySelector('[data-settings-search]');
+            if (!root) {
+                return;
+            }
+
+            const input = root.querySelector('[data-settings-search-input]');
+            const results = root.querySelector('[data-settings-search-results]');
+            const items = Array.from(root.querySelectorAll('[data-settings-search-item]'));
+            const empty = root.querySelector('[data-settings-search-empty]');
+
+            if (!input || !results || items.length === 0) {
+                return;
+            }
+
+            const normalize = (value) => value.trim().toLowerCase();
+            const visibleItems = () => items.filter((item) => !item.hidden);
+
+            const setOpen = (isOpen) => {
+                results.hidden = !isOpen;
+                input.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            };
+
+            const update = () => {
+                const query = normalize(input.value);
+                let matchCount = 0;
+
+                items.forEach((item) => {
+                    const haystack = normalize(item.dataset.settingsSearchText ?? item.textContent ?? '');
+                    const isMatch = query.length > 0 && haystack.includes(query);
+                    item.hidden = !isMatch;
+                    if (isMatch) {
+                        matchCount++;
+                    }
+                });
+
+                if (empty) {
+                    empty.hidden = query.length === 0 || matchCount > 0;
+                }
+
+                setOpen(query.length > 0);
+            };
+
+            input.addEventListener('input', update);
+            input.addEventListener('focus', update);
+            input.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    input.value = '';
+                    update();
+                    input.blur();
+                    return;
+                }
+
+                if (event.key === 'Enter') {
+                    const first = visibleItems()[0];
+                    if (first) {
+                        event.preventDefault();
+                        first.click();
+                    }
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!root.contains(event.target)) {
+                    setOpen(false);
+                }
+            });
+        })();
+
+        (() => {
+            const statusMessages = document.querySelectorAll('[data-dismissible-status]');
+            if (statusMessages.length === 0) {
+                return;
+            }
+
+            statusMessages.forEach((message) => {
+                const dismissButton = message.querySelector('[data-status-dismiss]');
+                dismissButton?.addEventListener('click', () => {
+                    message.remove();
+                });
+            });
         })();
     </script>
     @await RenderSectionAsync("Scripts", required: false)

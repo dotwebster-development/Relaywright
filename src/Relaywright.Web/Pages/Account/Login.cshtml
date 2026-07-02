@@ -6,30 +6,44 @@
 }
 
 <section class="page narrow">
-    <h1>Login</h1>
+    <section class="panel">
+        <h1>Login</h1>
 
-    <form method="post" class="form-grid">
-        <div asp-validation-summary="ModelOnly" class="status error"></div>
-        <input asp-for="Input.ReturnUrl" type="hidden" />
-        <label>
-            <span>User Name</span>
-            <input asp-for="Input.UserName" autocomplete="username" />
-        </label>
-        <label>
-            <span>Password</span>
-            <input asp-for="Input.Password" type="password" autocomplete="current-password" />
-        </label>
-        <label class="checkbox">
-            <input asp-for="Input.RememberMe" type="checkbox" />
-            <span>Remember me</span>
-        </label>
-        <div class="actions">
-            <button type="submit">Sign In</button>
+        <form method="post" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+            <input asp-for="Input.ReturnUrl" type="hidden" />
+            <label>
+                <span>User Name</span>
+                <input asp-for="Input.UserName" autocomplete="username" />
+            </label>
+            <label>
+                <span>Password</span>
+                <input asp-for="Input.Password" type="password" autocomplete="current-password" />
+            </label>
+            <label class="switch-control">
+                <input asp-for="Input.RememberMe" type="checkbox" />
+                <span class="switch-control-track" aria-hidden="true"></span>
+                <span>Remember me</span>
+            </label>
+            <div class="actions">
+                <button type="submit">Sign In</button>
+            </div>
+        </form>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status dismissible-status" data-dismissible-status role="status" aria-live="polite">
+            <p class="status ok">@Model.StatusMessage</p>
+            <button type="button" class="status-dismiss" data-status-dismiss aria-label="Dismiss status message">x</button>
         </div>
-    </form>
+    }
 
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <p class="status error">@Model.ErrorMessage</p>
+        <div class="surface-status dismissible-status" data-dismissible-status role="alert" aria-live="assertive">
+            <p class="status error">@Model.ErrorMessage</p>
+            <button type="button" class="status-dismiss" data-status-dismiss aria-label="Dismiss error message">x</button>
+        </div>
     }
 </section>

@@ -3,27 +3,46 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Identity;
+using Relaywright.Web.Services.Events;
+using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages.Account;
 
 [AllowAnonymous]
 public sealed class LoginModel(
+    UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
+    IOperationalEventService eventService,
     ILogger<LoginModel> logger) : PageModel
 {
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     public string? ErrorMessage { get; private set; }
 
-    public void OnGet(string? returnUrl = null)
+    public async Task<IActionResult> OnGetAsync(string? returnUrl = null, CancellationToken cancellationToken = default)
     {
+        if (!await userManager.Users.AnyAsync(cancellationToken))
+        {
+            return RedirectToPage("/Account/Setup");
+        }
+
         Input.ReturnUrl = returnUrl;
+        return Page();
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
+        if (!await userManager.Users.AnyAsync(cancellationToken))
+        {
+            return RedirectToPage("/Account/Setup");
+        }
+
         if (!ModelState.IsValid)
         {
             return Page();
@@ -37,6 +56,11 @@ public sealed class LoginModel(
 
         if (result.Succeeded)
         {
+            await eventService.WriteAsync(AdminLoginSecurityEvent.Success(
+                Input.UserName,
+                Input.RememberMe,
+                HttpContext.Connection.RemoteIpAddress?.ToString()).ToOperationalEventRequest(), cancellationToken);
+
             logger.LogInformation(
                 "Admin sign-in succeeded. UserName={UserName}; RememberMe={RememberMe}; RemoteIp={RemoteIp}; ReturnUrlPresent={ReturnUrlPresent}",
                 Input.UserName,
@@ -64,8 +88,34 @@ public sealed class LoginModel(
                 result.RequiresTwoFactor);
         }
 
+        await eventService.WriteAsync(AdminLoginSecurityEvent.Failure(
+            Input.UserName,
+            Input.RememberMe,
+            GetFailureResult(result),
+            HttpContext.Connection.RemoteIpAddress?.ToString()).ToOperationalEventRequest(), cancellationToken);
+
         ErrorMessage = "Invalid user name or password.";
         return Page();
+    }
+
+    private static string GetFailureResult(Microsoft.AspNetCore.Identity.SignInResult result)
+    {
+        if (result.IsLockedOut)
+        {
+            return "LockedOut";
+        }
+
+        if (result.IsNotAllowed)
+        {
+            return "NotAllowed";
+        }
+
+        if (result.RequiresTwoFactor)
+        {
+            return "RequiresTwoFactor";
+        }
+
+        return "InvalidCredentials";
     }
 
     public sealed class InputModel

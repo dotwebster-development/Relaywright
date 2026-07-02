@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches:
+      - development
       - main
       - master
   pull_request:
@@ -13,10 +14,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -29,5 +30,92 @@ jobs:
       - name: Test
         run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --no-build
 
-      - name: Vulnerability report
-        run: dotnet list Relaywright.sln package --vulnerable --include-transitive
+      - name: Vulnerability gate
+        shell: pwsh
+        run: |
+          $report = dotnet list Relaywright.sln package --vulnerable --include-transitive 2>&1
+          $report | Write-Output
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          if ($report -match "has the following vulnerable packages") {
+            throw "Vulnerable packages detected."
+          }
+
+  provider-integration-sqlserver:
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Relaywright!23456"
+        ports:
+          - 1433:1433
+
+    env:
+      RELAYWRIGHT_TEST_SQLSERVER_CONNECTION_STRING: "Server=127.0.0.1,1433;Database=RelaywrightProviderTests;User Id=sa;Password=Relaywright!23456;Encrypt=True;TrustServerCertificate=True"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Wait for SQL Server
+        shell: bash
+        run: |
+          timeout 180 bash -c 'until echo > /dev/tcp/127.0.0.1/1433; do sleep 2; done'
+          sleep 20
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        run: dotnet build Relaywright.sln --no-restore
+
+      - name: Test SQL Server provider
+        run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --no-build --filter "FullyQualifiedName~DatabaseProviderIntegrationTests.SqlServerProviderCanInitializeSeedAndRunCoreQueuePaths"
+
+  provider-integration-mysql:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: "Relaywright!23456"
+          MYSQL_DATABASE: "RelaywrightProviderTests"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pRelaywright!23456"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      RELAYWRIGHT_TEST_MYSQL_CONNECTION_STRING: "server=127.0.0.1;port=3306;database=RelaywrightProviderTests;user=root;password=Relaywright!23456;SslMode=Disabled;AllowPublicKeyRetrieval=True"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        run: dotnet build Relaywright.sln --no-restore
+
+      - name: Test MySQL provider
+        run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --no-build --filter "FullyQualifiedName~DatabaseProviderIntegrationTests.MySqlProviderCanInitializeSeedAndRunCoreQueuePaths"

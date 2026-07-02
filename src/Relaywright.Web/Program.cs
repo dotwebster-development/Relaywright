@@ -6,11 +6,15 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Identity;
 using Relaywright.Web.Infrastructure;
 using Relaywright.Web.Options;
+using Relaywright.Web.Services.Alerts;
+using Relaywright.Web.Services.Backups;
+using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Delivery;
 using Relaywright.Web.Services.Diagnostics;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
 using Relaywright.Web.Services.Smtp;
 
@@ -21,17 +25,50 @@ builder.Host.UseSystemd();
 
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<BootstrapAdminOptions>(builder.Configuration.GetSection(BootstrapAdminOptions.SectionName));
+builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.SectionName));
 
 var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var appPaths = new AppPaths(builder.Environment.ContentRootPath, storageOptions);
 appPaths.EnsureCreated();
+var databaseOptions = builder.Configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
+var databaseConfiguration = DatabaseConfiguration.Create(databaseOptions, appPaths);
+if (databaseConfiguration.IsSqlite)
+{
+    BackupRestoreService.ApplyPendingRestore(appPaths);
+}
+
+var startupDataProtectionProvider = DataProtectionProvider.Create(
+    new DirectoryInfo(appPaths.KeyRingDirectory),
+    options => options.SetApplicationName("Relaywright"));
+var configuredAdminWebListener = AdminWebListenerConfigurationService.LoadConfiguration(appPaths);
+if (configuredAdminWebListener is not null)
+{
+    builder.WebHost.UseUrls(configuredAdminWebListener.GetUrls());
+    builder.Services.AddHttpsRedirection(options =>
+    {
+        options.HttpsPort = configuredAdminWebListener.HttpsPort;
+    });
+}
+
+var configuredAdminHttpsCertificate = AdminHttpsCertificateService.LoadConfiguredCertificate(appPaths, startupDataProtectionProvider);
+if (configuredAdminHttpsCertificate is not null)
+{
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.ConfigureHttpsDefaults(httpsOptions =>
+        {
+            httpsOptions.ServerCertificate = configuredAdminHttpsCertificate;
+        });
+    });
+}
 
 builder.Services.AddSingleton(appPaths);
+builder.Services.AddSingleton(databaseConfiguration);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(appPaths.KeyRingDirectory))
     .SetApplicationName("Relaywright");
 
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite($"Data Source={appPaths.DatabasePath}"));
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options => databaseConfiguration.Configure(options));
 builder.Services.AddScoped(serviceProvider =>
     serviceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 
@@ -57,22 +94,40 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/Account/Login";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
     options.SlidingExpiration = true;
 });
+builder.Services.Configure<SecurityStampValidatorOptions>(AdminSecurityDefaults.ConfigureSecurityStampValidator);
 
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Account/Login");
+    options.Conventions.AllowAnonymousToPage("/Account/Setup");
 });
 
 builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
+builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
+builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
+builder.Services.AddSingleton<IAdminSecurityActivityService, AdminSecurityActivityService>();
+builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
+builder.Services.AddSingleton<IApplicationRestartService, ApplicationRestartService>();
+builder.Services.AddSingleton<IOutboundRouteProbe, OutboundRouteProbe>();
+builder.Services.AddSingleton<IDashboardMetricsService, DashboardMetricsService>();
 builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
 builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
+builder.Services.AddSingleton<IBackupCoordinator, BackupCoordinator>();
+builder.Services.AddSingleton<IBackupService, BackupService>();
+builder.Services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
+builder.Services.AddSingleton<IAlertEmailNotifier, AlertEmailNotifier>();
+builder.Services.AddSingleton<IAlertService, AlertService>();
 builder.Services.AddSingleton<IRelayConfigurationService, RelayConfigurationService>();
 builder.Services.AddSingleton<ITrustedNetworkService, TrustedNetworkService>();
+builder.Services.AddSingleton<ITrustedDevicePolicyService, TrustedDevicePolicyService>();
+builder.Services.AddSingleton<ITrustedDeviceRateLimiter, TrustedDeviceRateLimiter>();
 builder.Services.AddSingleton<IMessageSpoolService, MessageSpoolService>();
 builder.Services.AddSingleton<IMessageMetadataService, MessageMetadataService>();
 builder.Services.AddSingleton<RetryDelayCalculator>();
@@ -81,8 +136,11 @@ builder.Services.AddSingleton<DeliveryFailureClassifier>();
 builder.Services.AddSingleton<MicrosoftOAuthTokenProvider>();
 builder.Services.AddSingleton<IUpstreamAuthenticationService, UpstreamAuthenticationService>();
 builder.Services.AddSingleton<IUpstreamDeliveryService, UpstreamDeliveryService>();
+builder.Services.AddSingleton<IDiagnosticRunRecorder, DiagnosticRunRecorder>();
 builder.Services.AddSingleton<IUpstreamConnectivityTester, UpstreamConnectivityTester>();
 builder.Services.AddSingleton<IUpstreamTestEmailSender, UpstreamTestEmailSender>();
+builder.Services.AddSingleton<ISubmissionFlowChecker, SubmissionFlowChecker>();
+builder.Services.AddSingleton<IConfigurationSnapshotService, ConfigurationSnapshotService>();
 builder.Services.AddSingleton<SmtpOptionsFactory>();
 builder.Services.AddSingleton<RelayMessageStore>();
 builder.Services.AddSingleton<TrustedNetworkMailboxFilter>();
@@ -92,15 +150,18 @@ builder.Services.AddHttpClient();
 builder.Services.AddHostedService<SmtpRelayHostedService>();
 builder.Services.AddHostedService<QueueDeliveryWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
+builder.Services.AddHostedService<AlertWorker>();
+builder.Services.AddHostedService<BackupWorker>();
 
 var app = builder.Build();
 
 app.Logger.LogInformation(
-    "Starting Relaywright. Environment={Environment}; ContentRoot={ContentRoot}; DataDirectory={DataDirectory}; DatabasePath={DatabasePath}; SpoolRoot={SpoolRoot}; KeyRing={KeyRing}",
+    "Starting Relaywright. Environment={Environment}; ContentRoot={ContentRoot}; DataDirectory={DataDirectory}; DatabaseProvider={DatabaseProvider}; Database={Database}; SpoolRoot={SpoolRoot}; KeyRing={KeyRing}",
     app.Environment.EnvironmentName,
     app.Environment.ContentRootPath,
     appPaths.DataDirectory,
-    appPaths.DatabasePath,
+    databaseConfiguration.Provider,
+    databaseConfiguration.Description,
     appPaths.SpoolRootDirectory,
     appPaths.KeyRingDirectory);
 
@@ -108,7 +169,19 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
+
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers.TryAdd("X-Content-Type-Options", "nosniff");
+    headers.TryAdd("X-Frame-Options", "DENY");
+    headers.TryAdd("Referrer-Policy", "no-referrer");
+    headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+    await next();
+});
 
 app.Use(async (context, next) =>
 {
@@ -157,6 +230,8 @@ using (var scope = app.Services.CreateScope())
 {
     var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
     await seeder.InitializeAsync(CancellationToken.None);
+    var restartService = scope.ServiceProvider.GetRequiredService<IApplicationRestartService>();
+    await restartService.ClearAppliedRestartIfNeededAsync(CancellationToken.None);
 }
 
 app.UseStaticFiles();
@@ -165,7 +240,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
-app.MapGet("/health", async (
+app.MapGet("/health", () => Results.Json(new { status = "ok" })).AllowAnonymous();
+
+app.MapGet("/health/details", async (
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     AppPaths paths,
     IRelayConfigurationService relayConfigurationService,
@@ -231,8 +308,14 @@ app.MapGet("/health", async (
     }
 
     return Results.Json(
-        new { status = healthy ? "ok" : "degraded", checks },
+        new
+        {
+            status = healthy ? "ok" : "degraded",
+            version = ApplicationVersion.DisplayVersion,
+            informationalVersion = ApplicationVersion.InformationalVersion,
+            checks
+        },
         statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-}).AllowAnonymous();
+}).RequireAuthorization();
 
 app.Run();

@@ -89,5 +89,14 @@ public sealed class CidrRange
         var mask = (byte)(0xff << (8 - remainingBits));
         return (networkBytes[wholeBytes] & mask) == (addressBytes[wholeBytes] & mask);
     }
-}
 
+    public bool Overlaps(CidrRange other)
+    {
+        if (Network.AddressFamily != other.Network.AddressFamily)
+        {
+            return false;
+        }
+
+        return Contains(other.Network) || other.Contains(Network);
+    }
+}

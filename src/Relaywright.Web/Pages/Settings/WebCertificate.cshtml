@@ -1,0 +1,176 @@
+@page
+@model Relaywright.Web.Pages.Settings.WebCertificateModel
+@using Relaywright.Web.Services.Security
+@{
+    ViewData["Title"] = "Web Certificate";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">System</p>
+            <h1>Web Certificate</h1>
+            <p class="page-summary">Configure the certificate used by HTTPS for the admin web interface. Changes are picked up after the service restarts.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    <section class="panel">
+        <h2>Current Certificate</h2>
+        @if (Model.CurrentCertificate is null)
+        {
+            <p class="muted">No Relaywright-managed web HTTPS certificate has been configured. The app is using the current deployment or hosting certificate.</p>
+        }
+        else
+        {
+            <dl class="kv">
+                <dt>Mode</dt>
+                <dd>@Model.CurrentCertificate.Mode</dd>
+                <dt>Certificate</dt>
+                <dd>@Model.CurrentCertificate.CertificatePath</dd>
+                @if (!string.IsNullOrWhiteSpace(Model.CurrentCertificate.KeyPath))
+                {
+                    <dt>Private Key</dt>
+                    <dd>@Model.CurrentCertificate.KeyPath</dd>
+                }
+                <dt>DNS Names</dt>
+                <dd>@(Model.CurrentCertificate.DnsNames.Length == 0 ? "Not available" : string.Join(", ", Model.CurrentCertificate.DnsNames))</dd>
+                <dt>Expires</dt>
+                <dd>@(Model.CurrentCertificate.NotAfterUtc?.ToLocalTime().ToString("g") ?? "Not available")</dd>
+                <dt>Updated</dt>
+                <dd>@Model.CurrentCertificate.UpdatedUtc.ToLocalTime().ToString("g")</dd>
+            </dl>
+        }
+    </section>
+
+    @if (Model.SecuritySummary is not null)
+    {
+        <section class="panel">
+            <h2>Certificate Security</h2>
+            <dl class="kv">
+                <dt>Mode</dt>
+                <dd>@Model.SecuritySummary.CertificateModeLabel</dd>
+                <dt>Status</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.CertificateBadgeClass(Model.LoadedUtc)">@Model.SecuritySummary.CertificateStatusLabel(Model.LoadedUtc)</span></dd>
+                <dt>DNS Names</dt>
+                <dd>@Model.SecuritySummary.CertificateDnsLabel</dd>
+                <dt>Expires</dt>
+                <dd>@(Model.SecuritySummary.CertificateExpiresUtc?.ToLocalTime().ToString("g") ?? "Not available")</dd>
+                <dt>Updated</dt>
+                <dd>@(Model.SecuritySummary.CertificateUpdatedUtc?.ToLocalTime().ToString("g") ?? "Not available")</dd>
+                <dt>HTTP Listener</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.HttpBadgeClass">@Model.SecuritySummary.HttpStatusLabel</span></dd>
+                <dt>Restart State</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.RestartBadgeClass">@Model.SecuritySummary.RestartStatusLabel</span></dd>
+                @if (Model.SecuritySummary.RestartRequired)
+                {
+                    <dt>Restart Reason</dt>
+                    <dd>@(Model.SecuritySummary.RestartReason ?? "Pending configuration change")</dd>
+                    <dt>Requested</dt>
+                    <dd>@(Model.SecuritySummary.RestartRequestedUtc?.ToLocalTime().ToString("g") ?? "Not available") by @(Model.SecuritySummary.RestartRequestedBy ?? "system")</dd>
+                }
+            </dl>
+        </section>
+    }
+
+    <section class="panel">
+        <h2>Configure Certificate</h2>
+        <form method="post" asp-page-handler="SaveCertificate" enctype="multipart/form-data" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+
+            <div class="certificate-choice-grid" data-certificate-modes>
+                <label class="certificate-choice">
+                    <input asp-for="Input.Mode" type="radio" value="@AdminHttpsCertificateMode.SelfSigned" data-certificate-mode="selfsigned" />
+                    <span>
+                        <strong>Self-signed</strong>
+                        <small>Generate a local certificate for lab and test machines.</small>
+                    </span>
+                </label>
+                <label class="certificate-choice">
+                    <input asp-for="Input.Mode" type="radio" value="@AdminHttpsCertificateMode.Pfx" data-certificate-mode="pfx" />
+                    <span>
+                        <strong>PFX</strong>
+                        <small>Upload a `.pfx` or `.p12` certificate bundle.</small>
+                    </span>
+                </label>
+                <label class="certificate-choice">
+                    <input asp-for="Input.Mode" type="radio" value="@AdminHttpsCertificateMode.Pem" data-certificate-mode="pem" />
+                    <span>
+                        <strong>Cert + key</strong>
+                        <small>Upload PEM certificate and private key files.</small>
+                    </span>
+                </label>
+            </div>
+
+            <div class="certificate-panel" data-certificate-panel="selfsigned">
+                <label>
+                    <span>DNS Names</span>
+                    <input asp-for="Input.SelfSignedDnsNames" />
+                </label>
+                <label>
+                    <span>Valid Years</span>
+                    <input asp-for="Input.SelfSignedValidYears" type="number" min="1" max="10" />
+                    <span asp-validation-for="Input.SelfSignedValidYears"></span>
+                </label>
+            </div>
+
+            <div class="certificate-panel" data-certificate-panel="pfx" hidden>
+                <label>
+                    <span>PFX File</span>
+                    <input asp-for="Input.PfxFile" type="file" accept=".pfx,.p12,application/x-pkcs12" />
+                </label>
+                <label>
+                    <span>PFX Password</span>
+                    <input asp-for="Input.PfxPassword" type="password" autocomplete="new-password" />
+                </label>
+            </div>
+
+            <div class="certificate-panel" data-certificate-panel="pem" hidden>
+                <label>
+                    <span>Certificate File</span>
+                    <input asp-for="Input.CertificateFile" type="file" accept=".crt,.cer,.pem,application/x-pem-file" />
+                </label>
+                <label>
+                    <span>Private Key File</span>
+                    <input asp-for="Input.KeyFile" type="file" accept=".key,.pem,application/x-pem-file" />
+                </label>
+                <label>
+                    <span>Private Key Password</span>
+                    <input asp-for="Input.KeyPassword" type="password" autocomplete="new-password" />
+                </label>
+            </div>
+
+            <p class="field-hint">Uploaded files are stored under the Relaywright data directory. Passwords are protected with the local Data Protection key ring.</p>
+
+            <div class="actions">
+                <button type="submit">Save Certificate</button>
+            </div>
+        </form>
+    </section>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const modeInputs = Array.from(document.querySelectorAll('[data-certificate-mode]'));
+            const panels = Array.from(document.querySelectorAll('[data-certificate-panel]'));
+
+            const syncPanels = () => {
+                const selected = modeInputs.find((input) => input.checked)?.dataset.certificateMode ?? 'selfsigned';
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.certificatePanel !== selected;
+                });
+            };
+
+            modeInputs.forEach((input) => input.addEventListener('change', syncPanels));
+            syncPanels();
+        })();
+    </script>
+}

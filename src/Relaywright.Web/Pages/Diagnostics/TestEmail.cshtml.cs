@@ -14,6 +14,7 @@ public sealed class TestEmailModel(
     IRelayConfigurationService relayConfigurationService,
     IUpstreamTestEmailSender upstreamTestEmailSender,
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    IDiagnosticRunRecorder diagnosticRunRecorder,
     ILogger<TestEmailModel> logger) : PageModel
 {
     [BindProperty]
@@ -25,9 +26,12 @@ public sealed class TestEmailModel(
 
     public IReadOnlyList<OperationalEvent> RunEvents { get; private set; } = Array.Empty<OperationalEvent>();
 
+    public IReadOnlyList<DiagnosticRun> RecentRuns { get; private set; } = Array.Empty<DiagnosticRun>();
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
+        RecentRuns = await diagnosticRunRecorder.GetRecentRunsAsync(DiagnosticRunKind.TestEmail, 10, cancellationToken);
         InitializeDefaults();
 
         logger.LogDebug(
@@ -42,6 +46,7 @@ public sealed class TestEmailModel(
 
         if (!ModelState.IsValid)
         {
+            RecentRuns = await diagnosticRunRecorder.GetRecentRunsAsync(DiagnosticRunKind.TestEmail, 10, cancellationToken);
             logger.LogWarning(
                 "Diagnostic test email request rejected by validation. User={UserName}; ErrorCount={ErrorCount}",
                 User.Identity?.Name,
@@ -72,6 +77,7 @@ public sealed class TestEmailModel(
             cancellationToken);
 
         RunEvents = await LoadRunEventsAsync(sessionId, cancellationToken);
+        RecentRuns = await diagnosticRunRecorder.GetRecentRunsAsync(DiagnosticRunKind.TestEmail, 10, cancellationToken);
         logger.LogInformation(
             "Diagnostic test email page completed. SessionId={SessionId}; Succeeded={Succeeded}; RunEventCount={RunEventCount}; User={UserName}",
             sessionId,

@@ -1,0 +1,66 @@
+@page
+@model Relaywright.Web.Pages.Operations.ChangeHistoryModel
+@{
+    ViewData["Title"] = "Change History";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">System</p>
+            <h1>Change History</h1>
+            <p class="page-summary">Review settings snapshots and roll back configuration areas when a change needs to be reverted.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    <section class="panel">
+        <h2>Snapshots</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Created</th>
+                        <th>Area</th>
+                        <th>Summary</th>
+                        <th>By</th>
+                        <th>Kind</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.Snapshots.Count == 0)
+                {
+                    <tr class="empty-row">
+                        <td colspan="6" class="table-empty">No change history recorded</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var snapshot in Model.Snapshots)
+                    {
+                        <tr>
+                            <td>@snapshot.CreatedUtc.ToLocalTime()</td>
+                            <td><span class="badge">@snapshot.DisplayName</span></td>
+                            <td>@snapshot.Summary</td>
+                            <td>@snapshot.CreatedBy</td>
+                            <td><span class="status-badge @(snapshot.IsRollback ? "severity-warning" : "status-enabled")">@(snapshot.IsRollback ? "Rollback" : "Snapshot")</span></td>
+                            <td>
+                                <form method="post" asp-page-handler="Rollback" asp-route-id="@snapshot.Id" class="inline-form" onsubmit="return confirm('Roll back this configuration area to the selected snapshot? A safety snapshot of the current state will be created first.');">
+                                    <button type="submit" class="secondary-button">Rollback</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

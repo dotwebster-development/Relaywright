@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Options;
+using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.Events;
 
 namespace Relaywright.Web.Services.Queueing;
@@ -11,10 +13,16 @@ public sealed class MessageQueueService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     RetryDelayCalculator retryDelayCalculator,
     IMessageSpoolService spoolService,
+    IBackupCoordinator backupCoordinator,
     IOperationalEventService eventService,
     IQueueSignal queueSignal,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<MessageQueueService> logger) : IMessageQueueService
 {
+    private const int ClaimRetryLimit = 3;
+
+    private sealed record QueueCandidate(Guid Id, QueuedMessageStatus Status, int AttemptCount);
+
     public async Task EnqueueAsync(NewQueuedMessageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -71,102 +79,90 @@ public sealed class MessageQueueService(
 
     public async Task<DeliveryWorkItem?> TryClaimNextAsync(CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
-        var staleThreshold = now.AddMinutes(-15);
-
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-
-        var pendingCandidates = await dbContext.QueuedMessages
-            .AsSplitQuery()
-            .Include(x => x.Recipients)
-            .Where(x => x.Status == QueuedMessageStatus.Pending)
-            .ToListAsync(cancellationToken);
-
-        var retryCandidates = await dbContext.QueuedMessages
-            .AsSplitQuery()
-            .Include(x => x.Recipients)
-            .Where(x => x.Status == QueuedMessageStatus.RetryScheduled)
-            .ToListAsync(cancellationToken);
-
-        var staleCandidates = await dbContext.QueuedMessages
-            .AsSplitQuery()
-            .Include(x => x.Recipients)
-            .Where(x => x.Status == QueuedMessageStatus.InProgress)
-            .ToListAsync(cancellationToken);
-
-        var pendingMessage = pendingCandidates
-            .Where(x => x.NextAttemptAtUtc <= now)
-            .OrderBy(x => x.NextAttemptAtUtc)
-            .ThenBy(x => x.CreatedUtc)
-            .FirstOrDefault();
-
-        var retryMessage = retryCandidates
-            .Where(x => x.NextAttemptAtUtc <= now)
-            .OrderBy(x => x.NextAttemptAtUtc)
-            .ThenBy(x => x.CreatedUtc)
-            .FirstOrDefault();
-
-        var staleMessage = staleCandidates
-            .Where(x => x.LastAttemptStartedUtc != null && x.LastAttemptStartedUtc <= staleThreshold)
-            .OrderBy(x => x.LastAttemptStartedUtc)
-            .ThenBy(x => x.CreatedUtc)
-            .FirstOrDefault();
-
-        var queuedMessage = SelectEarliestEligibleMessage(
-            SelectEarliestEligibleMessage(pendingMessage, retryMessage),
-            staleMessage);
-
-        if (queuedMessage is null)
+        for (var claimAttempt = 1; claimAttempt <= ClaimRetryLimit; claimAttempt++)
         {
-            logger.LogDebug(
-                "No eligible queue work found. PendingCandidates={PendingCandidates}; RetryCandidates={RetryCandidates}; StaleCandidates={StaleCandidates}",
-                pendingCandidates.Count,
-                retryCandidates.Count,
-                staleCandidates.Count);
-            return null;
+            var now = DateTimeOffset.UtcNow;
+            var staleThreshold = now.AddMinutes(-15);
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+            var candidate = await SelectClaimCandidateAsync(dbContext, now, staleThreshold, cancellationToken);
+
+            if (candidate is null)
+            {
+                logger.LogDebug("No eligible queue work found.");
+                return null;
+            }
+
+            var attemptNumber = candidate.AttemptCount + 1;
+            var updated = await dbContext.QueuedMessages
+                .Where(x =>
+                    x.Id == candidate.Id
+                    && x.Status == candidate.Status
+                    && x.AttemptCount == candidate.AttemptCount)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.Status, QueuedMessageStatus.InProgress)
+                    .SetProperty(x => x.AttemptCount, attemptNumber)
+                    .SetProperty(x => x.LastAttemptStartedUtc, (DateTimeOffset?)now),
+                    cancellationToken);
+
+            if (updated == 0)
+            {
+                logger.LogDebug(
+                    "Queue claim candidate was already claimed by another worker. MessageId={MessageId}; ClaimAttempt={ClaimAttempt}",
+                    candidate.Id,
+                    claimAttempt);
+                await transaction.RollbackAsync(cancellationToken);
+                continue;
+            }
+
+            var deliveryAttempt = new DeliveryAttempt
+            {
+                QueuedMessageId = candidate.Id,
+                AttemptNumber = attemptNumber,
+                StartedUtc = now
+            };
+
+            dbContext.DeliveryAttempts.Add(deliveryAttempt);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var queuedMessage = await dbContext.QueuedMessages
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(x => x.Recipients)
+                .SingleAsync(x => x.Id == candidate.Id, cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Claimed queued message for delivery. MessageId={MessageId}; PreviousStatus={PreviousStatus}; AttemptNumber={AttemptNumber}; RecipientCount={RecipientCount}; RemoteIp={RemoteIp}; ExpiresUtc={ExpiresUtc}; SpoolPath={SpoolPath}",
+                queuedMessage.Id,
+                candidate.Status,
+                attemptNumber,
+                queuedMessage.Recipients.Count,
+                queuedMessage.RemoteIpAddress,
+                queuedMessage.ExpiresUtc,
+                queuedMessage.SpoolFileRelativePath);
+
+            return new DeliveryWorkItem
+            {
+                MessageId = queuedMessage.Id,
+                DeliveryAttemptId = deliveryAttempt.Id,
+                AttemptNumber = attemptNumber,
+                CorrelationId = queuedMessage.CorrelationId,
+                EnvelopeFrom = queuedMessage.EnvelopeFrom,
+                Recipients = queuedMessage.Recipients
+                    .Select(x => x.RecipientAddress)
+                    .ToArray(),
+                SpoolFileRelativePath = queuedMessage.SpoolFileRelativePath,
+                RemoteIpAddress = queuedMessage.RemoteIpAddress,
+                ExpiresUtc = queuedMessage.ExpiresUtc
+            };
         }
 
-        var previousStatus = queuedMessage.Status;
-        queuedMessage.Status = QueuedMessageStatus.InProgress;
-        queuedMessage.AttemptCount += 1;
-        queuedMessage.LastAttemptStartedUtc = now;
-
-        var deliveryAttempt = new DeliveryAttempt
-        {
-            QueuedMessageId = queuedMessage.Id,
-            AttemptNumber = queuedMessage.AttemptCount,
-            StartedUtc = now
-        };
-
-        dbContext.DeliveryAttempts.Add(deliveryAttempt);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        logger.LogInformation(
-            "Claimed queued message for delivery. MessageId={MessageId}; PreviousStatus={PreviousStatus}; AttemptNumber={AttemptNumber}; RecipientCount={RecipientCount}; RemoteIp={RemoteIp}; ExpiresUtc={ExpiresUtc}; SpoolPath={SpoolPath}",
-            queuedMessage.Id,
-            previousStatus,
-            queuedMessage.AttemptCount,
-            queuedMessage.Recipients.Count,
-            queuedMessage.RemoteIpAddress,
-            queuedMessage.ExpiresUtc,
-            queuedMessage.SpoolFileRelativePath);
-
-        return new DeliveryWorkItem
-        {
-            MessageId = queuedMessage.Id,
-            DeliveryAttemptId = deliveryAttempt.Id,
-            AttemptNumber = queuedMessage.AttemptCount,
-            CorrelationId = queuedMessage.CorrelationId,
-            EnvelopeFrom = queuedMessage.EnvelopeFrom,
-            Recipients = queuedMessage.Recipients
-                .Select(x => x.RecipientAddress)
-                .ToArray(),
-            SpoolFileRelativePath = queuedMessage.SpoolFileRelativePath,
-            RemoteIpAddress = queuedMessage.RemoteIpAddress,
-            ExpiresUtc = queuedMessage.ExpiresUtc
-        };
+        logger.LogDebug("No queue work was claimed after retrying contended candidates.");
+        return null;
     }
 
     public async Task MarkDeliveredAsync(DeliveryWorkItem workItem, DeliveryResult result, CancellationToken cancellationToken)
@@ -339,6 +335,41 @@ public sealed class MessageQueueService(
         return QueueActionResult.Success("Retry scheduled.");
     }
 
+    public async Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken)
+    {
+        var requested = messageIds
+            .Distinct()
+            .ToArray();
+        var succeeded = 0;
+        var rejected = 0;
+        var missing = 0;
+
+        foreach (var messageId in requested)
+        {
+            var result = await RetryNowAsync(messageId, cancellationToken);
+            if (result.Succeeded)
+            {
+                succeeded += 1;
+            }
+            else if (string.Equals(result.Message, "Message not found.", StringComparison.OrdinalIgnoreCase))
+            {
+                missing += 1;
+            }
+            else
+            {
+                rejected += 1;
+            }
+        }
+
+        return new QueueBulkActionResult
+        {
+            Requested = requested.Length,
+            Succeeded = succeeded,
+            Rejected = rejected,
+            Missing = missing
+        };
+    }
+
     public async Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -359,7 +390,32 @@ public sealed class MessageQueueService(
         var spoolPath = queuedMessage.SpoolFileRelativePath;
         dbContext.QueuedMessages.Remove(queuedMessage);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await spoolService.DeleteIfExistsAsync(spoolPath, cancellationToken);
+
+        try
+        {
+            await using var backupLock = await backupCoordinator.AcquireSpoolDeletionLockAsync(cancellationToken);
+            await spoolService.DeleteIfExistsAsync(spoolPath, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Queued message metadata was purged but spool deletion failed. MessageId={MessageId}; PreviousStatus={PreviousStatus}; SpoolPath={SpoolPath}",
+                messageId,
+                previousStatus,
+                spoolPath);
+
+            await eventService.WriteAsync(new OperationalEventRequest
+            {
+                Severity = EventSeverity.Error,
+                Category = OperationalEventCategory.Queue,
+                QueuedMessageId = messageId,
+                Message = "Queued message metadata was purged, but its spool file could not be deleted.",
+                Detail = exception.Message
+            }, cancellationToken);
+
+            return QueueActionResult.Failure("Queued message metadata was purged, but the spool file could not be deleted.");
+        }
 
         logger.LogInformation(
             "Purged queued message. MessageId={MessageId}; PreviousStatus={PreviousStatus}; SpoolPath={SpoolPath}",
@@ -377,6 +433,47 @@ public sealed class MessageQueueService(
         return QueueActionResult.Success("Queued message purged.");
     }
 
+    public async Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken)
+    {
+        var requested = messageIds
+            .Distinct()
+            .ToArray();
+        var succeeded = 0;
+        var rejected = 0;
+        var missing = 0;
+        var spoolFailures = 0;
+
+        foreach (var messageId in requested)
+        {
+            var result = await PurgeAsync(messageId, cancellationToken);
+            if (result.Succeeded)
+            {
+                succeeded += 1;
+            }
+            else if (string.Equals(result.Message, "Message not found.", StringComparison.OrdinalIgnoreCase))
+            {
+                missing += 1;
+            }
+            else if (result.Message.Contains("spool file", StringComparison.OrdinalIgnoreCase))
+            {
+                spoolFailures += 1;
+            }
+            else
+            {
+                rejected += 1;
+            }
+        }
+
+        return new QueueBulkActionResult
+        {
+            Requested = requested.Length,
+            Succeeded = succeeded,
+            Rejected = rejected,
+            Missing = missing,
+            SpoolDeleteFailures = spoolFailures
+        };
+    }
+
     public async Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -389,17 +486,15 @@ public sealed class MessageQueueService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var deliveredMessagesToDelete = (await dbContext.QueuedMessages
-            .Where(x => x.Status == QueuedMessageStatus.Delivered)
-            .ToListAsync(cancellationToken))
-            .Where(x => x.DeliveredUtc != null && x.DeliveredUtc <= deliveredCutoff)
-            .ToList();
+        var deliveredMessagesToDelete = await GetDeliveredMessagesToDeleteAsync(
+            dbContext,
+            deliveredCutoff,
+            cancellationToken);
 
-        var terminalMessagesToDelete = (await dbContext.QueuedMessages
-            .Where(x => x.Status == QueuedMessageStatus.Failed || x.Status == QueuedMessageStatus.Expired)
-            .ToListAsync(cancellationToken))
-            .Where(x => x.LastAttemptCompletedUtc != null && x.LastAttemptCompletedUtc <= failedCutoff)
-            .ToList();
+        var terminalMessagesToDelete = await GetTerminalMessagesToDeleteAsync(
+            dbContext,
+            failedCutoff,
+            cancellationToken);
 
         var messagesToDelete = deliveredMessagesToDelete
             .Concat(terminalMessagesToDelete)
@@ -414,30 +509,23 @@ public sealed class MessageQueueService(
 
         dbContext.QueuedMessages.RemoveRange(messagesToDelete);
 
-        var expirableMessages = await dbContext.QueuedMessages
-            .Where(x =>
-                x.Status == QueuedMessageStatus.Pending
-                || x.Status == QueuedMessageStatus.InProgress
-                || x.Status == QueuedMessageStatus.RetryScheduled)
-            .ToListAsync(cancellationToken);
+        var expirableMessages = await GetExpirableMessagesAsync(dbContext, now, cancellationToken);
 
-        foreach (var message in expirableMessages.Where(x => x.ExpiresUtc <= now))
+        foreach (var message in expirableMessages)
         {
             message.Status = QueuedMessageStatus.Expired;
             message.LastAttemptCompletedUtc ??= now;
             message.LastError = "Message expired before successful delivery.";
         }
 
-        var eventsToDelete = (await dbContext.OperationalEvents
-            .ToListAsync(cancellationToken))
-            .Where(x => x.OccurredUtc <= eventCutoff)
-            .ToList();
+        var eventsToDelete = await GetEventsToDeleteAsync(dbContext, eventCutoff, cancellationToken);
 
         dbContext.OperationalEvents.RemoveRange(eventsToDelete);
         deletedCount += messagesToDelete.Count + eventsToDelete.Count;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        await using var backupLock = await backupCoordinator.AcquireSpoolDeletionLockAsync(cancellationToken);
         foreach (var spoolPath in spoolPathsToDelete)
         {
             await spoolService.DeleteIfExistsAsync(spoolPath, cancellationToken);
@@ -456,20 +544,149 @@ public sealed class MessageQueueService(
         return deletedCount;
     }
 
-    private static QueuedMessage? SelectEarliestEligibleMessage(QueuedMessage? first, QueuedMessage? second)
+    private async Task<QueueCandidate?> SelectClaimCandidateAsync(
+        ApplicationDbContext dbContext,
+        DateTimeOffset now,
+        DateTimeOffset staleThreshold,
+        CancellationToken cancellationToken)
     {
-        if (first is null)
+        if (databaseConfiguration.IsSqlite)
         {
-            return second;
+            return await dbContext.QueuedMessages
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "QueuedMessages"
+                    WHERE (("Status" = {(int)QueuedMessageStatus.Pending} OR "Status" = {(int)QueuedMessageStatus.RetryScheduled})
+                        AND "NextAttemptAtUtc" <= {now})
+                        OR ("Status" = {(int)QueuedMessageStatus.InProgress}
+                            AND "LastAttemptStartedUtc" IS NOT NULL
+                            AND "LastAttemptStartedUtc" <= {staleThreshold})
+                    ORDER BY CASE
+                        WHEN "Status" = {(int)QueuedMessageStatus.InProgress} THEN "LastAttemptStartedUtc"
+                        ELSE "NextAttemptAtUtc"
+                    END ASC, "CreatedUtc" ASC
+                    LIMIT 1
+                    """)
+                .AsNoTracking()
+                .Select(x => new QueueCandidate(x.Id, x.Status, x.AttemptCount))
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
-        if (second is null)
+        return await dbContext.QueuedMessages
+            .AsNoTracking()
+            .Where(x =>
+                ((x.Status == QueuedMessageStatus.Pending || x.Status == QueuedMessageStatus.RetryScheduled)
+                    && x.NextAttemptAtUtc <= now)
+                || (x.Status == QueuedMessageStatus.InProgress
+                    && x.LastAttemptStartedUtc != null
+                    && x.LastAttemptStartedUtc <= staleThreshold))
+            .OrderBy(x => x.Status == QueuedMessageStatus.InProgress
+                ? x.LastAttemptStartedUtc
+                : (DateTimeOffset?)x.NextAttemptAtUtc)
+            .ThenBy(x => x.CreatedUtc)
+            .Select(x => new QueueCandidate(x.Id, x.Status, x.AttemptCount))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<List<QueuedMessage>> GetDeliveredMessagesToDeleteAsync(
+        ApplicationDbContext dbContext,
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken)
+    {
+        if (databaseConfiguration.IsSqlite)
         {
-            return first;
+            return await dbContext.QueuedMessages
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "QueuedMessages"
+                    WHERE "Status" = {(int)QueuedMessageStatus.Delivered}
+                        AND "DeliveredUtc" IS NOT NULL
+                        AND "DeliveredUtc" <= {cutoff}
+                    """)
+                .ToListAsync(cancellationToken);
         }
 
-        return first.NextAttemptAtUtc <= second.NextAttemptAtUtc
-            ? first
-            : second;
+        return await dbContext.QueuedMessages
+            .Where(x =>
+                x.Status == QueuedMessageStatus.Delivered
+                && x.DeliveredUtc != null
+                && x.DeliveredUtc <= cutoff)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<QueuedMessage>> GetTerminalMessagesToDeleteAsync(
+        ApplicationDbContext dbContext,
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken)
+    {
+        if (databaseConfiguration.IsSqlite)
+        {
+            return await dbContext.QueuedMessages
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "QueuedMessages"
+                    WHERE ("Status" = {(int)QueuedMessageStatus.Failed}
+                            OR "Status" = {(int)QueuedMessageStatus.Expired})
+                        AND "LastAttemptCompletedUtc" IS NOT NULL
+                        AND "LastAttemptCompletedUtc" <= {cutoff}
+                    """)
+                .ToListAsync(cancellationToken);
+        }
+
+        return await dbContext.QueuedMessages
+            .Where(x =>
+                (x.Status == QueuedMessageStatus.Failed || x.Status == QueuedMessageStatus.Expired)
+                && x.LastAttemptCompletedUtc != null
+                && x.LastAttemptCompletedUtc <= cutoff)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<QueuedMessage>> GetExpirableMessagesAsync(
+        ApplicationDbContext dbContext,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (databaseConfiguration.IsSqlite)
+        {
+            return await dbContext.QueuedMessages
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "QueuedMessages"
+                    WHERE ("Status" = {(int)QueuedMessageStatus.Pending}
+                            OR "Status" = {(int)QueuedMessageStatus.InProgress}
+                            OR "Status" = {(int)QueuedMessageStatus.RetryScheduled})
+                        AND "ExpiresUtc" <= {now}
+                    """)
+                .ToListAsync(cancellationToken);
+        }
+
+        return await dbContext.QueuedMessages
+            .Where(x =>
+                (x.Status == QueuedMessageStatus.Pending
+                    || x.Status == QueuedMessageStatus.InProgress
+                    || x.Status == QueuedMessageStatus.RetryScheduled)
+                && x.ExpiresUtc <= now)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<OperationalEvent>> GetEventsToDeleteAsync(
+        ApplicationDbContext dbContext,
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken)
+    {
+        if (databaseConfiguration.IsSqlite)
+        {
+            return await dbContext.OperationalEvents
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "OperationalEvents"
+                    WHERE "OccurredUtc" <= {cutoff}
+                    """)
+                .ToListAsync(cancellationToken);
+        }
+
+        return await dbContext.OperationalEvents
+            .Where(x => x.OccurredUtc <= cutoff)
+            .ToListAsync(cancellationToken);
     }
 }

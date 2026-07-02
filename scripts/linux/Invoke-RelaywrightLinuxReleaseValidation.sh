@@ -396,6 +396,7 @@ run_installer_script() {
         --https-port "$https_port"
         --http-port "$http_port"
         --smtp-port "$smtp_port"
+        --health-timeout-seconds 240
         --configure-firewall
         --firewall-remote-address "$firewall_remote_address"
         --non-interactive
@@ -554,6 +555,8 @@ save_diagnostics() {
         "${SUDO[@]}" firewall-cmd --list-all > "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
         "${SUDO[@]}" firewall-cmd --list-rich-rules >> "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
     elif [[ "$(active_firewall_backend || true)" == "ufw" ]]; then
+        "${SUDO[@]}" ufw status numbered > "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
+    elif command_available ufw; then
         "${SUDO[@]}" ufw status numbered > "$artifacts_directory/firewall-${suffix}.txt" 2>&1 || true
     else
         printf 'No active firewalld or ufw firewall detected.\n' > "$artifacts_directory/firewall-${suffix}.txt"

@@ -31,6 +31,18 @@ on:
         description: "Stop capture upstream once for N seconds; use 0 to disable"
         required: true
         default: "15"
+      smtp_timeout_seconds:
+        description: "SMTP client timeout in seconds"
+        required: true
+        default: "30"
+      submission_retry_count:
+        description: "Retryable pre-DATA submission retries per logical message"
+        required: true
+        default: "3"
+      max_retryable_submit_failures:
+        description: "Maximum retryable pre-accept failures allowed before failing"
+        required: true
+        default: "20"
       cleanup_after:
         description: "Clean soak-linux01 after a successful soak"
         required: true
@@ -49,6 +61,7 @@ concurrency:
 
 jobs:
   validate-linux-soak:
+    timeout-minutes: 1500
     runs-on:
       - self-hosted
       - Linux
@@ -66,6 +79,9 @@ jobs:
       RELAYWRIGHT_SOAK_MESSAGE_RATE_PER_MINUTE: ${{ inputs.message_rate_per_minute }}
       RELAYWRIGHT_SOAK_RESTART_INTERVAL_MINUTES: ${{ inputs.restart_interval_minutes }}
       RELAYWRIGHT_SOAK_UPSTREAM_OUTAGE_SECONDS: ${{ inputs.upstream_outage_seconds }}
+      RELAYWRIGHT_SOAK_SMTP_TIMEOUT_SECONDS: ${{ inputs.smtp_timeout_seconds }}
+      RELAYWRIGHT_SOAK_SUBMISSION_RETRY_COUNT: ${{ inputs.submission_retry_count }}
+      RELAYWRIGHT_SOAK_MAX_RETRYABLE_SUBMIT_FAILURES: ${{ inputs.max_retryable_submit_failures }}
       RELAYWRIGHT_SOAK_CLEANUP_AFTER: ${{ inputs.cleanup_after }}
       RELAYWRIGHT_LINUX_SOAK_VALIDATION_SUDO_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD }}
 
@@ -100,6 +116,9 @@ jobs:
             --message-rate-per-minute "$RELAYWRIGHT_SOAK_MESSAGE_RATE_PER_MINUTE" \
             --restart-interval-minutes "$RELAYWRIGHT_SOAK_RESTART_INTERVAL_MINUTES" \
             --upstream-outage-seconds "$RELAYWRIGHT_SOAK_UPSTREAM_OUTAGE_SECONDS" \
+            --smtp-timeout-seconds "$RELAYWRIGHT_SOAK_SMTP_TIMEOUT_SECONDS" \
+            --submission-retry-count "$RELAYWRIGHT_SOAK_SUBMISSION_RETRY_COUNT" \
+            --max-retryable-submit-failures "$RELAYWRIGHT_SOAK_MAX_RETRYABLE_SUBMIT_FAILURES" \
             --cleanup-after "$RELAYWRIGHT_SOAK_CLEANUP_AFTER" \
             --artifacts-directory "$PWD/artifacts/linux-soak-validation"
 

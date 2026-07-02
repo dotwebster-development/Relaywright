@@ -3,6 +3,9 @@ param(
     [string]$PackagePath = "",
     [string]$InstallRoot = "$env:ProgramFiles\Relaywright",
     [string]$DataDirectory = "$env:ProgramData\Relaywright",
+    [string]$DatabaseProvider = "",
+    [string]$DatabaseConnectionString = "",
+    [string]$DatabaseConnectionStringFile = "",
     [string]$ServiceName = "Relaywright",
     [string]$DisplayName = "Relaywright",
     [string]$EnvironmentName = "Production",
@@ -60,6 +63,27 @@ function Read-Default {
     }
 
     return $value.Trim()
+}
+
+function Read-SecretValue {
+    param([string]$Prompt)
+
+    if ($NonInteractive) {
+        return ""
+    }
+
+    $secure = Read-Host $Prompt -AsSecureString
+    if ($secure.Length -eq 0) {
+        return ""
+    }
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
 }
 
 function Read-YesNo {
@@ -153,6 +177,68 @@ function Get-ServiceEnvironmentValue {
     }
 
     return $null
+}
+
+function Normalize-DatabaseProvider {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return ""
+    }
+
+    switch ($Value.Trim().ToLowerInvariant()) {
+        "sqlite" { return "Sqlite" }
+        "sqlserver" { return "SqlServer" }
+        "mssql" { return "SqlServer" }
+        "mysql" { return "MySql" }
+        default { throw "Unsupported database provider '$Value'. Use Sqlite, SqlServer, or MySql." }
+    }
+}
+
+function Get-DatabaseConnectionStringFromFile {
+    if ([string]::IsNullOrWhiteSpace($DatabaseConnectionStringFile)) {
+        return ""
+    }
+
+    if (-not (Test-Path -LiteralPath $DatabaseConnectionStringFile)) {
+        throw "DatabaseConnectionStringFile '$DatabaseConnectionStringFile' was not found."
+    }
+
+    return (Get-Content -LiteralPath $DatabaseConnectionStringFile -Raw).Trim()
+}
+
+function Resolve-DatabaseSettings {
+    $providerWasSupplied = -not [string]::IsNullOrWhiteSpace($DatabaseProvider)
+    $provider = Normalize-DatabaseProvider -Value $DatabaseProvider
+    if ([string]::IsNullOrWhiteSpace($provider)) {
+        $provider = Normalize-DatabaseProvider -Value (Get-ServiceEnvironmentValue -Name $ServiceName -VariableName "Database__Provider")
+    }
+
+    if ([string]::IsNullOrWhiteSpace($provider)) {
+        $provider = "Sqlite"
+    }
+
+    $connectionString = Get-DatabaseConnectionStringFromFile
+    if ([string]::IsNullOrWhiteSpace($connectionString)) {
+        $connectionString = $DatabaseConnectionString
+    }
+
+    if ([string]::IsNullOrWhiteSpace($connectionString) -and (($provider -ne "Sqlite") -or (-not $providerWasSupplied))) {
+        $connectionString = Get-ServiceEnvironmentValue -Name $ServiceName -VariableName "Database__ConnectionString"
+    }
+
+    if ($provider -ne "Sqlite" -and [string]::IsNullOrWhiteSpace($connectionString)) {
+        throw "$provider requires a database connection string. Provide DatabaseConnectionString or DatabaseConnectionStringFile."
+    }
+
+    if ($provider -eq "Sqlite" -and [string]::IsNullOrWhiteSpace($connectionString)) {
+        $connectionString = ""
+    }
+
+    return @{
+        Provider = $provider
+        ConnectionString = $connectionString
+    }
 }
 
 function Wait-ServiceStatus {
@@ -393,6 +479,22 @@ $GenerateSelfSignedCertificate = Convert-BoolArgument `
 if (-not $NonInteractive -and -not $Uninstall) {
     $InstallRoot = Read-Default -Prompt "Install directory" -Default $InstallRoot
     $DataDirectory = Read-Default -Prompt "Data directory" -Default $DataDirectory
+    $existingDatabaseProvider = Normalize-DatabaseProvider -Value (Get-ServiceEnvironmentValue -Name $ServiceName -VariableName "Database__Provider")
+    if ([string]::IsNullOrWhiteSpace($existingDatabaseProvider)) {
+        $existingDatabaseProvider = "Sqlite"
+    }
+
+    $DatabaseProvider = Read-Default -Prompt "Database provider (Sqlite, SqlServer, MySql)" -Default $existingDatabaseProvider
+    $DatabaseProvider = Normalize-DatabaseProvider -Value $DatabaseProvider
+    $needsDatabaseConnectionString =
+        ($DatabaseProvider -ne "Sqlite") `
+        -and [string]::IsNullOrWhiteSpace($DatabaseConnectionString) `
+        -and [string]::IsNullOrWhiteSpace($DatabaseConnectionStringFile) `
+        -and [string]::IsNullOrWhiteSpace((Get-ServiceEnvironmentValue -Name $ServiceName -VariableName "Database__ConnectionString"))
+    if ($needsDatabaseConnectionString) {
+        $DatabaseConnectionString = Read-SecretValue -Prompt "$DatabaseProvider connection string"
+    }
+
     $HttpsPort = [int](Read-Default -Prompt "Admin HTTPS port" -Default ([string]$HttpsPort))
     if (Read-YesNo -Prompt "Enable admin HTTP listener" -Default ([bool]$EnableHttp)) {
         $EnableHttp = $true
@@ -426,6 +528,7 @@ if ([string]::IsNullOrWhiteSpace($PackagePath)) {
 }
 
 $urls = Get-Urls
+$databaseSettings = Resolve-DatabaseSettings
 $healthUrl = "https://127.0.0.1:$HttpsPort/health"
 $resolvedPackagePath = Resolve-Path -Path $PackagePath
 $releaseName = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -483,6 +586,8 @@ $serviceEnvironment = @(
     "ASPNETCORE_ENVIRONMENT=$EnvironmentName",
     "ASPNETCORE_URLS=$urls",
     "Storage__DataDirectory=$DataDirectory",
+    "Database__Provider=$($databaseSettings.Provider)",
+    "Database__ConnectionString=$($databaseSettings.ConnectionString)",
     "BootstrapAdmin__UserName=$BootstrapUserName",
     "BootstrapAdmin__Email=$BootstrapEmail",
     "ASPNETCORE_Kestrel__Certificates__Default__Path=$HttpsCertificatePath",

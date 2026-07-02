@@ -1,0 +1,87 @@
+@page
+@model Relaywright.Web.Pages.Settings.SubmissionPolicyModel
+@{
+    ViewData["Title"] = "Submission Policy";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">Settings</p>
+            <h1>Submission Policy</h1>
+            <p class="page-summary">Set global sender, recipient, and size rules for trusted devices before mail is accepted into the spool.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    <form method="post" asp-page-handler="Save" class="relay-settings">
+        <div asp-validation-summary="ModelOnly" class="status error"></div>
+        <input asp-for="Input.Id" type="hidden" />
+
+        <section class="settings-block">
+            <div class="settings-block-title">Global Rules</div>
+            <div class="compact-grid">
+                <div class="toggle-field">
+                    <label class="switch-control">
+                        <input asp-for="Input.IsEnabled" type="checkbox" />
+                        <span class="switch-control-track" aria-hidden="true"></span>
+                        <span>Policy Enabled</span>
+                    </label>
+                </div>
+                <label>
+                    <span>Max Size (Bytes)</span>
+                    <input asp-for="Input.MaxMessageSizeBytes" type="number" min="1" />
+                </label>
+                <label>
+                    <span>Max Recipients</span>
+                    <input asp-for="Input.MaxRecipientsPerMessage" type="number" min="1" />
+                </label>
+            </div>
+            <p class="field-hint">Device-specific limits on Trusted IPs are combined with these rules; the stricter limit wins.</p>
+        </section>
+
+        <section class="settings-block">
+            <div class="settings-block-title">Senders</div>
+            <div class="compact-grid compact-grid-nested">
+                <label>
+                    <span>Allowed Senders</span>
+                    <textarea asp-for="Input.AllowedSenderAddresses" rows="7" placeholder="scanner&#64;example.com&#10;&#64;example.com"></textarea>
+                </label>
+                <label>
+                    <span>Blocked Senders</span>
+                    <textarea asp-for="Input.BlockedSenderAddresses" rows="7" placeholder="blocked&#64;example.com&#10;&#64;old-domain.test"></textarea>
+                </label>
+            </div>
+            <p class="field-hint">Use exact sender addresses or domain patterns such as &#64;example.com. Leave allowed senders empty to allow any sender from trusted devices.</p>
+        </section>
+
+        <section class="settings-block">
+            <div class="settings-block-title">Recipients</div>
+            <div class="compact-grid compact-grid-nested">
+                <label>
+                    <span>Allowed Domains</span>
+                    <textarea asp-for="Input.AllowedRecipientDomains" rows="7" placeholder="example.com&#10;*.partner.test"></textarea>
+                </label>
+                <label>
+                    <span>Blocked Domains</span>
+                    <textarea asp-for="Input.BlockedRecipientDomains" rows="7" placeholder="external.test&#10;*.blocked.test"></textarea>
+                </label>
+            </div>
+            <p class="field-hint">Recipient rules match domains only. Block lists take precedence over allowed lists.</p>
+        </section>
+
+        <div class="surface-toolbar">
+            <div class="toolbar-right">
+                <div class="actions compact-actions">
+                    <button type="submit">Save Policy</button>
+                </div>
+            </div>
+        </div>
+    </form>
+</section>

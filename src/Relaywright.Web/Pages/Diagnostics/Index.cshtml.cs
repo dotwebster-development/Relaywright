@@ -10,6 +10,7 @@ namespace Relaywright.Web.Pages.Diagnostics;
 public sealed class IndexModel(
     IRelayConfigurationService relayConfigurationService,
     IUpstreamConnectivityTester upstreamConnectivityTester,
+    IDiagnosticRunRecorder diagnosticRunRecorder,
     IOperationalEventService eventService,
     ILogger<IndexModel> logger) : PageModel
 {
@@ -17,9 +18,12 @@ public sealed class IndexModel(
 
     public ConnectivityTestResult? Result { get; private set; }
 
+    public IReadOnlyList<DiagnosticRun> RecentRuns { get; private set; } = Array.Empty<DiagnosticRun>();
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
+        RecentRuns = await diagnosticRunRecorder.GetRecentRunsAsync(DiagnosticRunKind.Connectivity, 10, cancellationToken);
         logger.LogDebug(
             "Diagnostics page loaded. UpstreamConfigured={UpstreamConfigured}; User={UserName}",
             !string.IsNullOrWhiteSpace(Configuration.UpstreamHost),
@@ -36,6 +40,7 @@ public sealed class IndexModel(
             User.Identity?.Name);
 
         Result = await upstreamConnectivityTester.TestAsync(Configuration, cancellationToken);
+        RecentRuns = await diagnosticRunRecorder.GetRecentRunsAsync(DiagnosticRunKind.Connectivity, 10, cancellationToken);
 
         logger.LogInformation(
             "Upstream connectivity test completed from admin page. Succeeded={Succeeded}; Message={Message}; User={UserName}",

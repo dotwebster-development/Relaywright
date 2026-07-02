@@ -1,0 +1,119 @@
+@page
+@model Relaywright.Web.Pages.Settings.WebHttpsModel
+@{
+    ViewData["Title"] = "Web Interface";
+}
+
+<section class="page">
+    <header class="page-header">
+        <div class="page-header-copy">
+            <p class="page-eyebrow">System</p>
+            <h1>Web Interface</h1>
+            <p class="page-summary">Configure the admin web listener ports. Changes are picked up after the service restarts.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="surface-status">
+            <p class="status">@Model.StatusMessage</p>
+        </div>
+    }
+
+    <section class="panel">
+        <h2>Current Listener</h2>
+        @if (Model.CurrentListener is null)
+        {
+            <p class="muted">No Relaywright-managed listener settings have been saved. The app is using the current deployment or hosting URLs.</p>
+        }
+        else
+        {
+            <dl class="kv">
+                <dt>HTTPS</dt>
+                <dd>Port @Model.CurrentListener.HttpsPort</dd>
+                <dt>HTTP</dt>
+                <dd>@(Model.CurrentListener.EnableHttp ? $"Enabled on port {Model.CurrentListener.HttpPort}" : "Disabled")</dd>
+                <dt>Updated</dt>
+                <dd>@Model.CurrentListener.UpdatedUtc.ToLocalTime().ToString("g")</dd>
+            </dl>
+        }
+    </section>
+
+    @if (Model.SecuritySummary is not null)
+    {
+        <section class="panel">
+            <h2>Admin Web Security</h2>
+            <dl class="kv">
+                <dt>Listener Source</dt>
+                <dd>@Model.SecuritySummary.ListenerSourceLabel</dd>
+                <dt>HTTPS</dt>
+                <dd>Port @Model.SecuritySummary.HttpsPort</dd>
+                <dt>HTTP</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.HttpBadgeClass">@Model.SecuritySummary.HttpStatusLabel</span></dd>
+                <dt>Certificate</dt>
+                <dd>@Model.SecuritySummary.CertificateModeLabel</dd>
+                <dt>Certificate Status</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.CertificateBadgeClass(Model.LoadedUtc)">@Model.SecuritySummary.CertificateStatusLabel(Model.LoadedUtc)</span></dd>
+                <dt>Certificate DNS</dt>
+                <dd>@Model.SecuritySummary.CertificateDnsLabel</dd>
+                <dt>Restart State</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.RestartBadgeClass">@Model.SecuritySummary.RestartStatusLabel</span></dd>
+                @if (Model.SecuritySummary.RestartRequired)
+                {
+                    <dt>Restart Reason</dt>
+                    <dd>@(Model.SecuritySummary.RestartReason ?? "Pending configuration change")</dd>
+                    <dt>Requested</dt>
+                    <dd>@(Model.SecuritySummary.RestartRequestedUtc?.ToLocalTime().ToString("g") ?? "Not available") by @(Model.SecuritySummary.RestartRequestedBy ?? "system")</dd>
+                }
+            </dl>
+        </section>
+    }
+
+    <section class="panel">
+        <h2>Configure Listener</h2>
+        <form method="post" asp-page-handler="SaveListener" class="form-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
+            <div class="compact-grid compact-grid-nested">
+                <label>
+                    <span>HTTPS Port</span>
+                    <input asp-for="ListenerInput.HttpsPort" type="number" min="1" max="65535" />
+                    <span asp-validation-for="ListenerInput.HttpsPort"></span>
+                </label>
+                <div class="toggle-field">
+                    <label class="switch-control">
+                        <input asp-for="ListenerInput.EnableHttp" type="checkbox" data-http-toggle />
+                        <span class="switch-control-track" aria-hidden="true"></span>
+                        <span>Enable HTTP</span>
+                    </label>
+                </div>
+                <label data-http-port>
+                    <span>HTTP Port</span>
+                    <input asp-for="ListenerInput.HttpPort" type="number" min="1" max="65535" />
+                    <span asp-validation-for="ListenerInput.HttpPort"></span>
+                </label>
+            </div>
+            <p class="field-hint">When HTTP is disabled, Relaywright will not listen on an HTTP port after restart. HTTPS remains enabled for the admin interface.</p>
+            <div class="actions">
+                <button type="submit">Save Listener</button>
+            </div>
+        </form>
+    </section>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const httpToggle = document.querySelector('[data-http-toggle]');
+            const httpPort = document.querySelector('[data-http-port]');
+
+            const syncHttp = () => {
+                if (httpPort) {
+                    httpPort.hidden = !httpToggle?.checked;
+                }
+            };
+
+            httpToggle?.addEventListener('change', syncHttp);
+            syncHttp();
+        })();
+    </script>
+}

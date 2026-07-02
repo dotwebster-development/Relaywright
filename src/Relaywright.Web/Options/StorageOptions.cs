@@ -11,5 +11,14 @@ public sealed class StorageOptions
     public string SpoolDirectoryName { get; set; } = "spool";
 
     public string KeyDirectoryName { get; set; } = "keys";
-}
 
+    public string BackupDirectoryName { get; set; } = "backups";
+
+    public string RestorePendingDirectoryName { get; set; } = "restore-pending";
+
+    public string CertificateDirectoryName { get; set; } = "certs";
+
+    public string AdminHttpsCertificateFileName { get; set; } = "admin-https-certificate.json";
+
+    public string AdminWebListenerFileName { get; set; } = "admin-web-listener.json";
+}
