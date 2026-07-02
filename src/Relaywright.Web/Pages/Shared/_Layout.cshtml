@@ -226,6 +226,20 @@
                 }
             });
         })();
+
+        (() => {
+            const statusMessages = document.querySelectorAll('[data-dismissible-status]');
+            if (statusMessages.length === 0) {
+                return;
+            }
+
+            statusMessages.forEach((message) => {
+                const dismissButton = message.querySelector('[data-status-dismiss]');
+                dismissButton?.addEventListener('click', () => {
+                    message.remove();
+                });
+            });
+        })();
     </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>

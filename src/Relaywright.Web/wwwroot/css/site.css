@@ -569,6 +569,22 @@ textarea {
     background: var(--accent-muted);
 }
 
+.security-checklist {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.security-checklist div {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.security-checklist p {
+    margin: 0;
+}
+
 .setup-summary {
     display: grid;
     gap: 10px;
@@ -730,17 +746,15 @@ textarea {
 
 .page-header {
     display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 16px;
-}
-
-.page-header:not(:has(.page-actions, .auto-refresh-controls)) {
-    display: none;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px 18px;
 }
 
 .page-header-copy {
-    display: none;
+    display: grid;
+    gap: 4px;
+    min-width: 0;
 }
 
 .page-eyebrow,
@@ -943,6 +957,13 @@ textarea {
     grid-column: 1 / -1;
 }
 
+.page .form-grid > .actions,
+.page .compact-grid > .actions,
+.page .panel > .actions,
+.page .panel > form.actions {
+    justify-content: flex-end;
+}
+
 .bind-address-field.is-collapsed {
     visibility: hidden;
     pointer-events: none;
@@ -971,6 +992,16 @@ textarea {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-muted);
+}
+
+.compact-list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+}
+
+.compact-list li + li {
+    margin-top: 4px;
 }
 
 .field-hint {
@@ -1101,6 +1132,16 @@ button:hover,
     background: var(--bg-muted);
 }
 
+.table-empty {
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: center;
+}
+
+.table tbody tr.empty-row:hover {
+    background: transparent;
+}
+
 .kv {
     display: grid;
     grid-template-columns: 170px minmax(0, 1fr);
@@ -1169,6 +1210,29 @@ button:hover,
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-surface);
+}
+
+.surface-status.dismissible-status {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+}
+
+.surface-status.dismissible-status .status {
+    margin: 0;
+}
+
+.status-dismiss {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    border-color: var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+}
+
+.status-dismiss:hover {
+    background: var(--bg-muted);
+    color: var(--text);
 }
 
 .toolbar-left {
@@ -1337,6 +1401,10 @@ button:hover,
 .inline-edit-form {
     display: grid;
     gap: 8px;
+}
+
+.inline-edit-form > button {
+    justify-self: end;
 }
 
 .inline-edit-form input[type="number"],

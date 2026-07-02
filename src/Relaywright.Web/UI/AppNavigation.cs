@@ -83,7 +83,7 @@ public static class AppNavigation
                 new AppNavItem("Change History", "/Operations/ChangeHistory"),
                 new AppNavItem("Web Interface", "/Settings/WebHttps"),
                 new AppNavItem("Certificate", "/Settings/WebCertificate"),
-                new AppNavItem("Password", "/Account/ChangePassword")
+                new AppNavItem("Account Security", "/Account/ChangePassword")
             ]),
         new AppNavSection(
             DiagnosticsKey,
@@ -140,10 +140,10 @@ public static class AppNavigation
             "/Operations/ChangeHistory",
             "change history snapshots rollback revert settings configuration restore previous"),
         new SettingsSearchItem(
-            "Password",
+            "Account Security",
             "System",
             "/Account/ChangePassword",
-            "admin account password credentials login change password")
+            "admin account password credentials login change password account security sessions")
     ];
 
     public static AppNavState Resolve(PathString requestPath)

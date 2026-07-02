@@ -117,23 +117,32 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var item in Model.Networks)
+                @if (Model.Networks.Count == 0)
                 {
-                    <tr>
-                        <td>@item.Cidr</td>
-                        <td>@item.Description</td>
-                        <td>@TrustedNetworksModel.FormatProfile(item)</td>
-                        <td>@TrustedNetworksModel.FormatLimits(item)</td>
-                        <td>@TrustedNetworksModel.FormatPolicySummary(item)</td>
-                        <td><span class="status-badge @(item.IsEnabled ? "status-enabled" : "status-disabled")">@(item.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                        <td class="row-actions">
-                            <a asp-page="/Settings/TrustedNetworks" asp-route-editId="@item.Id">Edit</a>
-                            <form method="post" asp-page-handler="Delete" class="inline-form" onsubmit="return confirm('Delete this trusted network?');">
-                                <input type="hidden" name="id" value="@item.Id" />
-                                <button type="submit" class="secondary-button">Delete</button>
-                            </form>
-                        </td>
+                    <tr class="empty-row">
+                        <td colspan="7" class="table-empty">No trusted IPs configured</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.Networks)
+                    {
+                        <tr>
+                            <td>@item.Cidr</td>
+                            <td>@item.Description</td>
+                            <td>@TrustedNetworksModel.FormatProfile(item)</td>
+                            <td>@TrustedNetworksModel.FormatLimits(item)</td>
+                            <td>@TrustedNetworksModel.FormatPolicySummary(item)</td>
+                            <td><span class="status-badge @(item.IsEnabled ? "status-enabled" : "status-disabled")">@(item.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                            <td class="row-actions">
+                                <a asp-page="/Settings/TrustedNetworks" asp-route-editId="@item.Id">Edit</a>
+                                <form method="post" asp-page-handler="Delete" class="inline-form" onsubmit="return confirm('Delete this trusted network?');">
+                                    <input type="hidden" name="id" value="@item.Id" />
+                                    <button type="submit" class="secondary-button">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

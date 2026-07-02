@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Security;
 
@@ -17,6 +19,10 @@ public sealed class SetupModel(
     SignInManager<ApplicationUser> signInManager,
     IOperationalEventService eventService,
     IAdminHttpsCertificateService adminHttpsCertificateService,
+    IAdminWebListenerConfigurationService adminWebListenerConfigurationService,
+    IOptions<IdentityOptions> identityOptions,
+    IOptions<BootstrapAdminOptions> bootstrapAdminOptions,
+    IHostEnvironment environment,
     ILogger<SetupModel> logger) : PageModel
 {
     private static readonly SemaphoreSlim InitialAdminGate = new(1, 1);
@@ -35,6 +41,11 @@ public sealed class SetupModel(
 
     public AdminHttpsCertificateConfiguration? ConfiguredCertificate { get; private set; }
 
+    public PasswordPolicySummary PasswordPolicy { get; private set; } =
+        PasswordPolicySummary.FromOptions(new IdentityOptions());
+
+    public SetupHardeningChecklist HardeningChecklist { get; private set; } = new([]);
+
     public bool IsWelcomeStep => CurrentStep == SetupStep.Welcome;
 
     public bool IsAdminAccountStep => CurrentStep == SetupStep.AdminAccount;
@@ -50,6 +61,7 @@ public sealed class SetupModel(
             return RedirectToPage("/Account/Login");
         }
 
+        await LoadPageStateAsync(adminExists: false, cancellationToken);
         return Page();
     }
 
@@ -62,6 +74,7 @@ public sealed class SetupModel(
 
         ModelState.Clear();
         CurrentStep = SetupStep.AdminAccount;
+        await LoadPageStateAsync(adminExists: false, cancellationToken);
         return Page();
     }
 
@@ -74,6 +87,7 @@ public sealed class SetupModel(
 
         ModelState.Clear();
         CurrentStep = SetupStep.Welcome;
+        await LoadPageStateAsync(adminExists: false, cancellationToken);
         return Page();
     }
 
@@ -83,12 +97,14 @@ public sealed class SetupModel(
 
         if (!ModelState.IsValid)
         {
+            await LoadPageStateAsync(adminExists: false, cancellationToken);
             return Page();
         }
 
         if (!string.Equals(Input.Password, Input.ConfirmPassword, StringComparison.Ordinal))
         {
             ModelState.AddModelError(string.Empty, "The password and confirmation password do not match.");
+            await LoadPageStateAsync(adminExists: false, cancellationToken);
             return Page();
         }
 
@@ -101,6 +117,7 @@ public sealed class SetupModel(
                     "First-run setup rejected because an admin already exists. RemoteIp={RemoteIp}",
                     HttpContext.Connection.RemoteIpAddress?.ToString());
                 ModelState.AddModelError(string.Empty, "Initial admin has already been created.");
+                await LoadPageStateAsync(adminExists: true, cancellationToken);
                 return Page();
             }
 
@@ -151,10 +168,12 @@ public sealed class SetupModel(
                 CertificateInput.Mode,
                 HttpContext.Connection.RemoteIpAddress?.ToString());
             ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadPageStateAsync(adminExists: true, cancellationToken);
             return Page();
         }
 
         CurrentStep = SetupStep.Complete;
+        await LoadPageStateAsync(adminExists: true, cancellationToken);
         return Page();
     }
 
@@ -168,6 +187,7 @@ public sealed class SetupModel(
 
         ConfiguredCertificate = await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
         CurrentStep = SetupStep.Complete;
+        await LoadPageStateAsync(adminExists: true, cancellationToken);
         return Page();
     }
 
@@ -195,6 +215,7 @@ public sealed class SetupModel(
                 ModelState.AddModelError(string.Empty, error.Description);
             }
 
+            await LoadPageStateAsync(adminExists: false, cancellationToken);
             return Page();
         }
 
@@ -215,7 +236,22 @@ public sealed class SetupModel(
         CreatedUserName = admin.UserName;
         CertificateInput.SelfSignedDnsNames = GetDefaultCertificateNames();
         CurrentStep = SetupStep.HttpsCertificate;
+        await LoadPageStateAsync(adminExists: true, cancellationToken);
         return Page();
+    }
+
+    private async Task LoadPageStateAsync(bool adminExists, CancellationToken cancellationToken)
+    {
+        PasswordPolicy = PasswordPolicySummary.FromOptions(identityOptions.Value);
+        var certificate = ConfiguredCertificate ?? await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
+        var listener = await adminWebListenerConfigurationService.GetConfigurationAsync(cancellationToken);
+        HardeningChecklist = SetupHardeningChecklist.Create(
+            adminExists,
+            PasswordPolicy,
+            certificate,
+            listener,
+            bootstrapAdminOptions.Value,
+            environment);
     }
 
     private async Task<bool> HasAnyUserAsync(CancellationToken cancellationToken)
@@ -228,6 +264,7 @@ public sealed class SetupModel(
         if (!await HasAnyUserAsync(cancellationToken))
         {
             CurrentStep = SetupStep.Welcome;
+            await LoadPageStateAsync(adminExists: false, cancellationToken);
             return Page();
         }
 

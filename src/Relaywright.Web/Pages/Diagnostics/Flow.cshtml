@@ -68,7 +68,7 @@
                     {
                         <tr>
                             <td>@stage.Name</td>
-                            <td><span class="status-badge @(stage.Succeeded ? "status-delivered" : "status-failed")">@(stage.Succeeded ? "Passed" : "Failed")</span></td>
+                            <td><span class="status-badge @(stage.Succeeded ? "status-delivered" : "status-failed")">@(stage.Succeeded ? "Succeeded" : "Failed")</span></td>
                             <td>@stage.Message</td>
                         </tr>
                     }
@@ -91,23 +91,32 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var run in Model.RecentRuns)
+                @if (Model.RecentRuns.Count == 0)
                 {
-                    <tr>
-                        <td>@run.StartedUtc.ToLocalTime()</td>
-                        <td><span class="status-badge @(run.Succeeded == true ? "status-delivered" : run.Succeeded == false ? "status-failed" : "status-inprogress")">@(run.Succeeded is null ? "Running" : run.Succeeded.Value ? "Accepted" : "Rejected")</span></td>
-                        <td>@run.Message</td>
-                        <td>
-                            @foreach (var stage in run.Stages.OrderBy(x => x.Sequence))
-                            {
-                                <div class="stage-line">
-                                    <span class="status-badge status-@(stage.Status == DiagnosticStageStatus.Succeeded ? "delivered" : stage.Status == DiagnosticStageStatus.Failed ? "failed" : stage.Status == DiagnosticStageStatus.Skipped ? "disabled" : "inprogress")">@stage.Status</span>
-                                    <strong>@stage.Name</strong>
-                                    <span>@stage.Message</span>
-                                </div>
-                            }
-                        </td>
+                    <tr class="empty-row">
+                        <td colspan="4" class="table-empty">No flow checks recorded</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var run in Model.RecentRuns)
+                    {
+                        <tr>
+                            <td>@run.StartedUtc.ToLocalTime()</td>
+                            <td><span class="status-badge @(run.Succeeded == true ? "status-delivered" : run.Succeeded == false ? "status-failed" : "status-inprogress")">@(run.Succeeded is null ? "Running" : run.Succeeded.Value ? "Succeeded" : "Failed")</span></td>
+                            <td>@run.Message</td>
+                            <td>
+                                @foreach (var stage in run.Stages.OrderBy(x => x.Sequence))
+                                {
+                                    <div class="stage-line">
+                                        <span class="status-badge status-@(stage.Status == DiagnosticStageStatus.Succeeded ? "delivered" : stage.Status == DiagnosticStageStatus.Failed ? "failed" : stage.Status == DiagnosticStageStatus.Skipped ? "disabled" : "inprogress")">@StatusLabels.For(stage.Status)</span>
+                                        <strong>@stage.Name</strong>
+                                        <span>@stage.Message</span>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

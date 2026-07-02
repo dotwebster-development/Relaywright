@@ -65,13 +65,14 @@
           </article>
           <article class="install">
             <h3>Linux</h3>
+            <p>Use the same installer on x64 or ARM64 hosts. Modern Raspberry Pi class devices should use a 64-bit OS; 32-bit ARMv7 is best-effort until dedicated validation is available.</p>
             <pre><code>curl -fsSL https://github.com/relaywright/relaywright/releases/latest/download/install-relaywright.sh \
   | sudo bash -s -- --version latest</code></pre>
           </article>
         </div>
         <div class="notes">
           <span>Release artifacts include checksums in <code>SHA256SUMS.txt</code>.</span>
-          <span>Windows and Linux packages are self-contained and do not require installing the .NET runtime.</span>
+          <span>Windows and Linux x64/ARM64 packages are self-contained and do not require installing the .NET runtime.</span>
           <span>Use the first-run setup page to create the initial admin account, or provide a bootstrap password during installation.</span>
         </div>
       </div>

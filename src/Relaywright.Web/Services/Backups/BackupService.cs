@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Infrastructure;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Events;
 
 namespace Relaywright.Web.Services.Backups;
@@ -14,6 +15,7 @@ public sealed class BackupService(
     IBackupCoordinator backupCoordinator,
     IOperationalEventService eventService,
     AppPaths appPaths,
+    DatabaseConfiguration databaseConfiguration,
     ILogger<BackupService> logger) : IBackupService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -36,6 +38,14 @@ public sealed class BackupService(
 
     public async Task<BackupScheduleState> GetScheduleAsync(CancellationToken cancellationToken)
     {
+        if (databaseConfiguration.IsExternalServer)
+        {
+            return new BackupScheduleState
+            {
+                IsEnabled = false
+            };
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var schedule = await dbContext.BackupScheduleStates.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
         if (schedule is not null)
@@ -51,6 +61,17 @@ public sealed class BackupService(
 
     public async Task SaveScheduleAsync(BackupScheduleState schedule, CancellationToken cancellationToken)
     {
+        if (databaseConfiguration.IsExternalServer)
+        {
+            await eventService.WriteAsync(new OperationalEventRequest
+            {
+                Category = OperationalEventCategory.System,
+                Message = "Relaywright scheduled backups are disabled because the database is managed externally.",
+                Detail = $"{databaseConfiguration.Provider} database backups must be handled with database platform tooling."
+            }, cancellationToken);
+            return;
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await dbContext.BackupScheduleStates.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
         if (existing is null)
@@ -81,7 +102,6 @@ public sealed class BackupService(
         CancellationToken cancellationToken,
         string? encryptionPassword = null)
     {
-        Directory.CreateDirectory(appPaths.BackupDirectory);
         var encrypt = !string.IsNullOrWhiteSpace(encryptionPassword);
 
         var run = new BackupRun
@@ -93,6 +113,25 @@ public sealed class BackupService(
             CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? null : createdBy.Trim()
         };
 
+        if (databaseConfiguration.IsExternalServer)
+        {
+            run.Status = BackupRunStatus.Failed;
+            run.CompletedUtc = DateTimeOffset.UtcNow;
+            run.Message = $"Built-in backup is only available for SQLite. Back up the {databaseConfiguration.Provider} database with database platform tooling.";
+            await SaveRunAsync(run, cancellationToken);
+
+            await eventService.WriteAsync(new OperationalEventRequest
+            {
+                Severity = EventSeverity.Warning,
+                Category = OperationalEventCategory.System,
+                Message = "Backup was not created because the database is managed externally.",
+                Detail = run.Message
+            }, cancellationToken);
+
+            return run;
+        }
+
+        Directory.CreateDirectory(appPaths.BackupDirectory);
         await SaveRunAsync(run, cancellationToken);
 
         var tempDirectory = Path.Combine(appPaths.BackupDirectory, $".tmp-{run.Id:N}");
@@ -297,6 +336,16 @@ public sealed class BackupService(
 
     public async Task<BackupReadiness> GetReadinessAsync(CancellationToken cancellationToken)
     {
+        if (databaseConfiguration.IsExternalServer)
+        {
+            return new BackupReadiness
+            {
+                IsReady = true,
+                BackupStorageBytes = DirectorySize(appPaths.BackupDirectory),
+                Message = $"{databaseConfiguration.Provider} database backup is managed outside Relaywright."
+            };
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var schedule = await dbContext.BackupScheduleStates
@@ -346,6 +395,11 @@ public sealed class BackupService(
 
     public async Task PruneByRetentionAsync(int retentionCount, CancellationToken cancellationToken)
     {
+        if (databaseConfiguration.IsExternalServer)
+        {
+            return;
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var retention = Math.Clamp(retentionCount, 1, 100);
         var succeededRuns = await dbContext.BackupRuns

@@ -51,7 +51,7 @@
             <h2>SMTP Listener</h2>
             <dl class="kv">
                 <dt>Status</dt>
-                <dd><span class="status-badge status-@Model.Status.SmtpListener.Status.ToLowerInvariant()">@Model.Status.SmtpListener.Status</span></dd>
+                <dd><span class="status-badge status-@Model.Status.SmtpListener.Status.ToLowerInvariant()">@StatusLabels.ForRuntime(Model.Status.SmtpListener.Status)</span></dd>
                 <dt>Detail</dt>
                 <dd>@Model.Status.SmtpListener.Detail</dd>
                 <dt>Heartbeat</dt>
@@ -65,7 +65,7 @@
             <h2>Delivery Worker</h2>
             <dl class="kv">
                 <dt>Status</dt>
-                <dd><span class="status-badge @(Model.Status.DeliveryWorker.Status == "Faulted" ? "status-failed" : Model.Status.DeliveryWorker.Status == "Paused" ? "status-disabled" : "status-enabled")">@Model.Status.DeliveryWorker.Status</span></dd>
+                <dd><span class="status-badge @(Model.Status.DeliveryWorker.Status == "Faulted" ? "status-failed" : Model.Status.DeliveryWorker.Status == "Paused" ? "status-disabled" : "status-enabled")">@StatusLabels.ForRuntime(Model.Status.DeliveryWorker.Status)</span></dd>
                 <dt>Active Deliveries</dt>
                 <dd>@Model.Status.ActiveDeliveries</dd>
                 <dt>Heartbeat</dt>
@@ -80,7 +80,7 @@
         <h2>Maintenance Worker</h2>
         <dl class="kv">
             <dt>Status</dt>
-            <dd><span class="status-badge @(Model.Status.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@Model.Status.MaintenanceWorker.Status</span></dd>
+            <dd><span class="status-badge @(Model.Status.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@StatusLabels.ForRuntime(Model.Status.MaintenanceWorker.Status)</span></dd>
             <dt>Last Cleanup</dt>
             <dd>@Model.Status.LastCleanupUtc?.ToLocalTime()</dd>
             <dt>Records Removed</dt>

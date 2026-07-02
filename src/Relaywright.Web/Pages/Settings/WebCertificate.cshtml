@@ -49,6 +49,36 @@
         }
     </section>
 
+    @if (Model.SecuritySummary is not null)
+    {
+        <section class="panel">
+            <h2>Certificate Security</h2>
+            <dl class="kv">
+                <dt>Mode</dt>
+                <dd>@Model.SecuritySummary.CertificateModeLabel</dd>
+                <dt>Status</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.CertificateBadgeClass(Model.LoadedUtc)">@Model.SecuritySummary.CertificateStatusLabel(Model.LoadedUtc)</span></dd>
+                <dt>DNS Names</dt>
+                <dd>@Model.SecuritySummary.CertificateDnsLabel</dd>
+                <dt>Expires</dt>
+                <dd>@(Model.SecuritySummary.CertificateExpiresUtc?.ToLocalTime().ToString("g") ?? "Not available")</dd>
+                <dt>Updated</dt>
+                <dd>@(Model.SecuritySummary.CertificateUpdatedUtc?.ToLocalTime().ToString("g") ?? "Not available")</dd>
+                <dt>HTTP Listener</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.HttpBadgeClass">@Model.SecuritySummary.HttpStatusLabel</span></dd>
+                <dt>Restart State</dt>
+                <dd><span class="status-badge @Model.SecuritySummary.RestartBadgeClass">@Model.SecuritySummary.RestartStatusLabel</span></dd>
+                @if (Model.SecuritySummary.RestartRequired)
+                {
+                    <dt>Restart Reason</dt>
+                    <dd>@(Model.SecuritySummary.RestartReason ?? "Pending configuration change")</dd>
+                    <dt>Requested</dt>
+                    <dd>@(Model.SecuritySummary.RestartRequestedUtc?.ToLocalTime().ToString("g") ?? "Not available") by @(Model.SecuritySummary.RestartRequestedBy ?? "system")</dd>
+                }
+            </dl>
+        </section>
+    }
+
     <section class="panel">
         <h2>Configure Certificate</h2>
         <form method="post" asp-page-handler="SaveCertificate" enctype="multipart/form-data" class="form-grid">

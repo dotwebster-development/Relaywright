@@ -63,10 +63,10 @@ public sealed class QueueDeliveryWorkerTests
     [Fact]
     public async Task PausedDeliveryWorkerDoesNotClaimNewQueueWork()
     {
-        using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeoutSource = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var queueService = new ClaimCountingQueueService();
         var runtimeStatus = new StaticRuntimeStatusService { IsPaused = true };
-        var queueSignal = new CancelAfterWaitQueueSignal(cancellationSource);
+        var queueSignal = new ObservedWaitQueueSignal();
         var worker = new QueueDeliveryWorker(
             new TestRelayConfigurationService(),
             queueService,
@@ -76,13 +76,12 @@ public sealed class QueueDeliveryWorkerTests
             runtimeStatus,
             NullLogger<QueueDeliveryWorker>.Instance);
 
-        await worker.StartAsync(cancellationSource.Token);
-        await Task.Delay(100, CancellationToken.None);
-        cancellationSource.Cancel();
+        await worker.StartAsync(CancellationToken.None);
+        await queueSignal.WaitObserved.WaitAsync(timeoutSource.Token);
         await worker.StopAsync(CancellationToken.None);
 
         Assert.Equal(0, queueService.TryClaimCallCount);
-        Assert.True(queueSignal.WaitCallCount > 0);
+        Assert.Equal(1, queueSignal.WaitCallCount);
     }
 
     private static QueueDeliveryWorker CreateWorker(
@@ -285,9 +284,13 @@ public sealed class QueueDeliveryWorkerTests
         public Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class CancelAfterWaitQueueSignal(CancellationTokenSource cancellationTokenSource) : IQueueSignal
+    private sealed class ObservedWaitQueueSignal : IQueueSignal
     {
+        private readonly TaskCompletionSource _waitObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public int WaitCallCount { get; private set; }
+
+        public Task WaitObserved => _waitObserved.Task;
 
         public void Pulse()
         {
@@ -296,8 +299,8 @@ public sealed class QueueDeliveryWorkerTests
         public Task WaitAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {
             WaitCallCount += 1;
-            cancellationTokenSource.Cancel();
-            return Task.CompletedTask;
+            _waitObserved.TrySetResult();
+            return Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
     }
 }

@@ -35,20 +35,29 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var snapshot in Model.Snapshots)
+                @if (Model.Snapshots.Count == 0)
                 {
-                    <tr>
-                        <td>@snapshot.CreatedUtc.ToLocalTime()</td>
-                        <td><span class="badge">@snapshot.DisplayName</span></td>
-                        <td>@snapshot.Summary</td>
-                        <td>@snapshot.CreatedBy</td>
-                        <td><span class="status-badge @(snapshot.IsRollback ? "severity-warning" : "status-enabled")">@(snapshot.IsRollback ? "Rollback" : "Snapshot")</span></td>
-                        <td>
-                            <form method="post" asp-page-handler="Rollback" asp-route-id="@snapshot.Id" class="inline-form" onsubmit="return confirm('Roll back this configuration area to the selected snapshot? A safety snapshot of the current state will be created first.');">
-                                <button type="submit" class="secondary-button">Rollback</button>
-                            </form>
-                        </td>
+                    <tr class="empty-row">
+                        <td colspan="6" class="table-empty">No change history recorded</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var snapshot in Model.Snapshots)
+                    {
+                        <tr>
+                            <td>@snapshot.CreatedUtc.ToLocalTime()</td>
+                            <td><span class="badge">@snapshot.DisplayName</span></td>
+                            <td>@snapshot.Summary</td>
+                            <td>@snapshot.CreatedBy</td>
+                            <td><span class="status-badge @(snapshot.IsRollback ? "severity-warning" : "status-enabled")">@(snapshot.IsRollback ? "Rollback" : "Snapshot")</span></td>
+                            <td>
+                                <form method="post" asp-page-handler="Rollback" asp-route-id="@snapshot.Id" class="inline-form" onsubmit="return confirm('Roll back this configuration area to the selected snapshot? A safety snapshot of the current state will be created first.');">
+                                    <button type="submit" class="secondary-button">Rollback</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

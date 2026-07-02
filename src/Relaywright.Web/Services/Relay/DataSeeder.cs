@@ -1,6 +1,5 @@
 using System.Data;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Relaywright.Web.Data;
@@ -14,7 +13,8 @@ public sealed class DataSeeder(
     IServiceProvider serviceProvider,
     IOptions<BootstrapAdminOptions> bootstrapAdminOptions,
     IHostEnvironment environment,
-    ILogger<DataSeeder> logger)
+    ILogger<DataSeeder> logger,
+    DatabaseConfiguration? databaseConfiguration = null)
 {
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -22,8 +22,7 @@ public sealed class DataSeeder(
 
         await using var scope = serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        await UpgradeSchemaAsync(dbContext, cancellationToken);
+        await InitializeSchemaAsync(dbContext, cancellationToken);
 
         if (!await dbContext.RelayConfigurations.AnyAsync(cancellationToken))
         {
@@ -117,6 +116,71 @@ public sealed class DataSeeder(
         }
 
         logger.LogInformation("Data store initialization completed.");
+    }
+
+    private async Task InitializeSchemaAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    {
+        if (databaseConfiguration is null || databaseConfiguration.IsSqlite)
+        {
+            await InitializeSqliteSchemaAsync(dbContext, cancellationToken);
+            return;
+        }
+
+        await InitializeServerSchemaAsync(dbContext, cancellationToken);
+    }
+
+    private async Task InitializeSqliteSchemaAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        await UpgradeSchemaAsync(dbContext, cancellationToken);
+    }
+
+    private async Task InitializeServerSchemaAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var created = await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+            if (created)
+            {
+                logger.LogInformation(
+                    "Created Relaywright schema in configured {DatabaseProvider} database.",
+                    databaseConfiguration!.Provider);
+                return;
+            }
+
+            await VerifyServerSchemaAsync(dbContext, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new InvalidOperationException(
+                $"The configured {databaseConfiguration!.Provider} database could not be initialized. Use an empty database for new SQL Server/MySQL installs, or an existing database that already contains the current Relaywright schema. SQLite-to-server migration is not supported in this release.",
+                exception);
+        }
+    }
+
+    private async Task VerifyServerSchemaAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _ = await dbContext.Set<ApplicationUser>()
+                .AsNoTracking()
+                .AnyAsync(cancellationToken);
+            _ = await dbContext.RelayConfigurations
+                .AsNoTracking()
+                .AnyAsync(cancellationToken);
+            _ = await dbContext.QueuedMessages
+                .AsNoTracking()
+                .AnyAsync(cancellationToken);
+            _ = await dbContext.OperationalEvents
+                .AsNoTracking()
+                .AnyAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new InvalidOperationException(
+                $"The configured {databaseConfiguration!.Provider} database is not empty but does not contain the current Relaywright schema.",
+                exception);
+        }
     }
 
     private void ValidateBootstrapUserName()

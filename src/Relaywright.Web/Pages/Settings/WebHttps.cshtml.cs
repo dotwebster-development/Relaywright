@@ -11,6 +11,8 @@ namespace Relaywright.Web.Pages.Settings;
 
 public sealed class WebHttpsModel(
     IAdminWebListenerConfigurationService adminWebListenerConfigurationService,
+    IAdminHttpsCertificateService adminHttpsCertificateService,
+    IRuntimeStatusService runtimeStatusService,
     IConfigurationSnapshotService configurationSnapshotService,
     IApplicationRestartService applicationRestartService,
     IOperationalEventService eventService,
@@ -23,6 +25,10 @@ public sealed class WebHttpsModel(
     public string? StatusMessage { get; set; }
 
     public AdminWebListenerConfiguration? CurrentListener { get; private set; }
+
+    public AdminWebSecuritySummary? SecuritySummary { get; private set; }
+
+    public DateTimeOffset LoadedUtc { get; private set; } = DateTimeOffset.UtcNow;
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -86,7 +92,11 @@ public sealed class WebHttpsModel(
 
     private async Task LoadPageStateAsync(CancellationToken cancellationToken)
     {
+        LoadedUtc = DateTimeOffset.UtcNow;
         CurrentListener = await adminWebListenerConfigurationService.GetConfigurationAsync(cancellationToken);
+        var certificate = await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
+        var runtimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
+        SecuritySummary = AdminWebSecuritySummary.Create(CurrentListener, certificate, runtimeStatus, LoadedUtc);
         var listener = CurrentListener ?? new AdminWebListenerConfiguration();
         ListenerInput = new ListenerInputModel
         {
