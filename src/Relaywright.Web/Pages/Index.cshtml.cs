@@ -7,6 +7,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
+using Relaywright.Web.Services.Security;
 
 namespace Relaywright.Web.Pages;
 
@@ -15,6 +16,7 @@ public sealed class IndexModel(
     IRelayConfigurationService relayConfigurationService,
     IRuntimeStatusService runtimeStatusService,
     IDashboardMetricsService dashboardMetricsService,
+    IAdminSecurityActivityService adminSecurityActivityService,
     DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
@@ -23,6 +25,8 @@ public sealed class IndexModel(
     public RuntimeStatusSnapshot RuntimeStatus { get; private set; } = new();
 
     public DashboardMetricsSnapshot Metrics { get; private set; } = new();
+
+    public SuspiciousLoginSummary SuspiciousLogins { get; private set; } = SuspiciousLoginSummary.Empty;
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -42,9 +46,11 @@ public sealed class IndexModel(
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
         RuntimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
         Metrics = await dashboardMetricsService.GetSnapshotAsync(Configuration, cancellationToken);
+        var loadedUtc = DateTimeOffset.UtcNow;
+        SuspiciousLogins = await adminSecurityActivityService.GetSuspiciousLoginSummaryAsync(loadedUtc, cancellationToken);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var todayUtc = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
+        var todayUtc = new DateTimeOffset(loadedUtc.UtcDateTime.Date, TimeSpan.Zero);
 
         PendingCount = await dbContext.QueuedMessages
             .CountAsync(x => x.Status == QueuedMessageStatus.Pending, cancellationToken);

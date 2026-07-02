@@ -35,6 +35,26 @@
         </div>
     }
 
+    @if (Model.SuspiciousLogins.IsSuspicious)
+    {
+        <div class="surface-status">
+            <section class="status warning">
+                <strong>Admin login attention.</strong>
+                <span>@Model.SuspiciousLogins.FailedLast15Minutes failed in 15 minutes; @Model.SuspiciousLogins.FailedLast24Hours failed in 24 hours.</span>
+                <a asp-page="/Logs/Index" asp-route-category="Security" asp-route-search="Admin sign-in">Review security logs</a>
+            </section>
+            <div class="security-checklist">
+                @foreach (var finding in Model.SuspiciousLogins.Findings)
+                {
+                    <div>
+                        <span class="status-badge @finding.BadgeClass">@finding.Label</span>
+                        <p>@finding.Detail</p>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     <div class="stats-grid">
         <article class="stat">
             <h2>Pending</h2>

@@ -101,6 +101,157 @@ public sealed class AdminSecurityVisibilityTests
     }
 
     [Fact]
+    public async Task SignOutAllSessionsRotatesStampSignsOutAndWritesSecurityEvent()
+    {
+        await using var fixture = await IdentityPageFixture.CreateAsync();
+        var user = await fixture.CreateUserAsync("admin", "Password12345");
+        var userManager = fixture.Services.GetRequiredService<UserManager<ApplicationUser>>();
+        var originalStamp = await userManager.GetSecurityStampAsync(user);
+        var model = fixture.CreateChangePasswordModel(user);
+
+        var result = await model.OnPostSignOutAllSessionsAsync(CancellationToken.None);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Account/Login", redirect.PageName);
+        Assert.Equal("All admin sessions were signed out. Sign in again to continue.", model.StatusMessage);
+
+        var updatedUser = await userManager.FindByIdAsync(user.Id);
+        Assert.NotNull(updatedUser);
+        Assert.NotEqual(originalStamp, await userManager.GetSecurityStampAsync(updatedUser));
+
+        var securityEvent = Assert.Single(fixture.Events.Events);
+        Assert.Equal(OperationalEventCategory.Security, securityEvent.Category);
+        Assert.Equal("Admin sessions invalidated.", securityEvent.Message);
+        Assert.Equal("203.0.113.10", securityEvent.RemoteIpAddress);
+        Assert.DoesNotContain("Password12345", securityEvent.Detail, StringComparison.Ordinal);
+
+        var setCookie = model.HttpContext.Response.Headers.SetCookie.ToString();
+        Assert.Contains("Identity.Application", setCookie, StringComparison.Ordinal);
+        Assert.Contains("expires=", setCookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ChangePasswordLoadsLoginActivityAndRecoveryGuidance()
+    {
+        await using var fixture = await IdentityPageFixture.CreateAsync();
+        var user = await fixture.CreateUserAsync("admin", "Password12345");
+        fixture.SecurityActivity.LoginActivity = new AdminLoginActivitySummary(
+            "admin",
+            new AdminLoginObservation(DateTimeOffset.UtcNow.AddMinutes(-3), "admin", true, "Succeeded", false, "203.0.113.10"),
+            new AdminLoginObservation(DateTimeOffset.UtcNow.AddMinutes(-1), "admin", false, "InvalidCredentials", false, "203.0.113.11"),
+            1,
+            2);
+        var model = fixture.CreateChangePasswordModel(user);
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Equal("admin", model.LoginActivity.UserName);
+        Assert.Equal(1, model.LoginActivity.FailedLast24Hours);
+        Assert.NotEmpty(model.RecoveryGuidance);
+        Assert.Contains(model.RecoveryGuidance, x => x.Label == "Password recovery");
+    }
+
+    [Fact]
+    public async Task SecurityActivityIgnoresMalformedLoginEventsAndKeepsMissingRemoteIp()
+    {
+        await using var store = await SqliteTestStore.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInFailedMessage,
+            now.AddMinutes(-1),
+            "UserName=admin; Result=InvalidCredentials; RememberMe=False",
+            remoteIpAddress: null);
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInFailedMessage,
+            now,
+            "Result=InvalidCredentials; RememberMe=False",
+            remoteIpAddress: "203.0.113.10");
+        var service = new AdminSecurityActivityService(store.DbContextFactory);
+
+        var summary = await service.GetLoginActivityAsync("admin", now, CancellationToken.None);
+
+        Assert.Equal(1, summary.FailedLast24Hours);
+        Assert.NotNull(summary.LastFailedLogin);
+        Assert.Null(summary.LastFailedLogin.RemoteIpAddress);
+    }
+
+    [Fact]
+    public async Task LoginActivitySummarySelectsLatestAndCountsFailures()
+    {
+        await using var store = await SqliteTestStore.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInSucceededMessage,
+            now.AddDays(-2),
+            "UserName=admin; Result=Succeeded; RememberMe=True",
+            "203.0.113.1");
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInSucceededMessage,
+            now.AddMinutes(-10),
+            "UserName=admin; Result=Succeeded; RememberMe=False",
+            "203.0.113.2");
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInFailedMessage,
+            now.AddHours(-2),
+            "UserName=admin; Result=InvalidCredentials; RememberMe=False",
+            "203.0.113.3");
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInFailedMessage,
+            now.AddDays(-3),
+            "UserName=admin; Result=InvalidCredentials; RememberMe=False",
+            "203.0.113.4");
+        await AddSecurityEventAsync(
+            store,
+            AdminSecurityActivityService.SignInFailedMessage,
+            now.AddHours(-1),
+            "UserName=other; Result=InvalidCredentials; RememberMe=False",
+            "203.0.113.5");
+        var service = new AdminSecurityActivityService(store.DbContextFactory);
+
+        var summary = await service.GetLoginActivityAsync("admin", now, CancellationToken.None);
+
+        Assert.Equal("203.0.113.2", summary.LastSuccessfulLogin?.RemoteIpAddress);
+        Assert.Equal("203.0.113.3", summary.LastFailedLogin?.RemoteIpAddress);
+        Assert.Equal(1, summary.FailedLast24Hours);
+        Assert.Equal(2, summary.FailedLast7Days);
+    }
+
+    [Fact]
+    public async Task SuspiciousLoginSummaryFlagsConfiguredThresholds()
+    {
+        await using var store = await SqliteTestStore.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < 10; i++)
+        {
+            await AddSecurityEventAsync(
+                store,
+                AdminSecurityActivityService.SignInFailedMessage,
+                now.AddMinutes(-i),
+                "UserName=admin; Result=InvalidCredentials; RememberMe=False",
+                i < 3 ? "203.0.113.10" : $"203.0.113.{20 + i}");
+        }
+
+        var service = new AdminSecurityActivityService(store.DbContextFactory);
+
+        var summary = await service.GetSuspiciousLoginSummaryAsync(now, CancellationToken.None);
+
+        Assert.True(summary.IsSuspicious);
+        Assert.Equal(10, summary.FailedLast15Minutes);
+        Assert.Equal(10, summary.FailedLast24Hours);
+        Assert.Equal("203.0.113.10", summary.MostActiveRemoteIpAddress);
+        Assert.Equal(3, summary.MostActiveRemoteIpFailureCount);
+        Assert.Contains(summary.Findings, x => x.Label == "Failed logins");
+        Assert.Contains(summary.Findings, x => x.Label == "Daily failed logins");
+        Assert.Contains(summary.Findings, x => x.Label == "Repeated remote IP");
+    }
+
+    [Fact]
     public void SecurityStampValidationDefaultsToEveryRequest()
     {
         var options = new SecurityStampValidatorOptions
@@ -249,6 +400,28 @@ public sealed class AdminSecurityVisibilityTests
         Assert.Contains(checklist.Items, x => x.Label == "HTTP listener" && x.Status == "HTTP enabled");
     }
 
+    private static async Task AddSecurityEventAsync(
+        SqliteTestStore store,
+        string message,
+        DateTimeOffset occurredUtc,
+        string? detail,
+        string? remoteIpAddress)
+    {
+        await using var dbContext = store.CreateDbContext();
+        dbContext.OperationalEvents.Add(new OperationalEvent
+        {
+            Category = OperationalEventCategory.Security,
+            Severity = message == AdminSecurityActivityService.SignInFailedMessage
+                ? EventSeverity.Warning
+                : EventSeverity.Information,
+            Message = message,
+            Detail = detail,
+            RemoteIpAddress = remoteIpAddress,
+            OccurredUtc = occurredUtc
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
     private sealed class IdentityPageFixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -265,11 +438,14 @@ public sealed class AdminSecurityVisibilityTests
             _serviceProvider = serviceProvider;
             Events = events;
             _httpContextAccessor = httpContextAccessor;
+            SecurityActivity = new TestAdminSecurityActivityService();
         }
 
         public IServiceProvider Services => _serviceProvider;
 
         public RecordingOperationalEventService Events { get; }
+
+        public TestAdminSecurityActivityService SecurityActivity { get; }
 
         public static async Task<IdentityPageFixture> CreateAsync()
         {
@@ -359,6 +535,8 @@ public sealed class AdminSecurityVisibilityTests
             var model = new ChangePasswordModel(
                 _serviceProvider.GetRequiredService<UserManager<ApplicationUser>>(),
                 _serviceProvider.GetRequiredService<SignInManager<ApplicationUser>>(),
+                Events,
+                SecurityActivity,
                 _serviceProvider.GetRequiredService<IOptions<IdentityOptions>>(),
                 _serviceProvider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>(),
                 _serviceProvider.GetRequiredService<IOptions<SecurityStampValidatorOptions>>(),
@@ -391,6 +569,29 @@ public sealed class AdminSecurityVisibilityTests
             {
                 HttpContext = httpContext
             };
+        }
+    }
+
+    private sealed class TestAdminSecurityActivityService : IAdminSecurityActivityService
+    {
+        public AdminLoginActivitySummary LoginActivity { get; set; } =
+            new(null, null, null, 0, 0);
+
+        public SuspiciousLoginSummary SuspiciousLogins { get; set; } = SuspiciousLoginSummary.Empty;
+
+        public Task<AdminLoginActivitySummary> GetLoginActivityAsync(
+            string? userName,
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(LoginActivity);
+        }
+
+        public Task<SuspiciousLoginSummary> GetSuspiciousLoginSummaryAsync(
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(SuspiciousLogins);
         }
     }
 

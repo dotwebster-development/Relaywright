@@ -112,6 +112,7 @@ builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>()
 builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
 builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
 builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
+builder.Services.AddSingleton<IAdminSecurityActivityService, AdminSecurityActivityService>();
 builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
 builder.Services.AddSingleton<IApplicationRestartService, ApplicationRestartService>();
 builder.Services.AddSingleton<IOutboundRouteProbe, OutboundRouteProbe>();
