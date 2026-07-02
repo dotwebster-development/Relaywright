@@ -7,7 +7,7 @@
 <section class="page">
     <header class="page-header">
         <div class="page-header-copy">
-            <p class="page-eyebrow">Operations</p>
+            <p class="page-eyebrow">System</p>
             <h1>Backups</h1>
             <p class="page-summary">Create, validate, and restore backup bundles for the database, spool, certificates, and listener configuration.</p>
         </div>
@@ -19,17 +19,6 @@
             <p class="status">@Model.StatusMessage</p>
         </div>
     }
-
-    <div class="surface-toolbar">
-        <div class="toolbar-right">
-            <div class="page-actions">
-                <form method="post" asp-page-handler="Create" class="inline-form">
-                    <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional encryption password" />
-                    <button type="submit">Create Backup</button>
-                </form>
-            </div>
-        </div>
-    </div>
 
     <section class="panel">
         <h2>Restore Readiness</h2>
@@ -47,6 +36,20 @@
             <dt>Message</dt>
             <dd>@Model.Readiness.Message</dd>
         </dl>
+    </section>
+
+    <section class="settings-block">
+        <div class="settings-block-title">Manual Backup</div>
+        <form method="post" asp-page-handler="Create" class="compact-grid">
+            <label class="span-2">
+                <span>Encryption Password</span>
+                <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional one-time password" />
+            </label>
+            <div class="actions compact-actions">
+                <button type="submit">Create Backup</button>
+            </div>
+        </form>
+        <p class="field-hint">Creates a backup file in the configured backup storage. Use the history table to download, validate, or delete it.</p>
     </section>
 
     <section class="settings-block">
@@ -109,40 +112,49 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var run in Model.Runs)
+                @if (Model.Runs.Count == 0)
                 {
-                    <tr>
-                        <td>@run.StartedUtc.ToLocalTime()</td>
-                        <td><span class="status-badge status-@(run.Status == BackupRunStatus.Succeeded ? "delivered" : run.Status == BackupRunStatus.Failed ? "failed" : run.Status == BackupRunStatus.Deleted ? "disabled" : "inprogress")">@run.Status</span></td>
-                        <td>@run.FileName</td>
-                        <td><span class="status-badge @(run.IsEncrypted ? "status-enabled" : "status-disabled")">@(run.IsEncrypted ? "Encrypted" : "Plain")</span></td>
-                        <td>@(run.FileSizeBytes is null ? null : $"{run.FileSizeBytes / 1024} KB")</td>
-                        <td>
-                            @if (run.LastValidationSucceeded is not null)
-                            {
-                                <span class="status-badge @(run.LastValidationSucceeded.Value ? "status-delivered" : "status-failed")">@(run.LastValidationSucceeded.Value ? "Valid" : "Invalid")</span>
-                            }
-                        </td>
-                        <td>@(run.LastValidationMessage ?? run.Message)</td>
-                        <td>
-                            <div class="row-actions">
-                                @if (run.Status == BackupRunStatus.Succeeded)
-                                {
-                                    <a asp-page-handler="Download" asp-route-id="@run.Id">Download</a>
-                                    <form method="post" asp-page-handler="Validate" asp-route-id="@run.Id" class="inline-form">
-                                        @if (run.IsEncrypted)
-                                        {
-                                            <input name="ValidationPassword" type="password" autocomplete="new-password" placeholder="Password" />
-                                        }
-                                        <button type="submit" class="secondary-button">Validate</button>
-                                    </form>
-                                    <form method="post" asp-page-handler="Delete" asp-route-id="@run.Id" class="inline-form" onsubmit="return confirm('Delete this backup file?');">
-                                        <button type="submit" class="secondary-button">Delete</button>
-                                    </form>
-                                }
-                            </div>
-                        </td>
+                    <tr class="empty-row">
+                        <td colspan="8" class="table-empty">No backups recorded</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var run in Model.Runs)
+                    {
+                        <tr>
+                            <td>@run.StartedUtc.ToLocalTime()</td>
+                            <td><span class="status-badge status-@(run.Status == BackupRunStatus.Succeeded ? "delivered" : run.Status == BackupRunStatus.Failed ? "failed" : run.Status == BackupRunStatus.Deleted ? "disabled" : "inprogress")">@StatusLabels.For(run.Status)</span></td>
+                            <td>@run.FileName</td>
+                            <td><span class="status-badge @(run.IsEncrypted ? "status-enabled" : "status-disabled")">@(run.IsEncrypted ? "Encrypted" : "Unencrypted")</span></td>
+                            <td>@(run.FileSizeBytes is null ? null : $"{run.FileSizeBytes / 1024} KB")</td>
+                            <td>
+                                @if (run.LastValidationSucceeded is not null)
+                                {
+                                    <span class="status-badge @(run.LastValidationSucceeded.Value ? "status-delivered" : "status-failed")">@(run.LastValidationSucceeded.Value ? "Valid" : "Invalid")</span>
+                                }
+                            </td>
+                            <td>@(run.LastValidationMessage ?? run.Message)</td>
+                            <td>
+                                <div class="row-actions">
+                                    @if (run.Status == BackupRunStatus.Succeeded)
+                                    {
+                                        <a asp-page-handler="Download" asp-route-id="@run.Id">Download</a>
+                                        <form method="post" asp-page-handler="Validate" asp-route-id="@run.Id" class="inline-form">
+                                            @if (run.IsEncrypted)
+                                            {
+                                                <input name="ValidationPassword" type="password" autocomplete="new-password" placeholder="Password" />
+                                            }
+                                            <button type="submit" class="secondary-button">Validate</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="Delete" asp-route-id="@run.Id" class="inline-form" onsubmit="return confirm('Delete this backup file?');">
+                                            <button type="submit" class="secondary-button">Delete</button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

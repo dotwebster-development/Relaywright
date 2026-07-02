@@ -7,7 +7,7 @@
 <section class="page">
     <header class="page-header">
         <div class="page-header-copy">
-            <p class="page-eyebrow">Operations</p>
+            <p class="page-eyebrow">System</p>
             <h1>Alerts</h1>
             <p class="page-summary">Configure local alert thresholds and optional email notification recipients for operational conditions.</p>
         </div>
@@ -42,49 +42,58 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var rule in Model.Rules)
+                @if (Model.Rules.Count == 0)
                 {
-                    <tr>
-                        <td>
-                            <strong>@rule.DisplayName</strong><br />
-                            <span class="muted">@rule.Description</span>
-                        </td>
-                        <td>
-                            <span class="status-badge @(rule.IsActive ? "severity-warning" : "status-enabled")">@(rule.IsActive ? "Active" : "Clear")</span>
-                        </td>
-                        <td>
-                            <form method="post" asp-page-handler="Save" class="inline-edit-form">
-                                <input type="hidden" name="RuleId" value="@rule.Id" />
-                                <div class="compact-grid">
-                                    <div class="toggle-field">
-                                        <label class="switch-control">
-                                            <input type="checkbox" name="IsEnabled" value="true" checked="@rule.IsEnabled" />
-                                            <span class="switch-control-track" aria-hidden="true"></span>
-                                            <span>Enabled</span>
-                                        </label>
-                                        <input type="hidden" name="IsEnabled" value="false" />
-                                    </div>
-                                    <label>
-                                        <span>Threshold</span>
-                                        <input name="Threshold" value="@rule.Threshold" type="number" />
-                                    </label>
-                                    <label>
-                                        <span>Cooldown</span>
-                                        <input name="CooldownMinutes" value="@rule.CooldownMinutes" type="number" />
-                                    </label>
-                                    <label>
-                                        <span>Email Recipients</span>
-                                        <input name="EmailRecipients" value="@rule.EmailRecipients" placeholder="admin@example.test" />
-                                    </label>
-                                </div>
-                                @if (!string.IsNullOrWhiteSpace(rule.LastNotificationMessage))
-                                {
-                                    <p class="field-hint">@rule.LastNotificationMessage</p>
-                                }
-                                <button type="submit">Save</button>
-                            </form>
-                        </td>
+                    <tr class="empty-row">
+                        <td colspan="3" class="table-empty">No alert rules configured</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var rule in Model.Rules)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@rule.DisplayName</strong><br />
+                                <span class="muted">@rule.Description</span>
+                            </td>
+                            <td>
+                                <span class="status-badge @(rule.IsActive ? "severity-warning" : "status-enabled")">@(rule.IsActive ? "Active" : "Clear")</span>
+                            </td>
+                            <td>
+                                <form method="post" asp-page-handler="Save" class="inline-edit-form">
+                                    <input type="hidden" name="RuleId" value="@rule.Id" />
+                                    <div class="compact-grid">
+                                        <div class="toggle-field">
+                                            <label class="switch-control">
+                                                <input type="checkbox" name="IsEnabled" value="true" checked="@rule.IsEnabled" />
+                                                <span class="switch-control-track" aria-hidden="true"></span>
+                                                <span>Enabled</span>
+                                            </label>
+                                            <input type="hidden" name="IsEnabled" value="false" />
+                                        </div>
+                                        <label>
+                                            <span>Threshold</span>
+                                            <input name="Threshold" value="@rule.Threshold" type="number" />
+                                        </label>
+                                        <label>
+                                            <span>Cooldown</span>
+                                            <input name="CooldownMinutes" value="@rule.CooldownMinutes" type="number" />
+                                        </label>
+                                        <label>
+                                            <span>Email Recipients</span>
+                                            <input name="EmailRecipients" value="@rule.EmailRecipients" placeholder="admin@example.test" />
+                                        </label>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(rule.LastNotificationMessage))
+                                    {
+                                        <p class="field-hint">@rule.LastNotificationMessage</p>
+                                    }
+                                    <button type="submit">Save</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>
@@ -106,16 +115,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var result in Model.RecentResults)
+                @if (Model.RecentResults.Count == 0)
                 {
-                    <tr>
-                        <td>@result.OccurredUtc.ToLocalTime()</td>
-                        <td>@result.AlertRule.DisplayName</td>
-                        <td><span class="status-badge @(result.IsActive ? "severity-warning" : "status-enabled")">@(result.IsActive ? "Active" : "Resolved")</span></td>
-                        <td>@result.ObservedValue / @result.Threshold</td>
-                        <td>@result.Message</td>
-                        <td>@result.NotificationMessage</td>
+                    <tr class="empty-row">
+                        <td colspan="6" class="table-empty">No alert results recorded</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var result in Model.RecentResults)
+                    {
+                        <tr>
+                            <td>@result.OccurredUtc.ToLocalTime()</td>
+                            <td>@result.AlertRule.DisplayName</td>
+                            <td><span class="status-badge @(result.IsActive ? "severity-warning" : "status-enabled")">@(result.IsActive ? "Active" : "Clear")</span></td>
+                            <td>@result.ObservedValue / @result.Threshold</td>
+                            <td>@result.Message</td>
+                            <td>@result.NotificationMessage</td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

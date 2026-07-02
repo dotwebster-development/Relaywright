@@ -145,15 +145,15 @@
             <h2>Runtime Status</h2>
             <dl class="kv">
                 <dt>SMTP Listener</dt>
-                <dd><span class="status-badge status-@Model.RuntimeStatus.SmtpListener.Status.ToLowerInvariant()">@Model.RuntimeStatus.SmtpListener.Status</span></dd>
+                <dd><span class="status-badge status-@Model.RuntimeStatus.SmtpListener.Status.ToLowerInvariant()">@StatusLabels.ForRuntime(Model.RuntimeStatus.SmtpListener.Status)</span></dd>
                 <dt>Listener Detail</dt>
                 <dd>@Model.RuntimeStatus.SmtpListener.Detail</dd>
                 <dt>Delivery Worker</dt>
-                <dd><span class="status-badge @(Model.RuntimeStatus.IsDeliveryPaused ? "status-disabled" : Model.RuntimeStatus.DeliveryWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : Model.RuntimeStatus.DeliveryWorker.Status)</span></dd>
+                <dd><span class="status-badge @(Model.RuntimeStatus.IsDeliveryPaused ? "status-disabled" : Model.RuntimeStatus.DeliveryWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@(Model.RuntimeStatus.IsDeliveryPaused ? "Paused" : StatusLabels.ForRuntime(Model.RuntimeStatus.DeliveryWorker.Status))</span></dd>
                 <dt>Active Deliveries</dt>
                 <dd>@Model.RuntimeStatus.ActiveDeliveries</dd>
                 <dt>Maintenance</dt>
-                <dd><span class="status-badge @(Model.RuntimeStatus.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@Model.RuntimeStatus.MaintenanceWorker.Status</span></dd>
+                <dd><span class="status-badge @(Model.RuntimeStatus.MaintenanceWorker.Status == "Faulted" ? "status-failed" : "status-enabled")">@StatusLabels.ForRuntime(Model.RuntimeStatus.MaintenanceWorker.Status)</span></dd>
                 <dt>Last Cleanup</dt>
                 <dd>@Model.RuntimeStatus.LastCleanupUtc?.ToLocalTime()</dd>
             </dl>
@@ -203,14 +203,23 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var item in Model.RecentEvents)
+                @if (Model.RecentEvents.Count == 0)
                 {
-                    <tr>
-                        <td>@item.OccurredUtc.ToLocalTime()</td>
-                        <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
-                        <td><span class="badge">@item.Category</span></td>
-                        <td>@item.Message</td>
+                    <tr class="empty-row">
+                        <td colspan="4" class="table-empty">No recent events</td>
                     </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.RecentEvents)
+                    {
+                        <tr>
+                            <td>@item.OccurredUtc.ToLocalTime()</td>
+                            <td><span class="status-badge severity-@(item.Severity.ToString().ToLowerInvariant())">@item.Severity</span></td>
+                            <td><span class="badge">@item.Category</span></td>
+                            <td>@item.Message</td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>
