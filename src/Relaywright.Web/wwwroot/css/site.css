@@ -569,6 +569,22 @@ textarea {
     background: var(--accent-muted);
 }
 
+.security-checklist {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.security-checklist div {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.security-checklist p {
+    margin: 0;
+}
+
 .setup-summary {
     display: grid;
     gap: 10px;
@@ -973,6 +989,16 @@ textarea {
     background: var(--bg-muted);
 }
 
+.compact-list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+}
+
+.compact-list li + li {
+    margin-top: 4px;
+}
+
 .field-hint {
     margin: 0;
     color: var(--text-muted);
@@ -1169,6 +1195,29 @@ button:hover,
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-surface);
+}
+
+.surface-status.dismissible-status {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+}
+
+.surface-status.dismissible-status .status {
+    margin: 0;
+}
+
+.status-dismiss {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    border-color: var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+}
+
+.status-dismiss:hover {
+    background: var(--bg-muted);
+    color: var(--text);
 }
 
 .toolbar-left {

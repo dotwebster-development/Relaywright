@@ -99,6 +99,7 @@ builder.Services.ConfigureApplicationCookie(options =>
         : CookieSecurePolicy.Always;
     options.SlidingExpiration = true;
 });
+builder.Services.Configure<SecurityStampValidatorOptions>(AdminSecurityDefaults.ConfigureSecurityStampValidator);
 
 builder.Services.AddRazorPages(options =>
 {
@@ -169,6 +170,17 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
     app.UseHttpsRedirection();
 }
+
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers.TryAdd("X-Content-Type-Options", "nosniff");
+    headers.TryAdd("X-Frame-Options", "DENY");
+    headers.TryAdd("Referrer-Policy", "no-referrer");
+    headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+    await next();
+});
 
 app.Use(async (context, next) =>
 {

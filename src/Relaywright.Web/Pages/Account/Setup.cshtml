@@ -35,6 +35,20 @@
             </li>
         </ol>
 
+        <div class="setup-callout">
+            <strong>Security checklist</strong>
+            <div class="security-checklist">
+                @foreach (var item in Model.HardeningChecklist.Items)
+                {
+                    <div>
+                        <span class="status-badge @item.BadgeClass">@item.Status</span>
+                        <strong>@item.Label</strong>
+                        <p>@item.Detail</p>
+                    </div>
+                }
+            </div>
+        </div>
+
         @if (Model.IsWelcomeStep)
         {
             <div class="setup-step">
@@ -59,6 +73,16 @@
                 <div class="setup-copy">
                     <h2>Create the administrator</h2>
                     <p>This account is required before the web interface, relay settings, and diagnostics can be used.</p>
+                </div>
+
+                <div class="auth-panel">
+                    <strong>Password Requirements</strong>
+                    <ul class="compact-list">
+                        @foreach (var requirement in Model.PasswordPolicy.Requirements)
+                        {
+                            <li>@requirement</li>
+                        }
+                    </ul>
                 </div>
 
                 <div asp-validation-summary="ModelOnly" class="status error"></div>
