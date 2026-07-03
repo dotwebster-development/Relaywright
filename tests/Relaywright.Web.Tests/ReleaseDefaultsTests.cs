@@ -124,13 +124,21 @@ public sealed class ReleaseDefaultsTests
     public void DocumentationGuidelinesAndDashboardWikiLinkAreTracked()
     {
         var guidelines = ReadRepositoryFile("docs", "DOCUMENTATION_GUIDELINES.md");
+        var docsReadme = ReadRepositoryFile("docs", "README.md");
         var checklist = ReadRepositoryFile("docs", "RELEASE_CHECKLIST.md");
+        var projectReview = ReadRepositoryFile("docs", "PROJECT_IMPROVEMENT_REVIEW.md");
         var wikiDraftsReadme = ReadRepositoryFile("docs", "wiki-drafts", "README.md");
+        var readme = ReadRepositoryFile("README.md");
         var dashboard = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Index.cshtml");
 
         Assert.Contains("Repository docs are the source of truth", guidelines, StringComparison.Ordinal);
         Assert.Contains("GitHub Wiki is the operator manual", guidelines, StringComparison.Ordinal);
         Assert.Contains("docs/wiki-drafts/", guidelines, StringComparison.Ordinal);
+        Assert.Contains("Relaywright Documentation Map", docsReadme, StringComparison.Ordinal);
+        Assert.Contains("Release records", docsReadme, StringComparison.Ordinal);
+        Assert.Contains("Historical snapshot", projectReview, StringComparison.Ordinal);
+        Assert.Contains("Historical Improvement Backlog", projectReview, StringComparison.Ordinal);
+        Assert.Contains("[Documentation map](docs/README.md)", readme, StringComparison.Ordinal);
         Assert.Contains("Website and Wiki have been reviewed", checklist, StringComparison.Ordinal);
         Assert.Contains("docs/wiki-drafts/", checklist, StringComparison.Ordinal);
         Assert.Contains("The GitHub Wiki repository is initialized", wikiDraftsReadme, StringComparison.Ordinal);
