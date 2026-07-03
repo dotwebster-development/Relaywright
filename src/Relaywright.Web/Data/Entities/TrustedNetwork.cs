@@ -26,22 +26,22 @@ public sealed class TrustedNetwork
     [NoControlCharacters]
     public string? Location { get; set; }
 
-    [StringLength(4096)]
+    [StringLength(ValidationLimits.MaximumPolicyListLength)]
     [NoControlCharacters(true)]
     [SenderPolicyList]
     public string? AllowedSenderAddresses { get; set; }
 
-    [StringLength(4096)]
+    [StringLength(ValidationLimits.MaximumPolicyListLength)]
     [NoControlCharacters(true)]
     [SenderPolicyList]
     public string? BlockedSenderAddresses { get; set; }
 
-    [StringLength(4096)]
+    [StringLength(ValidationLimits.MaximumPolicyListLength)]
     [NoControlCharacters(true)]
     [RecipientDomainPolicyList]
     public string? AllowedRecipientDomains { get; set; }
 
-    [StringLength(4096)]
+    [StringLength(ValidationLimits.MaximumPolicyListLength)]
     [NoControlCharacters(true)]
     [RecipientDomainPolicyList]
     public string? BlockedRecipientDomains { get; set; }

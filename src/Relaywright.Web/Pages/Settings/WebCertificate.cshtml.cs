@@ -163,7 +163,7 @@ public sealed class WebCertificateModel(
         [AllowedFileExtensions(".pfx", ".p12")]
         public IFormFile? PfxFile { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string? PfxPassword { get; set; }
 
@@ -173,11 +173,11 @@ public sealed class WebCertificateModel(
         [AllowedFileExtensions(".key", ".pem")]
         public IFormFile? KeyFile { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string? KeyPassword { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumTextLength)]
         [NoControlCharacters(true)]
         [CertificateNames]
         public string SelfSignedDnsNames { get; set; } = GetDefaultCertificateNames();

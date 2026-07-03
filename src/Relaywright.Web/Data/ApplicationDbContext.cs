@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MySql.EntityFrameworkCore.Extensions;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Data;
 
@@ -49,7 +50,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.Id).ValueGeneratedNever();
             entity.Property(x => x.ListenerBindAddress).HasMaxLength(256);
             entity.Property(x => x.ListenerHostName).HasMaxLength(256);
-            entity.Property(x => x.CertificatePath).HasMaxLength(1024);
+            entity.Property(x => x.CertificatePath).HasMaxLength(ValidationLimits.MaximumTextLength);
             entity.Property(x => x.UpstreamHost).HasMaxLength(256);
             entity.Property(x => x.UpstreamUserName).HasMaxLength(256);
             entity.Property(x => x.MicrosoftTenantId).HasMaxLength(128);
@@ -63,10 +64,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.Description).HasMaxLength(256);
             entity.Property(x => x.Owner).HasMaxLength(256);
             entity.Property(x => x.Location).HasMaxLength(256);
-            entity.Property(x => x.AllowedSenderAddresses).HasMaxLength(4096);
-            entity.Property(x => x.BlockedSenderAddresses).HasMaxLength(4096);
-            entity.Property(x => x.AllowedRecipientDomains).HasMaxLength(4096);
-            entity.Property(x => x.BlockedRecipientDomains).HasMaxLength(4096);
+            entity.Property(x => x.AllowedSenderAddresses).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
+            entity.Property(x => x.BlockedSenderAddresses).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
+            entity.Property(x => x.AllowedRecipientDomains).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
+            entity.Property(x => x.BlockedRecipientDomains).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
             entity.HasIndex(x => x.Cidr).IsUnique();
         });
 
@@ -74,10 +75,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).ValueGeneratedNever();
-            entity.Property(x => x.AllowedSenderAddresses).HasMaxLength(4096);
-            entity.Property(x => x.BlockedSenderAddresses).HasMaxLength(4096);
-            entity.Property(x => x.AllowedRecipientDomains).HasMaxLength(4096);
-            entity.Property(x => x.BlockedRecipientDomains).HasMaxLength(4096);
+            entity.Property(x => x.AllowedSenderAddresses).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
+            entity.Property(x => x.BlockedSenderAddresses).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
+            entity.Property(x => x.AllowedRecipientDomains).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
+            entity.Property(x => x.BlockedRecipientDomains).HasMaxLength(ValidationLimits.MaximumPolicyListLength);
         });
 
         builder.Entity<QueuedMessage>(entity =>
@@ -89,7 +90,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.LastResponseCode).HasMaxLength(32);
             entity.Property(x => x.LastResponseText).HasMaxLength(2048);
             entity.Property(x => x.LastError).HasMaxLength(4096);
-            entity.Property(x => x.SpoolFileRelativePath).HasMaxLength(1024);
+            entity.Property(x => x.SpoolFileRelativePath).HasMaxLength(ValidationLimits.MaximumTextLength);
             entity.HasIndex(x => new { x.Status, x.NextAttemptAtUtc });
             entity.HasIndex(x => new { x.Status, x.DeliveredUtc });
             entity.HasIndex(x => new { x.Status, x.LastAttemptCompletedUtc });
@@ -147,8 +148,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Key).HasMaxLength(128);
             entity.Property(x => x.DisplayName).HasMaxLength(256);
-            entity.Property(x => x.Description).HasMaxLength(1024);
-            entity.Property(x => x.EmailRecipients).HasMaxLength(1024);
+            entity.Property(x => x.Description).HasMaxLength(ValidationLimits.MaximumTextLength);
+            entity.Property(x => x.EmailRecipients).HasMaxLength(ValidationLimits.MaximumTextLength);
             entity.Property(x => x.LastNotificationMessage).HasMaxLength(2048);
             entity.HasIndex(x => x.Key).IsUnique();
             entity.HasMany(x => x.Results)

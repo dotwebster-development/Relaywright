@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Relaywright.Web.Infrastructure;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Security;
 
@@ -88,9 +89,9 @@ public sealed class AdminWebListenerConfigurationService(
 
     private static void ValidatePort(int port, string label)
     {
-        if (port is < 1 or > 65535)
+        if (port is < ValidationLimits.MinimumPort or > ValidationLimits.MaximumPort)
         {
-            throw new InvalidOperationException($"{label} must be between 1 and 65535.");
+            throw new InvalidOperationException(ValidationMessages.PortRange(label));
         }
     }
 }
