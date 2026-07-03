@@ -61,6 +61,38 @@ public sealed class RelayConfigurationServiceTests
         Assert.Equal(SecureSocketOptions.None, saved.UpstreamSecureSocketOptions);
     }
 
+    [Fact]
+    public async Task SaveRejectsUpstreamHostThatLooksLikeUrl()
+    {
+        await using var fixture = await RelayConfigurationFixture.CreateAsync();
+        var model = CreateBaseModel();
+        model.UpstreamHost = "https://smtp.example.test";
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Service.SaveAsync(model, CancellationToken.None));
+
+        Assert.Contains("hostname or IP address", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SaveRejectsMicrosoftClientIdThatIsNotGuid()
+    {
+        await using var fixture = await RelayConfigurationFixture.CreateAsync();
+        var model = CreateBaseModel();
+        model.UseUpstreamAuthentication = true;
+        model.UpstreamAuthenticationMode = UpstreamAuthenticationMode.Microsoft365OAuth;
+        model.UpstreamUserName = "relay@example.test";
+        model.MicrosoftTenantId = "contoso.onmicrosoft.com";
+        model.MicrosoftClientId = "client-id";
+        model.MicrosoftClientSecret = "secret";
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Service.SaveAsync(model, CancellationToken.None));
+
+        Assert.Contains("client ID", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GUID", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static RelayConfigurationEditModel CreateAuthenticatedModel(SecureSocketOptions secureSocketOptions)
     {
         var model = CreateBaseModel();

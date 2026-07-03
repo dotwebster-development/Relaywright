@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Diagnostics;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Diagnostics;
 
@@ -55,13 +56,19 @@ public sealed class FlowModel(
     public sealed class InputModel
     {
         [Required]
+        [StringLength(128)]
+        [IpAddress]
         public string SourceIpAddress { get; set; } = string.Empty;
 
         [Required]
-        [EmailAddress]
+        [StringLength(512)]
+        [MailboxAddress]
         public string EnvelopeFrom { get; set; } = string.Empty;
 
         [Required]
+        [StringLength(4096)]
+        [NoControlCharacters(true)]
+        [MailboxList]
         public string Recipients { get; set; } = string.Empty;
 
         [Range(0, long.MaxValue)]

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Security;
 
@@ -19,6 +20,8 @@ public sealed class TrustedDevicePolicyService(
 
     public async Task SavePolicyAsync(SubmissionPolicy policy, CancellationToken cancellationToken)
     {
+        ValidatePolicy(policy);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await dbContext.SubmissionPolicies.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
         if (existing is null)
@@ -227,13 +230,7 @@ public sealed class TrustedDevicePolicyService(
 
     private static IReadOnlyList<string> ParseList(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return [];
-        }
-
-        return value
-            .Split([',', ';', '\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        return ValidationRules.SplitDelimitedList(value)
             .Select(x => x.ToLowerInvariant())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -260,8 +257,7 @@ public sealed class TrustedDevicePolicyService(
 
     private static string? NormalizeList(string? value)
     {
-        var entries = ParseList(value);
-        return entries.Count == 0 ? null : string.Join(Environment.NewLine, entries);
+        return ValidationRules.NormalizeDelimitedList(value);
     }
 
     private static long? NormalizePositive(long? value) => value is > 0 ? value : null;
@@ -288,5 +284,68 @@ public sealed class TrustedDevicePolicyService(
             (null, { } r) => r,
             _ => null
         };
+    }
+
+    private static void ValidatePolicy(SubmissionPolicy policy)
+    {
+        if (policy.Id != 1)
+        {
+            throw new InvalidOperationException("Submission policy ID must be 1.");
+        }
+
+        ValidateSenderPolicyList(policy.AllowedSenderAddresses, "Allowed sender addresses");
+        ValidateSenderPolicyList(policy.BlockedSenderAddresses, "Blocked sender addresses");
+        ValidateRecipientDomainPolicyList(policy.AllowedRecipientDomains, "Allowed recipient domains");
+        ValidateRecipientDomainPolicyList(policy.BlockedRecipientDomains, "Blocked recipient domains");
+        ValidatePositive(policy.MaxMessageSizeBytes, "Maximum message size");
+        ValidatePositive(policy.MaxRecipientsPerMessage, "Maximum recipients per message");
+    }
+
+    private static void ValidateSenderPolicyList(string? value, string label)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
+        {
+            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
+        }
+
+        foreach (var entry in ValidationRules.SplitDelimitedList(value))
+        {
+            if (!ValidationRules.IsSenderPolicyPattern(entry))
+            {
+                throw new InvalidOperationException($"{label} contains an invalid sender entry: {entry}.");
+            }
+        }
+    }
+
+    private static void ValidateRecipientDomainPolicyList(string? value, string label)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
+        {
+            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
+        }
+
+        foreach (var entry in ValidationRules.SplitDelimitedList(value))
+        {
+            if (!ValidationRules.IsRecipientDomainPattern(entry))
+            {
+                throw new InvalidOperationException($"{label} contains an invalid domain entry: {entry}.");
+            }
+        }
+    }
+
+    private static void ValidatePositive(long? value, string label)
+    {
+        if (value is <= 0)
+        {
+            throw new InvalidOperationException($"{label} must be at least 1.");
+        }
+    }
+
+    private static void ValidatePositive(int? value, string label)
+    {
+        if (value is <= 0)
+        {
+            throw new InvalidOperationException($"{label} must be at least 1.");
+        }
     }
 }

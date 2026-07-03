@@ -107,11 +107,13 @@
                     </span>
                 </label>
             </div>
+            <span asp-validation-for="Input.Mode"></span>
 
             <div class="certificate-panel" data-certificate-panel="selfsigned">
                 <label>
                     <span>DNS Names</span>
                     <input asp-for="Input.SelfSignedDnsNames" />
+                    <span asp-validation-for="Input.SelfSignedDnsNames"></span>
                 </label>
                 <label>
                     <span>Valid Years</span>
@@ -124,10 +126,12 @@
                 <label>
                     <span>PFX File</span>
                     <input asp-for="Input.PfxFile" type="file" accept=".pfx,.p12,application/x-pkcs12" />
+                    <span asp-validation-for="Input.PfxFile"></span>
                 </label>
                 <label>
                     <span>PFX Password</span>
                     <input asp-for="Input.PfxPassword" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="Input.PfxPassword"></span>
                 </label>
             </div>
 
@@ -135,14 +139,17 @@
                 <label>
                     <span>Certificate File</span>
                     <input asp-for="Input.CertificateFile" type="file" accept=".crt,.cer,.pem,application/x-pem-file" />
+                    <span asp-validation-for="Input.CertificateFile"></span>
                 </label>
                 <label>
                     <span>Private Key File</span>
                     <input asp-for="Input.KeyFile" type="file" accept=".key,.pem,application/x-pem-file" />
+                    <span asp-validation-for="Input.KeyFile"></span>
                 </label>
                 <label>
                     <span>Private Key Password</span>
                     <input asp-for="Input.KeyPassword" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="Input.KeyPassword"></span>
                 </label>
             </div>
 

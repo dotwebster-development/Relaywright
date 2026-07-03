@@ -451,6 +451,31 @@ public sealed class BackupServiceTests
         Assert.Equal(BackupRunStatus.Deleted, verifyContext.BackupRuns.Single(x => x.Id == oldest).Status);
     }
 
+    [Fact]
+    public async Task SaveScheduleRejectsOutOfRangeValuesInsteadOfClamping()
+    {
+        using var appData = TempAppData.Create();
+        var factory = await CreateFileBackedDatabaseAsync(appData);
+        var service = new BackupService(
+            factory,
+            new BackupCoordinator(),
+            new RecordingOperationalEventService(),
+            appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
+            NullLogger<BackupService>.Instance);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveScheduleAsync(
+            new BackupScheduleState
+            {
+                IsEnabled = true,
+                IntervalHours = 0,
+                RetentionCount = 7
+            },
+            CancellationToken.None));
+
+        Assert.Contains("interval", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task SeedCredentialStateAsync(TestDbContextFactory factory)
     {
         await using var dbContext = factory.CreateDbContext();

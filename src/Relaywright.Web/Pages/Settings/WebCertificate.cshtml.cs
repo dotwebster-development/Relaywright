@@ -5,6 +5,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Settings;
 
@@ -37,6 +38,19 @@ public sealed class WebCertificateModel(
 
     public async Task<IActionResult> OnPostSaveCertificateAsync(CancellationToken cancellationToken)
     {
+        ValidateCertificateInput();
+        if (!ModelState.IsValid)
+        {
+            await LoadPageStateAsync(cancellationToken);
+            logger.LogWarning(
+                "Admin web HTTPS certificate save rejected by validation. Mode={Mode}; ErrorCount={ErrorCount}; User={UserName}; RemoteIp={RemoteIp}",
+                Input.Mode,
+                ModelState.ErrorCount,
+                User.Identity?.Name,
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+            return Page();
+        }
+
         try
         {
             CurrentCertificate = Input.Mode switch
@@ -108,6 +122,33 @@ public sealed class WebCertificateModel(
             : throw new InvalidOperationException(message);
     }
 
+    private void ValidateCertificateInput()
+    {
+        switch (Input.Mode)
+        {
+            case AdminHttpsCertificateMode.Pfx:
+                AddMissingFileError(Input.PfxFile, $"{nameof(Input)}.{nameof(CertificateInputModel.PfxFile)}", "Select a PFX certificate file.");
+                break;
+            case AdminHttpsCertificateMode.Pem:
+                AddMissingFileError(Input.CertificateFile, $"{nameof(Input)}.{nameof(CertificateInputModel.CertificateFile)}", "Select a certificate file.");
+                AddMissingFileError(Input.KeyFile, $"{nameof(Input)}.{nameof(CertificateInputModel.KeyFile)}", "Select a private key file.");
+                break;
+            case AdminHttpsCertificateMode.SelfSigned:
+                break;
+            default:
+                ModelState.AddModelError($"{nameof(Input)}.{nameof(CertificateInputModel.Mode)}", "Choose a certificate option.");
+                break;
+        }
+    }
+
+    private void AddMissingFileError(IFormFile? file, string key, string message)
+    {
+        if (file is not { Length: > 0 })
+        {
+            ModelState.AddModelError(key, message);
+        }
+    }
+
     public static string GetDefaultCertificateNames()
     {
         return string.Join(", ", new[] { "localhost", Environment.MachineName }
@@ -119,16 +160,26 @@ public sealed class WebCertificateModel(
     {
         public AdminHttpsCertificateMode Mode { get; set; } = AdminHttpsCertificateMode.SelfSigned;
 
+        [AllowedFileExtensions(".pfx", ".p12")]
         public IFormFile? PfxFile { get; set; }
 
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string? PfxPassword { get; set; }
 
+        [AllowedFileExtensions(".crt", ".cer", ".pem")]
         public IFormFile? CertificateFile { get; set; }
 
+        [AllowedFileExtensions(".key", ".pem")]
         public IFormFile? KeyFile { get; set; }
 
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string? KeyPassword { get; set; }
 
+        [StringLength(1024)]
+        [NoControlCharacters(true)]
+        [CertificateNames]
         public string SelfSignedDnsNames { get; set; } = GetDefaultCertificateNames();
 
         [Range(1, 10)]

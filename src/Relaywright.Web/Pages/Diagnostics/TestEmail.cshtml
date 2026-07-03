@@ -25,18 +25,22 @@
             <label>
                 <span>From</span>
                 <input asp-for="Input.FromAddress" />
+                <span asp-validation-for="Input.FromAddress"></span>
             </label>
             <label>
                 <span>To</span>
                 <input asp-for="Input.ToAddress" />
+                <span asp-validation-for="Input.ToAddress"></span>
             </label>
             <label>
                 <span>Subject</span>
                 <input asp-for="Input.Subject" />
+                <span asp-validation-for="Input.Subject"></span>
             </label>
             <label>
                 <span>Body</span>
                 <textarea asp-for="Input.Body" rows="8"></textarea>
+                <span asp-validation-for="Input.Body"></span>
             </label>
             <div class="actions">
                 <button type="submit">Send Test Email</button>

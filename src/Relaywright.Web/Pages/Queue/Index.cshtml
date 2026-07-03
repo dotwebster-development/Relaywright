@@ -23,9 +23,11 @@
             </div>
 
             <form method="get" class="filter-row">
+                <div asp-validation-summary="ModelOnly" class="status error"></div>
                 <input type="hidden" name="status" value="@Model.SelectedStatus" />
                 <label>
                     <input asp-for="Search" type="search" placeholder="Sender, recipient, IP, correlation ID" aria-label="Search queue" />
+                    <span asp-validation-for="Search"></span>
                 </label>
                 <button type="submit">Filter</button>
                 <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus">Clear</a>
@@ -59,6 +61,7 @@
     }
 
     <form method="post" class="stack">
+        <div asp-validation-summary="ModelOnly" class="status error"></div>
         <input type="hidden" name="ReturnStatus" value="@Model.SelectedStatus" />
         <input type="hidden" name="ReturnSearch" value="@Model.Search" />
         <input type="hidden" name="ReturnPageNumber" value="@Model.PageNumber" />

@@ -81,6 +81,33 @@ public sealed class AdminHttpsCertificateServiceTests
         Assert.True(certificate.HasPrivateKey);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GenerateSelfSignedRejectsInvalidDnsName()
+    {
+        using var fixture = CertificateFixture.Create();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Service.GenerateSelfSignedAsync("https://relaywright.test", 1, CancellationToken.None));
+
+        Assert.Contains("invalid", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task SavePfxRejectsUnsupportedFileExtension()
+    {
+        using var fixture = CertificateFixture.Create();
+        var password = "cert-secret";
+        await using var pfxStream = CreatePfxStream("relaywright.test", password);
+        var file = new FormFile(pfxStream, 0, pfxStream.Length, "CertificateInput.PfxFile", "relaywright.txt");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Service.SavePfxAsync(file, password, CancellationToken.None));
+
+        Assert.Contains(".pfx", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static MemoryStream CreatePfxStream(string dnsName, string password)
     {
         using var rsa = RSA.Create(2048);

@@ -29,6 +29,15 @@ public sealed class SubmissionPolicyModel(
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            logger.LogWarning(
+                "Submission policy save rejected by validation. ErrorCount={ErrorCount}; User={UserName}",
+                ModelState.ErrorCount,
+                User.Identity?.Name);
+            return Page();
+        }
+
         await configurationSnapshotService.CaptureAsync(
             ConfigurationSnapshotService.SubmissionPolicyArea,
             User.Identity?.Name,

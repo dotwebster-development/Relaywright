@@ -1,9 +1,11 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Backups;
 using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Runtime;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Operations;
 
@@ -22,15 +24,22 @@ public sealed class BackupsModel(
     public BackupScheduleState Schedule { get; set; } = new();
 
     [BindProperty]
+    [StringLength(1024)]
+    [NoControlCharacters]
     public string? EncryptionPassword { get; set; }
 
     [BindProperty]
+    [StringLength(1024)]
+    [NoControlCharacters]
     public string? ValidationPassword { get; set; }
 
     [BindProperty]
+    [AllowedFileExtensions(".zip", ".rwbak")]
     public IFormFile? RestoreBackupFile { get; set; }
 
     [BindProperty]
+    [StringLength(1024)]
+    [NoControlCharacters]
     public string? RestoreEncryptionPassword { get; set; }
 
     [TempData]
@@ -43,6 +52,12 @@ public sealed class BackupsModel(
 
     public async Task<IActionResult> OnPostCreateAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var run = await backupService.CreateBackupAsync(
             User.Identity?.Name,
             scheduled: false,
@@ -61,6 +76,12 @@ public sealed class BackupsModel(
 
     public async Task<IActionResult> OnPostSaveScheduleAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         await configurationSnapshotService.CaptureAsync(
             ConfigurationSnapshotService.BackupScheduleArea,
             User.Identity?.Name,
@@ -73,6 +94,12 @@ public sealed class BackupsModel(
 
     public async Task<IActionResult> OnPostValidateAsync(Guid id, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var result = await backupService.ValidateAsync(id, cancellationToken, ValidationPassword);
         StatusMessage = result.Message;
         return RedirectToPage();
@@ -80,14 +107,20 @@ public sealed class BackupsModel(
 
     public async Task<IActionResult> OnPostStageRestoreAsync(CancellationToken cancellationToken)
     {
-        if (RestoreBackupFile is null || RestoreBackupFile.Length <= 0)
+        var backupFile = RestoreBackupFile;
+        if (backupFile is null || backupFile.Length <= 0)
         {
-            StatusMessage = "Select a Relaywright backup file.";
-            return RedirectToPage();
+            ModelState.AddModelError(nameof(RestoreBackupFile), "Select a Relaywright backup file.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         var restore = await backupRestoreService.StageRestoreAsync(
-            RestoreBackupFile,
+            backupFile!,
             RestoreEncryptionPassword,
             cancellationToken);
 
@@ -96,7 +129,7 @@ public sealed class BackupsModel(
             StatusMessage = restore.Message;
             logger.LogWarning(
                 "Backup restore staging failed from admin page. FileName={FileName}; User={UserName}; Message={Message}",
-                RestoreBackupFile.FileName,
+                backupFile!.FileName,
                 User.Identity?.Name,
                 restore.Message);
             return RedirectToPage();
@@ -110,7 +143,7 @@ public sealed class BackupsModel(
         StatusMessage = $"{restore.Message} {restart.Message}";
         logger.LogWarning(
             "Backup restore staged from admin page. FileName={FileName}; User={UserName}; RestartScheduled={RestartScheduled}",
-            RestoreBackupFile.FileName,
+            backupFile!.FileName,
             User.Identity?.Name,
             restart.RestartScheduled);
         return RedirectToPage();

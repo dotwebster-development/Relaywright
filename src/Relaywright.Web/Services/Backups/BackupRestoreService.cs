@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Relaywright.Web.Infrastructure;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Backups;
 
@@ -50,6 +51,24 @@ public sealed class BackupRestoreService(
             {
                 Succeeded = false,
                 Message = $"Backup file is too large. The restore upload limit is {MaxRestoreUploadBytes / 1024 / 1024 / 1024} GB."
+            };
+        }
+
+        if (!ValidationRules.HasAllowedExtension(backupFile.FileName, [".zip", ".rwbak"]))
+        {
+            return new BackupRestoreResult
+            {
+                Succeeded = false,
+                Message = "Backup file must use a .zip or .rwbak extension."
+            };
+        }
+
+        if (!IsValidPassword(encryptionPassword, out var passwordMessage))
+        {
+            return new BackupRestoreResult
+            {
+                Succeeded = false,
+                Message = passwordMessage
             };
         }
 
@@ -328,6 +347,29 @@ public sealed class BackupRestoreService(
         }
 
         return candidate;
+    }
+
+    private static bool IsValidPassword(string? value, out string message)
+    {
+        message = string.Empty;
+        if (value is null)
+        {
+            return true;
+        }
+
+        if (value.Length > 1024)
+        {
+            message = "Restore encryption password must be 1024 characters or fewer.";
+            return false;
+        }
+
+        if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
+        {
+            message = "Restore encryption password contains an unsupported control character.";
+            return false;
+        }
+
+        return true;
     }
 
     private static async Task ValidateDatabaseAsync(string databasePath, CancellationToken cancellationToken)

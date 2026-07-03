@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Relaywright.Web.Infrastructure;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Security;
 
@@ -59,6 +60,9 @@ public sealed class AdminHttpsCertificateService(
             throw new InvalidOperationException("Select a PFX certificate file.");
         }
 
+        ValidateFileExtension(certificateFile.FileName, "PFX certificate file", [".pfx", ".p12"]);
+        ValidatePassword(password, "PFX password");
+
         var targetPath = Path.Combine(paths.CertificateDirectory, "admin-web.pfx");
         var tempPath = CreateTemporaryPath(".pfx");
 
@@ -105,6 +109,10 @@ public sealed class AdminHttpsCertificateService(
         {
             throw new InvalidOperationException("Select a private key file.");
         }
+
+        ValidateFileExtension(certificateFile.FileName, "Certificate file", [".crt", ".cer", ".pem"]);
+        ValidateFileExtension(keyFile.FileName, "Private key file", [".key", ".pem"]);
+        ValidatePassword(keyPassword, "Private key password");
 
         var certificatePath = Path.Combine(paths.CertificateDirectory, "admin-web.crt");
         var keyPath = Path.Combine(paths.CertificateDirectory, "admin-web.key");
@@ -158,6 +166,14 @@ public sealed class AdminHttpsCertificateService(
         if (names.Count == 0)
         {
             names.Add("localhost");
+        }
+
+        foreach (var name in names)
+        {
+            if (!ValidationRules.IsCertificateName(name))
+            {
+                throw new InvalidOperationException($"Self-signed certificate contains an invalid DNS name or IP address: {name}.");
+            }
         }
 
         var password = CreateRandomPassword();
@@ -269,6 +285,32 @@ public sealed class AdminHttpsCertificateService(
             .Split([',', ';', '\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static void ValidateFileExtension(string fileName, string label, IReadOnlyCollection<string> extensions)
+    {
+        if (!ValidationRules.HasAllowedExtension(fileName, extensions))
+        {
+            throw new InvalidOperationException($"{label} must use one of these file extensions: {string.Join(", ", extensions)}.");
+        }
+    }
+
+    private static void ValidatePassword(string? password, string label)
+    {
+        if (password is null)
+        {
+            return;
+        }
+
+        if (password.Length > 1024)
+        {
+            throw new InvalidOperationException($"{label} must be 1024 characters or fewer.");
+        }
+
+        if (ValidationRules.ContainsDisallowedControlCharacter(password, allowLineBreaks: false, out _))
+        {
+            throw new InvalidOperationException($"{label} contains an unsupported control character.");
+        }
     }
 
     private static string CreateRandomPassword()
