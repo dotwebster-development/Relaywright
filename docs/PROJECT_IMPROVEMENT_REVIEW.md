@@ -1,5 +1,7 @@
 # Project Improvement Review And GUI Redesign Plan
 
+> Historical snapshot: this review is not the current Relaywright backlog. It is kept for context about the June 2026 improvement pass. Check [Implementation summary](IMPLEMENTATION_SUMMARY.md), [Release records](release-records/), [Documentation map](README.md), and the current code before treating any item below as open.
+
 Review date: 2026-06-20
 
 Scope: source, config, docs, and tests. Generated `bin`/`obj` output and runtime `App_Data` state were excluded from the review.
@@ -8,7 +10,7 @@ Implementation note: most items from this review were implemented on 2026-06-20.
 
 Status note, 2026-07-03: this file is a historical review snapshot, not the current live backlog. Check `docs/IMPLEMENTATION_SUMMARY.md`, the latest release record, and the current code before treating any item below as still open.
 
-## Top Improvement Backlog
+## Historical Improvement Backlog
 
 ### P0 - Reliability, Security, And Data Safety
 

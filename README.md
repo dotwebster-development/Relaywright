@@ -123,6 +123,7 @@ Relaywright uses release-candidate artifacts for validation. The current release
 See:
 
 - [Operator Wiki](https://github.com/dotwebster-development/Relaywright/wiki)
+- [Documentation map](docs/README.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development guidelines](docs/DEVELOPMENT_GUIDELINES.md)
 - [Documentation guidelines](docs/DOCUMENTATION_GUIDELINES.md)
