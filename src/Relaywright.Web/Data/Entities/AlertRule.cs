@@ -21,7 +21,7 @@ public sealed class AlertRule
     [Range(1, int.MaxValue)]
     public int CooldownMinutes { get; set; } = 60;
 
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumTextLength)]
     [NoControlCharacters(true)]
     [MailboxList]
     public string? EmailRecipients { get; set; }

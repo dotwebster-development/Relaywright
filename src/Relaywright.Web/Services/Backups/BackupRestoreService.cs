@@ -357,15 +357,15 @@ public sealed class BackupRestoreService(
             return true;
         }
 
-        if (value.Length > 1024)
+        if (value.Length > ValidationLimits.MaximumSecretLength)
         {
-            message = "Restore encryption password must be 1024 characters or fewer.";
+            message = ValidationMessages.MaximumLength("Restore encryption password", ValidationLimits.MaximumSecretLength);
             return false;
         }
 
         if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
         {
-            message = "Restore encryption password contains an unsupported control character.";
+            message = ValidationMessages.UnsupportedControlCharacter("Restore encryption password");
             return false;
         }
 

@@ -18,6 +18,7 @@ using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
 using Relaywright.Web.Services.Smtp;
 using Relaywright.Web.Services.Updates;
+using Relaywright.Web.Validation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -291,7 +292,7 @@ app.MapGet("/health/details", async (
     try
     {
         var configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
-        checks["configuration"] = configuration.ListenerPort is >= 1 and <= 65535
+        checks["configuration"] = configuration.ListenerPort is >= ValidationLimits.MinimumPort and <= ValidationLimits.MaximumPort
             ? "ok"
             : "invalid listener port";
         healthy &= checks["configuration"] == "ok";

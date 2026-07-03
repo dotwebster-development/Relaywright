@@ -303,9 +303,10 @@ public sealed class TrustedDevicePolicyService(
 
     private static void ValidateSenderPolicyList(string? value, string label)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
+        if (!string.IsNullOrWhiteSpace(value) && value.Length > ValidationLimits.MaximumPolicyListLength)
         {
-            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
+            throw new InvalidOperationException(
+                ValidationMessages.MaximumLength(label, ValidationLimits.MaximumPolicyListLength));
         }
 
         foreach (var entry in ValidationRules.SplitDelimitedList(value))
@@ -319,9 +320,10 @@ public sealed class TrustedDevicePolicyService(
 
     private static void ValidateRecipientDomainPolicyList(string? value, string label)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
+        if (!string.IsNullOrWhiteSpace(value) && value.Length > ValidationLimits.MaximumPolicyListLength)
         {
-            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
+            throw new InvalidOperationException(
+                ValidationMessages.MaximumLength(label, ValidationLimits.MaximumPolicyListLength));
         }
 
         foreach (var entry in ValidationRules.SplitDelimitedList(value))

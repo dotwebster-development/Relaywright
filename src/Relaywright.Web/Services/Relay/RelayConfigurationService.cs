@@ -210,9 +210,9 @@ public sealed class RelayConfigurationService(
             throw new InvalidOperationException("Listener bind address must be a valid IP address.");
         }
 
-        if (model.ListenerPort is < 1 or > 65535)
+        if (model.ListenerPort is < ValidationLimits.MinimumPort or > ValidationLimits.MaximumPort)
         {
-            throw new InvalidOperationException("Listener port must be between 1 and 65535.");
+            throw new InvalidOperationException(ValidationMessages.PortRange("Listener port"));
         }
 
         if (string.IsNullOrWhiteSpace(model.ListenerHostName))
@@ -222,9 +222,13 @@ public sealed class RelayConfigurationService(
 
         ValidateHostOrIp(model.ListenerHostName, "Listener host name");
 
-        if (model.MaxMessageSizeBytes < 1024)
+        if (model.MaxMessageSizeBytes < ValidationLimits.MinimumMessageSizeBytes)
         {
-            throw new InvalidOperationException("Maximum message size must be at least 1024 bytes.");
+            throw new InvalidOperationException(
+                ValidationMessages.AtLeast(
+                    "Maximum message size",
+                    ValidationLimits.MinimumMessageSizeBytes,
+                    "bytes"));
         }
 
         if (model.EnableStartTls)
@@ -237,14 +241,14 @@ public sealed class RelayConfigurationService(
             ValidateFileExtension(
                 model.CertificatePath,
                 "Certificate path",
-                [".pfx", ".p12", ".cer", ".crt", ".pem"]);
+                ValidationLimits.CertificateFileExtensions);
         }
         else if (!string.IsNullOrWhiteSpace(model.CertificatePath))
         {
             ValidateFileExtension(
                 model.CertificatePath,
                 "Certificate path",
-                [".pfx", ".p12", ".cer", ".crt", ".pem"]);
+                ValidationLimits.CertificateFileExtensions);
         }
 
         ValidateOptionalSecret(model.CertificatePassword, "Certificate password");
@@ -254,9 +258,9 @@ public sealed class RelayConfigurationService(
             ValidateHostOrIp(model.UpstreamHost, "Upstream host");
         }
 
-        if (model.UpstreamPort is < 1 or > 65535)
+        if (model.UpstreamPort is < ValidationLimits.MinimumPort or > ValidationLimits.MaximumPort)
         {
-            throw new InvalidOperationException("Upstream port must be between 1 and 65535.");
+            throw new InvalidOperationException(ValidationMessages.PortRange("Upstream port"));
         }
 
         if (model.DeliveryConcurrency < 1)
@@ -379,7 +383,7 @@ public sealed class RelayConfigurationService(
     {
         if (!ValidationRules.IsHostNameOrIpAddress(value.Trim()))
         {
-            throw new InvalidOperationException($"{label} must be a hostname or IP address, not a URL or path.");
+            throw new InvalidOperationException(ValidationMessages.HostNameOrIpAddress(label));
         }
     }
 
@@ -387,7 +391,7 @@ public sealed class RelayConfigurationService(
     {
         if (!ValidationRules.HasAllowedExtension(value, extensions))
         {
-            throw new InvalidOperationException($"{label} must use one of these file extensions: {string.Join(", ", extensions)}.");
+            throw new InvalidOperationException(ValidationMessages.FileExtension(label, extensions));
         }
     }
 
@@ -395,15 +399,15 @@ public sealed class RelayConfigurationService(
     {
         if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
         {
-            throw new InvalidOperationException($"{label} contains an unsupported control character.");
+            throw new InvalidOperationException(ValidationMessages.UnsupportedControlCharacter(label));
         }
     }
 
     private static void ValidateOptionalSecret(string? value, string label)
     {
-        if (value is not null && value.Length > 1024)
+        if (value is not null && value.Length > ValidationLimits.MaximumSecretLength)
         {
-            throw new InvalidOperationException($"{label} must be 1024 characters or fewer.");
+            throw new InvalidOperationException(ValidationMessages.MaximumLength(label, ValidationLimits.MaximumSecretLength));
         }
 
         ValidateSingleLineText(value, label);

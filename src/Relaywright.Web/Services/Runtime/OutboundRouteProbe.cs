@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Runtime;
 
@@ -19,7 +20,7 @@ public sealed class OutboundRouteProbe(ILogger<OutboundRouteProbe> logger) : IOu
             };
         }
 
-        if (port is < 1 or > 65535)
+        if (port is < ValidationLimits.MinimumPort or > ValidationLimits.MaximumPort)
         {
             return new OutboundRouteResult
             {

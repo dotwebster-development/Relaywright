@@ -55,7 +55,9 @@ public sealed class AlertService(
         existing.IsEnabled = rule.IsEnabled;
         existing.Threshold = rule.Threshold;
         existing.CooldownMinutes = rule.CooldownMinutes;
-        existing.EmailRecipients = string.IsNullOrWhiteSpace(rule.EmailRecipients) ? null : Trim(rule.EmailRecipients, 1024);
+        existing.EmailRecipients = string.IsNullOrWhiteSpace(rule.EmailRecipients)
+            ? null
+            : Trim(rule.EmailRecipients, ValidationLimits.MaximumTextLength);
         existing.UpdatedUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -316,14 +318,15 @@ public sealed class AlertService(
             return;
         }
 
-        if (rule.EmailRecipients.Length > 1024)
+        if (rule.EmailRecipients.Length > ValidationLimits.MaximumTextLength)
         {
-            throw new InvalidOperationException("Alert email recipients must be 1024 characters or fewer.");
+            throw new InvalidOperationException(
+                ValidationMessages.MaximumLength("Alert email recipients", ValidationLimits.MaximumTextLength));
         }
 
         if (ValidationRules.ContainsDisallowedControlCharacter(rule.EmailRecipients, allowLineBreaks: true, out _))
         {
-            throw new InvalidOperationException("Alert email recipients contain an unsupported control character.");
+            throw new InvalidOperationException(ValidationMessages.UnsupportedControlCharacter("Alert email recipients"));
         }
 
         foreach (var recipient in ValidationRules.SplitDelimitedList(rule.EmailRecipients))

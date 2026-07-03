@@ -33,7 +33,7 @@ public sealed class AlertsModel(
     public int CooldownMinutes { get; set; }
 
     [BindProperty]
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumTextLength)]
     [NoControlCharacters(true)]
     [MailboxList]
     public string? EmailRecipients { get; set; }

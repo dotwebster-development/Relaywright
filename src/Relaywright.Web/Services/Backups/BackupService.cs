@@ -612,14 +612,14 @@ public sealed class BackupService(
             return;
         }
 
-        if (value.Length > 1024)
+        if (value.Length > ValidationLimits.MaximumSecretLength)
         {
-            throw new InvalidOperationException($"{label} must be 1024 characters or fewer.");
+            throw new InvalidOperationException(ValidationMessages.MaximumLength(label, ValidationLimits.MaximumSecretLength));
         }
 
         if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
         {
-            throw new InvalidOperationException($"{label} contains an unsupported control character.");
+            throw new InvalidOperationException(ValidationMessages.UnsupportedControlCharacter(label));
         }
     }
 
