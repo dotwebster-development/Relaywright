@@ -138,6 +138,23 @@ public sealed class ReleaseDefaultsTests
         Assert.Contains("https://github.com/dotwebster-development/Relaywright/wiki", dashboard, StringComparison.Ordinal);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RelaySettingsPageUsesSectionPartials()
+    {
+        var page = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Settings", "Relay.cshtml");
+        var listener = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Settings", "_RelayListenerFields.cshtml");
+        var upstream = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Settings", "_RelayUpstreamFields.cshtml");
+        var delivery = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Settings", "_RelayDeliveryRetentionFields.cshtml");
+
+        Assert.Contains("<partial name=\"_RelayListenerFields\"", page, StringComparison.Ordinal);
+        Assert.Contains("<partial name=\"_RelayUpstreamFields\"", page, StringComparison.Ordinal);
+        Assert.Contains("<partial name=\"_RelayDeliveryRetentionFields\"", page, StringComparison.Ordinal);
+        Assert.Contains("settings-block-title\">Listener", listener, StringComparison.Ordinal);
+        Assert.Contains("settings-block-title\">Upstream", upstream, StringComparison.Ordinal);
+        Assert.Contains("settings-block-title\">Delivery And Retention", delivery, StringComparison.Ordinal);
+    }
+
     private static string ReadRepositoryFile(params string[] segments)
     {
         return File.ReadAllText(Path.Combine([RepositoryRoot, .. segments]));

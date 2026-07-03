@@ -1,0 +1,47 @@
+@model Relaywright.Web.Pages.Settings.RelayModel
+
+<section class="settings-block">
+    <div class="settings-block-title">Delivery And Retention</div>
+    <div class="compact-grid">
+        <label>
+            <span>Concurrency (Workers)</span>
+            <input asp-for="Input.DeliveryConcurrency" type="number" />
+            <span asp-validation-for="Input.DeliveryConcurrency"></span>
+        </label>
+        <label>
+            <span>Max Retries (Tries)</span>
+            <input asp-for="Input.MaxRetryCount" type="number" />
+            <span asp-validation-for="Input.MaxRetryCount"></span>
+        </label>
+        <label>
+            <span>Initial Retry (Seconds)</span>
+            <input asp-for="Input.InitialRetryDelaySeconds" type="number" />
+            <span asp-validation-for="Input.InitialRetryDelaySeconds"></span>
+        </label>
+        <label>
+            <span>Max Retry (Seconds)</span>
+            <input asp-for="Input.MaxRetryDelaySeconds" type="number" />
+            <span asp-validation-for="Input.MaxRetryDelaySeconds"></span>
+        </label>
+        <label>
+            <span>Expires After (Hours)</span>
+            <input asp-for="Input.MessageExpirationHours" type="number" />
+            <span asp-validation-for="Input.MessageExpirationHours"></span>
+        </label>
+        <label>
+            <span>Delivered Keep (Hours)</span>
+            <input asp-for="Input.DeliveredRetentionHours" type="number" />
+            <span asp-validation-for="Input.DeliveredRetentionHours"></span>
+        </label>
+        <label>
+            <span>Failed Keep (Hours)</span>
+            <input asp-for="Input.FailedRetentionHours" type="number" />
+            <span asp-validation-for="Input.FailedRetentionHours"></span>
+        </label>
+        <label>
+            <span>Event Keep (Hours)</span>
+            <input asp-for="Input.EventRetentionHours" type="number" />
+            <span asp-validation-for="Input.EventRetentionHours"></span>
+        </label>
+    </div>
+</section>
