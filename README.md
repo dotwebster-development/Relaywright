@@ -6,7 +6,7 @@ It is built with ASP.NET Core, EF Core, SmtpServer, and MailKit. Release builds 
 
 ## Status
 
-Relaywright is preparing for a stable `v1.0.0` release. Until that tag exists, treat published release candidates as test/validation builds rather than a production support promise.
+Relaywright has a stable `1.0.x` release line. Treat release candidates as validation builds until the matching stable tag is published.
 
 ## Why It Exists
 
@@ -66,7 +66,7 @@ curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/downlo
   | sudo bash -s -- --repo dotwebster-development/Relaywright --version <version>
 ```
 
-Replace `<version>` with a published version such as `1.0.0-rc.7`.
+Replace `<version>` with a published version such as `1.0.1`.
 
 The Linux installer auto-selects the matching package for x64, ARM64, or 32-bit ARMv7 hosts. For Raspberry Pi class devices, prefer a 64-bit OS so the installer selects the validated `linux-arm64` package; `linux-arm` is best-effort until dedicated ARMv7 validation is available.
 

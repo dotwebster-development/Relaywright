@@ -4,8 +4,15 @@ All notable Relaywright release changes are tracked here.
 
 ## Unreleased
 
+## 1.0.1
+
+- Adds typed server-side validation and browser hints across user-editable admin fields, including relay settings, trusted networks, submission policy, alerts, backups, web listener/certificates, diagnostics, account forms, queue search, and log search.
+- Keeps passwords, certificate passwords, OAuth secrets, backup passwords, restore passwords, message bodies, and search fields free of character allowlists while enforcing length and control-character checks.
+- Hardens service-layer validation for relay configuration, trusted networks, submission policy, alerts, backups, web listener settings, and HTTPS certificate operations.
+- Adds an in-app update status check and refreshed website content.
 - Adds a Linux ARM64 release package for Raspberry Pi class and other small-office ARM devices, plus a best-effort ARMv7 package until 32-bit ARM validation hardware is available.
 - Updates the Linux installer to auto-detect x64, ARM64, and ARMv7 hosts, with `--runtime` available for explicit overrides.
+- Updates release/install defaults to point at the current `dotwebster-development/Relaywright` release repository.
 
 ## 1.0.0
 

@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 mode="soak"
-version="1.0.0-rc.7"
-repository="${GITHUB_REPOSITORY:-relaywright/relaywright}"
+version="1.0.1-rc.1"
+repository="${GITHUB_REPOSITORY:-dotwebster-development/Relaywright}"
 github_token="${GITHUB_TOKEN:-}"
 artifacts_directory="$PWD/artifacts/linux-soak-validation"
 duration_minutes="10"

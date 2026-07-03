@@ -9,7 +9,7 @@ on:
       version:
         description: "Release version without leading v"
         required: true
-        default: "1.0.0"
+        default: "1.0.1"
 
 permissions:
   contents: write
@@ -253,10 +253,11 @@ jobs:
           Relaywright ${RELAYWRIGHT_VERSION}
 
           Release notes:
-          - Stable 1.0 release line.
-          - Admin web HTTP listener is disabled by default.
-          - Windows installer firewall scope defaults to LocalSubnet.
-          - Linux firewall configuration is optional; when enabled, local-subnet scope is the default.
+          - Maintenance release on the stable 1.0 release line.
+          - Adds typed admin field validation across user-editable settings and operations forms.
+          - Adds in-app update status checks and refreshed public website content.
+          - Adds Linux ARM64 and best-effort ARMv7 release packages with installer runtime auto-detection.
+          - Keeps admin web HTTP disabled by default and scoped firewall defaults for production installs.
           - See UPGRADE.md before upgrading existing beta installations.
 
           Downloads:
