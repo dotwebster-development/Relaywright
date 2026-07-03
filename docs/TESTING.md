@@ -43,6 +43,44 @@ dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --filter "F
 
 CI runs those provider checks in dedicated jobs with disposable service containers.
 
+External SQL Server/MySQL validation runs through `.github/workflows/validate-external-databases.yml`. It uses a self-hosted Linux runner with the `relaywright` and `test` labels because the shared database host is on the private test network. The workflow can be started manually for `both`, `sqlserver`, or `mysql`, and also runs weekly.
+
+Configure these GitHub environment or repository secrets before running it:
+
+- `RELAYWRIGHT_EXTERNAL_SQLSERVER_CONNECTION_STRING`
+- `RELAYWRIGHT_EXTERNAL_MYSQL_CONNECTION_STRING`
+
+The current shared-database test host is `test-sql01`. Use dedicated disposable test databases because `DatabaseProviderIntegrationTests` calls `EnsureDeletedAsync` and `EnsureCreatedAsync`.
+
+Example secret values:
+
+```text
+Server=test-sql01,1433;Database=RelaywrightProviderTests;User Id=relaywright_test;Password=...;Encrypt=True;TrustServerCertificate=True
+server=test-sql01;port=3306;database=RelaywrightProviderTests;user=relaywright_test;password=...;SslMode=Preferred;AllowPublicKeyRetrieval=True
+```
+
+The SQL Server test login needs permission to drop and create `RelaywrightProviderTests`; `dbcreator` plus database ownership is sufficient. The MySQL test user needs permission to drop and recreate `RelaywrightProviderTests`, and the server must listen on TCP 3306 from the self-hosted runner.
+
+For a local external-provider check against `test-sql01`, avoid putting the password in shell history:
+
+```powershell
+$pw = Read-Host "Relaywright DB test password" -AsSecureString
+$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw)
+
+try {
+    $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    $env:RELAYWRIGHT_TEST_SQLSERVER_CONNECTION_STRING = "Server=test-sql01,1433;Database=RelaywrightProviderTests;User Id=relaywright_test;Password=$plain;Encrypt=True;TrustServerCertificate=True"
+    $env:RELAYWRIGHT_TEST_MYSQL_CONNECTION_STRING = "server=test-sql01;port=3306;database=RelaywrightProviderTests;user=relaywright_test;password=$plain;SslMode=Preferred;AllowPublicKeyRetrieval=True"
+
+    dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --filter "FullyQualifiedName~DatabaseProviderIntegrationTests"
+}
+finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    Remove-Item Env:\RELAYWRIGHT_TEST_SQLSERVER_CONNECTION_STRING -ErrorAction SilentlyContinue
+    Remove-Item Env:\RELAYWRIGHT_TEST_MYSQL_CONNECTION_STRING -ErrorAction SilentlyContinue
+}
+```
+
 Good service-integration targets:
 
 - SMTP DATA accepted -> spool write -> queue metadata saved -> SMTP OK
