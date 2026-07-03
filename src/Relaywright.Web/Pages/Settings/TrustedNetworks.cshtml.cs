@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Settings;
 
@@ -35,6 +36,17 @@ public sealed class TrustedNetworksModel(
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
+            logger.LogWarning(
+                "Trusted network save rejected by validation. Id={TrustedNetworkId}; ErrorCount={ErrorCount}; User={UserName}",
+                Input.Id,
+                ModelState.ErrorCount,
+                User.Identity?.Name);
+            return Page();
+        }
+
         try
         {
             await configurationSnapshotService.CaptureAsync(
@@ -127,9 +139,7 @@ public sealed class TrustedNetworksModel(
 
     private static void AddCount(List<string> parts, string label, string? value)
     {
-        var count = value?
-            .Split([',', ';', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Length ?? 0;
+        var count = ValidationRules.SplitDelimitedList(value).Count;
 
         if (count > 0)
         {

@@ -15,10 +15,12 @@
             <label>
                 <span>User Name</span>
                 <input asp-for="Input.UserName" autocomplete="username" />
+                <span asp-validation-for="Input.UserName"></span>
             </label>
             <label>
                 <span>Password</span>
                 <input asp-for="Input.Password" type="password" autocomplete="current-password" />
+                <span asp-validation-for="Input.Password"></span>
             </label>
             <label class="switch-control">
                 <input asp-for="Input.RememberMe" type="checkbox" />

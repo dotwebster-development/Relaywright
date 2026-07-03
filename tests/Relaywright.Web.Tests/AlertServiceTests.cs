@@ -98,6 +98,51 @@ public sealed class AlertServiceTests
         Assert.True(recentResults.Single().ObservedValue >= 89);
     }
 
+    [Fact]
+    public async Task SaveRuleRejectsNegativeThresholdInsteadOfClamping()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        using var appData = TempAppData.Create();
+        int ruleId;
+        await using (var dbContext = database.CreateDbContext())
+        {
+            var rule = new AlertRule
+            {
+                Key = "queue-depth",
+                DisplayName = "Queue depth",
+                Description = "Queue is deep.",
+                IsEnabled = true,
+                Threshold = 1,
+                CooldownMinutes = 60
+            };
+            dbContext.AlertRules.Add(rule);
+            await dbContext.SaveChangesAsync();
+            ruleId = rule.Id;
+        }
+
+        var service = new AlertService(
+            database.DbContextFactory,
+            new StaticRuntimeStatusService(),
+            new StaticRelayConfigurationService(TestData.Snapshot()),
+            new NullAdminHttpsCertificateService(),
+            new RecordingAlertEmailNotifier(),
+            new RecordingOperationalEventService(),
+            appData.Paths,
+            NullLogger<AlertService>.Instance);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveRuleAsync(
+            new AlertRule
+            {
+                Id = ruleId,
+                IsEnabled = true,
+                Threshold = -1,
+                CooldownMinutes = 60
+            },
+            CancellationToken.None));
+
+        Assert.Contains("threshold", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class RecordingAlertEmailNotifier : IAlertEmailNotifier
     {
         public int SendCount { get; private set; }

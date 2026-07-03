@@ -1,8 +1,10 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Alerts;
 using Relaywright.Web.Services.ConfigurationHistory;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Operations;
 
@@ -16,18 +18,24 @@ public sealed class AlertsModel(
     public IReadOnlyList<AlertResult> RecentResults { get; private set; } = Array.Empty<AlertResult>();
 
     [BindProperty]
+    [Range(1, int.MaxValue)]
     public int RuleId { get; set; }
 
     [BindProperty]
     public bool IsEnabled { get; set; }
 
     [BindProperty]
+    [Range(typeof(long), "0", "9223372036854775807")]
     public long Threshold { get; set; }
 
     [BindProperty]
+    [Range(1, int.MaxValue)]
     public int CooldownMinutes { get; set; }
 
     [BindProperty]
+    [StringLength(1024)]
+    [NoControlCharacters(true)]
+    [MailboxList]
     public string? EmailRecipients { get; set; }
 
     [TempData]
@@ -40,6 +48,17 @@ public sealed class AlertsModel(
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            logger.LogWarning(
+                "Alert rule save rejected by validation. RuleId={RuleId}; ErrorCount={ErrorCount}; User={UserName}",
+                RuleId,
+                ModelState.ErrorCount,
+                User.Identity?.Name);
+            return Page();
+        }
+
         await configurationSnapshotService.CaptureAsync(
             ConfigurationSnapshotService.AlertRulesArea,
             User.Identity?.Name,

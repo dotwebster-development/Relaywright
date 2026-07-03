@@ -32,6 +32,7 @@
 
     <section class="panel">
         <h2>Rules</h2>
+        <div asp-validation-summary="ModelOnly" class="status error"></div>
         <div class="table-wrap">
             <table class="table">
                 <thead>
@@ -75,14 +76,17 @@
                                         <label>
                                             <span>Threshold</span>
                                             <input name="Threshold" value="@rule.Threshold" type="number" />
+                                            <span asp-validation-for="Threshold"></span>
                                         </label>
                                         <label>
                                             <span>Cooldown</span>
                                             <input name="CooldownMinutes" value="@rule.CooldownMinutes" type="number" />
+                                            <span asp-validation-for="CooldownMinutes"></span>
                                         </label>
                                         <label>
                                             <span>Email Recipients</span>
                                             <input name="EmailRecipients" value="@rule.EmailRecipients" placeholder="admin@example.test" />
+                                            <span asp-validation-for="EmailRecipients"></span>
                                         </label>
                                     </div>
                                     @if (!string.IsNullOrWhiteSpace(rule.LastNotificationMessage))

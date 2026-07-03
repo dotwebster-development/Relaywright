@@ -7,6 +7,7 @@ using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Alerts;
 
@@ -45,13 +46,15 @@ public sealed class AlertService(
 
     public async Task SaveRuleAsync(AlertRule rule, CancellationToken cancellationToken)
     {
+        ValidateRule(rule);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await dbContext.AlertRules.SingleOrDefaultAsync(x => x.Id == rule.Id, cancellationToken)
             ?? throw new InvalidOperationException("Alert rule not found.");
 
         existing.IsEnabled = rule.IsEnabled;
-        existing.Threshold = Math.Max(0, rule.Threshold);
-        existing.CooldownMinutes = Math.Max(1, rule.CooldownMinutes);
+        existing.Threshold = rule.Threshold;
+        existing.CooldownMinutes = rule.CooldownMinutes;
         existing.EmailRecipients = string.IsNullOrWhiteSpace(rule.EmailRecipients) ? null : Trim(rule.EmailRecipients, 1024);
         existing.UpdatedUtc = DateTimeOffset.UtcNow;
 
@@ -289,6 +292,47 @@ public sealed class AlertService(
     private static string Trim(string value, int maxLength)
     {
         return value.Length <= maxLength ? value : value[..maxLength];
+    }
+
+    private static void ValidateRule(AlertRule rule)
+    {
+        if (rule.Id < 1)
+        {
+            throw new InvalidOperationException("Alert rule ID must be at least 1.");
+        }
+
+        if (rule.Threshold < 0)
+        {
+            throw new InvalidOperationException("Alert threshold must be zero or greater.");
+        }
+
+        if (rule.CooldownMinutes < 1)
+        {
+            throw new InvalidOperationException("Alert cooldown must be at least 1 minute.");
+        }
+
+        if (string.IsNullOrWhiteSpace(rule.EmailRecipients))
+        {
+            return;
+        }
+
+        if (rule.EmailRecipients.Length > 1024)
+        {
+            throw new InvalidOperationException("Alert email recipients must be 1024 characters or fewer.");
+        }
+
+        if (ValidationRules.ContainsDisallowedControlCharacter(rule.EmailRecipients, allowLineBreaks: true, out _))
+        {
+            throw new InvalidOperationException("Alert email recipients contain an unsupported control character.");
+        }
+
+        foreach (var recipient in ValidationRules.SplitDelimitedList(rule.EmailRecipients))
+        {
+            if (!ValidationRules.IsMailboxAddress(recipient))
+            {
+                throw new InvalidOperationException($"Alert email recipients contains an invalid mailbox address: {recipient}.");
+            }
+        }
     }
 
     private sealed record AlertEvaluation(bool IsActive, long ObservedValue, string Message);

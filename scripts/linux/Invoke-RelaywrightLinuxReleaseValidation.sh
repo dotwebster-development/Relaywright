@@ -2,9 +2,9 @@
 set -Eeuo pipefail
 
 mode="clean-installer"
-version="1.0.0-rc.5"
-from_version=""
-repository="${GITHUB_REPOSITORY:-relaywright/relaywright}"
+version="1.0.1-rc.1"
+from_version="1.0.0"
+repository="${GITHUB_REPOSITORY:-dotwebster-development/Relaywright}"
 github_token="${GITHUB_TOKEN:-}"
 artifacts_directory="$PWD/artifacts/linux-release-validation"
 sudo_password="${RELAYWRIGHT_LINUX_RELEASE_VALIDATION_SUDO_PASSWORD:-${RELAYWRIGHT_SUDO_PASSWORD:-}}"

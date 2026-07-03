@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using Relaywright.Web.Validation;
+
 namespace Relaywright.Web.Data.Entities;
 
 public sealed class AlertRule
@@ -12,10 +15,15 @@ public sealed class AlertRule
 
     public bool IsEnabled { get; set; } = true;
 
+    [Range(typeof(long), "0", "9223372036854775807")]
     public long Threshold { get; set; }
 
+    [Range(1, int.MaxValue)]
     public int CooldownMinutes { get; set; } = 60;
 
+    [StringLength(1024)]
+    [NoControlCharacters(true)]
+    [MailboxList]
     public string? EmailRecipients { get; set; }
 
     public bool IsActive { get; set; }

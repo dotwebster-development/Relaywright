@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 mode="ugly-paths"
-version="1.0.0-rc.7"
-repository="${GITHUB_REPOSITORY:-relaywright/relaywright}"
+version="1.0.1-rc.1"
+repository="${GITHUB_REPOSITORY:-dotwebster-development/Relaywright}"
 github_token="${GITHUB_TOKEN:-}"
 artifacts_directory="$PWD/artifacts/linux-ugly-path-validation"
 cleanup_after="true"

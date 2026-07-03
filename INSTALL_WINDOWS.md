@@ -7,7 +7,7 @@ Relaywright for Windows is distributed as a self-contained x64 installer. The ho
 Download the latest Windows installer from GitHub Releases:
 
 ```powershell
-https://github.com/relaywright/relaywright/releases/latest
+https://github.com/dotwebster-development/Relaywright/releases/latest
 ```
 
 Run `Relaywright-<version>-windows-x64-installer.exe` as Administrator.

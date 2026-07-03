@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Relaywright</title>
-  <meta name="description" content="Relaywright is a free, self-hosted SMTP relay gateway for trusted local devices.">
+  <meta name="description" content="Relaywright is a free, self-hosted SMTP relay gateway for trusted local devices and internal systems.">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="assets/relaywright-logo.svg" type="image/svg+xml">
 </head>
@@ -15,9 +15,10 @@
     </a>
     <nav class="nav" aria-label="Primary">
       <a href="#download">Download</a>
-      <a href="#features">Features</a>
-      <a href="https://github.com/relaywright/relaywright/blob/main/SECURITY.md">Security</a>
-      <a href="https://github.com/relaywright/relaywright">GitHub</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#platforms">Platforms</a>
+      <a href="#docs">Docs</a>
+      <a href="https://github.com/dotwebster-development/Relaywright">GitHub</a>
     </nav>
   </header>
 
@@ -26,29 +27,99 @@
       <div class="hero-copy">
         <p class="eyebrow">Free self-hosted SMTP relay gateway</p>
         <h1>Relaywright</h1>
-        <p>Run a quiet local relay for printers, scanners, apps, and internal systems. Restrict submission by trusted IPs, apply sender and recipient policy, spool mail durably, and hand delivery to your upstream smart host.</p>
+        <p>Run a narrow, auditable relay for printers, scanners, line-of-business apps, and internal systems that need to send mail through one controlled upstream smart host.</p>
         <div class="actions">
-          <a class="button" href="https://github.com/relaywright/relaywright/releases/latest">Download latest</a>
+          <a class="button" href="https://github.com/dotwebster-development/Relaywright/releases/latest">Download latest</a>
           <a class="button-secondary" href="#download">Install commands</a>
+        </div>
+      </div>
+      <figure class="hero-preview">
+        <img src="assets/dashboard-preview.png" alt="Relaywright admin dashboard showing queue status, runtime health, and operational events">
+      </figure>
+    </section>
+
+    <section id="capabilities" class="section">
+      <div class="section-inner">
+        <div class="section-heading">
+          <p class="eyebrow">Operational control</p>
+          <h2>Built For Known Devices, Not Open Relay Exposure</h2>
+          <p>Relaywright focuses on the quiet work system engineers need from an internal SMTP relay: accept only what should be accepted, keep accepted messages durable, and make delivery state visible.</p>
+        </div>
+        <div class="grid">
+          <article class="feature">
+            <h3>Trusted Device Intake</h3>
+            <p>Allow SMTP submission by IP or CIDR, with per-device owner, location, sender, recipient, size, and rate policy summaries in the admin UI.</p>
+          </article>
+          <article class="feature">
+            <h3>Durable Queue</h3>
+            <p>Accepted DATA is written to disk before SMTP success. Operators can inspect age, attempts, retry schedule, expiry, failure category, and delivery history.</p>
+          </article>
+          <article class="feature">
+            <h3>Upstream Delivery</h3>
+            <p>Relay to one upstream smart host with TLS settings, optional basic authentication, or Microsoft OAuth client credentials.</p>
+          </article>
+          <article class="feature">
+            <h3>Diagnostics</h3>
+            <p>Run connectivity checks, submission-flow previews, and test email diagnostics without changing relay behavior or consuming production message flow.</p>
+          </article>
+          <article class="feature">
+            <h3>Backups And Restore Staging</h3>
+            <p>Create SQLite backups, validate restore readiness, review retention, and stage restores with clear restart impact before they apply.</p>
+          </article>
+          <article class="feature">
+            <h3>Security Visibility</h3>
+            <p>Review admin sign-in events, current session details, suspicious login warnings, HTTPS certificate status, and account recovery guidance.</p>
+          </article>
         </div>
       </div>
     </section>
 
-    <section id="features" class="section">
+    <section class="section band">
+      <div class="section-inner two-column">
+        <div>
+          <p class="eyebrow">Scope</p>
+          <h2>What Relaywright Is</h2>
+          <ul class="check-list">
+            <li>Self-hosted SMTP intake for trusted internal devices and apps.</li>
+            <li>A durable spool plus queue metadata before accepted clients get success.</li>
+            <li>An authenticated admin console for settings, logs, queue review, backups, alerts, diagnostics, and certificates.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow">Boundaries</p>
+          <h2>What It Is Not</h2>
+          <ul class="check-list muted-list">
+            <li>Not a public MX, mailbox server, spam filter, mailing list tool, or general-purpose MTA.</li>
+            <li>Not an open relay; trusted-network checks happen before SMTP submission is accepted.</li>
+            <li>Not an automatic updater; installers and release artifacts remain the update mechanism.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="platforms" class="section">
       <div class="section-inner">
-        <h2>Built For Small Infrastructure</h2>
-        <div class="grid">
+        <div class="section-heading">
+          <p class="eyebrow">Validated release line</p>
+          <h2>Windows And Linux Packages</h2>
+          <p>Release builds are self-contained. The target machine does not need a separate .NET runtime.</p>
+        </div>
+        <div class="grid compact">
           <article class="feature">
-            <h3>Trusted Device Intake</h3>
-            <p>Accept SMTP only from configured IPs and CIDRs, then apply device-level sender, recipient, size, and rate policy.</p>
+            <h3>Windows x64</h3>
+            <p>Installer-based service setup with HTTPS-first admin defaults, optional scoped Windows Firewall rules, and side-by-side release updates.</p>
           </article>
           <article class="feature">
-            <h3>Durable Queue</h3>
-            <p>Accepted DATA is written to disk before SMTP success, with retry, expiry, cleanup, and delivery history in the admin UI.</p>
+            <h3>Linux x64</h3>
+            <p>Installer script for systemd hosts with checksum verification, service management, optional firewall configuration, and retained release folders.</p>
           </article>
           <article class="feature">
-            <h3>Operational Console</h3>
-            <p>Manage relay settings, trusted networks, alerts, backups, diagnostics, web certificates, and rollback snapshots from one UI.</p>
+            <h3>Linux ARM64</h3>
+            <p>Validated ARM64 package for small-office ARM devices and modern Raspberry Pi class systems running a 64-bit OS.</p>
+          </article>
+          <article class="feature">
+            <h3>Linux ARMv7</h3>
+            <p>Best-effort 32-bit ARM package is published until dedicated ARMv7 validation hardware is available.</p>
           </article>
         </div>
       </div>
@@ -56,43 +127,53 @@
 
     <section id="download" class="section">
       <div class="section-inner">
-        <h2>Install Relaywright</h2>
+        <div class="section-heading">
+          <p class="eyebrow">Install</p>
+          <h2>Download Relaywright</h2>
+          <p>Use the latest GitHub Release for production installs. Release artifacts include checksums in <code>SHA256SUMS.txt</code>.</p>
+        </div>
         <div class="install-grid">
           <article class="install">
             <h3>Windows</h3>
             <p>Download the Windows x64 installer and run it as Administrator.</p>
-            <p><a href="https://github.com/relaywright/relaywright/releases/latest">Relaywright Windows releases</a></p>
+            <p><a href="https://github.com/dotwebster-development/Relaywright/releases/latest">Relaywright Windows releases</a></p>
           </article>
           <article class="install">
             <h3>Linux</h3>
-            <p>Use the same installer on x64 or ARM64 hosts. Modern Raspberry Pi class devices should use a 64-bit OS; 32-bit ARMv7 is best-effort until dedicated validation is available.</p>
-            <pre><code>curl -fsSL https://github.com/relaywright/relaywright/releases/latest/download/install-relaywright.sh \
-  | sudo bash -s -- --version latest</code></pre>
+            <p>The Linux installer selects x64, ARM64, or ARMv7 packages automatically.</p>
+            <pre><code>curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/latest/download/install-relaywright.sh \
+  | sudo bash -s -- --repo dotwebster-development/Relaywright --version latest</code></pre>
           </article>
-        </div>
-        <div class="notes">
-          <span>Release artifacts include checksums in <code>SHA256SUMS.txt</code>.</span>
-          <span>Windows and Linux x64/ARM64 packages are self-contained and do not require installing the .NET runtime.</span>
-          <span>Use the first-run setup page to create the initial admin account, or provide a bootstrap password during installation.</span>
         </div>
       </div>
     </section>
 
-    <section class="section">
+    <section id="docs" class="section">
       <div class="section-inner">
-        <h2>Docs</h2>
-        <div class="grid">
+        <div class="section-heading">
+          <p class="eyebrow">References</p>
+          <h2>Operator Docs</h2>
+        </div>
+        <div class="grid compact">
           <article class="feature">
             <h3>Windows Install</h3>
-            <p><a href="https://github.com/relaywright/relaywright/blob/main/INSTALL_WINDOWS.md">Installer options and service setup</a></p>
+            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/INSTALL_WINDOWS.md">Installer options and service setup</a></p>
           </article>
           <article class="feature">
             <h3>Linux Install</h3>
-            <p><a href="https://github.com/relaywright/relaywright/blob/main/INSTALL_LINUX.md">systemd install, update, and uninstall</a></p>
+            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/INSTALL_LINUX.md">systemd install, update, and uninstall</a></p>
           </article>
           <article class="feature">
             <h3>Upgrade Notes</h3>
-            <p><a href="https://github.com/relaywright/relaywright/blob/main/UPGRADE.md">Backup, update, and rollback guidance</a></p>
+            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/UPGRADE.md">Backup, update, and rollback guidance</a></p>
+          </article>
+          <article class="feature">
+            <h3>Operator Wiki</h3>
+            <p><a href="https://github.com/dotwebster-development/Relaywright/wiki">Practical setup and operations manual</a></p>
+          </article>
+          <article class="feature">
+            <h3>Security</h3>
+            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/SECURITY.md">Supported versions and reporting guidance</a></p>
           </article>
         </div>
       </div>
@@ -102,6 +183,7 @@
   <footer class="footer">
     <div class="footer-inner">
       <span>Relaywright is free software under the MIT License.</span>
+      <a href="https://github.com/dotwebster-development/Relaywright/releases/latest">Latest release</a>
     </div>
   </footer>
 </body>

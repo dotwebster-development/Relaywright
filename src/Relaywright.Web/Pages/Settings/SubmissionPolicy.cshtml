@@ -37,10 +37,12 @@
                 <label>
                     <span>Max Size (Bytes)</span>
                     <input asp-for="Input.MaxMessageSizeBytes" type="number" min="1" />
+                    <span asp-validation-for="Input.MaxMessageSizeBytes"></span>
                 </label>
                 <label>
                     <span>Max Recipients</span>
                     <input asp-for="Input.MaxRecipientsPerMessage" type="number" min="1" />
+                    <span asp-validation-for="Input.MaxRecipientsPerMessage"></span>
                 </label>
             </div>
             <p class="field-hint">Device-specific limits on Trusted IPs are combined with these rules; the stricter limit wins.</p>
@@ -52,10 +54,12 @@
                 <label>
                     <span>Allowed Senders</span>
                     <textarea asp-for="Input.AllowedSenderAddresses" rows="7" placeholder="scanner&#64;example.com&#10;&#64;example.com"></textarea>
+                    <span asp-validation-for="Input.AllowedSenderAddresses"></span>
                 </label>
                 <label>
                     <span>Blocked Senders</span>
                     <textarea asp-for="Input.BlockedSenderAddresses" rows="7" placeholder="blocked&#64;example.com&#10;&#64;old-domain.test"></textarea>
+                    <span asp-validation-for="Input.BlockedSenderAddresses"></span>
                 </label>
             </div>
             <p class="field-hint">Use exact sender addresses or domain patterns such as &#64;example.com. Leave allowed senders empty to allow any sender from trusted devices.</p>
@@ -67,10 +71,12 @@
                 <label>
                     <span>Allowed Domains</span>
                     <textarea asp-for="Input.AllowedRecipientDomains" rows="7" placeholder="example.com&#10;*.partner.test"></textarea>
+                    <span asp-validation-for="Input.AllowedRecipientDomains"></span>
                 </label>
                 <label>
                     <span>Blocked Domains</span>
                     <textarea asp-for="Input.BlockedRecipientDomains" rows="7" placeholder="external.test&#10;*.blocked.test"></textarea>
+                    <span asp-validation-for="Input.BlockedRecipientDomains"></span>
                 </label>
             </div>
             <p class="field-hint">Recipient rules match domains only. Block lists take precedence over allowed lists.</p>

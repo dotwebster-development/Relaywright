@@ -8,6 +8,7 @@ using Relaywright.Web.Options;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Services.Updates;
 
 namespace Relaywright.Web.Pages;
 
@@ -17,6 +18,7 @@ public sealed class IndexModel(
     IRuntimeStatusService runtimeStatusService,
     IDashboardMetricsService dashboardMetricsService,
     IAdminSecurityActivityService adminSecurityActivityService,
+    IUpdateCheckService updateCheckService,
     DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
@@ -27,6 +29,8 @@ public sealed class IndexModel(
     public DashboardMetricsSnapshot Metrics { get; private set; } = new();
 
     public SuspiciousLoginSummary SuspiciousLogins { get; private set; } = SuspiciousLoginSummary.Empty;
+
+    public UpdateCheckStatus UpdateStatus { get; private set; } = UpdateCheckStatus.Initial();
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -46,6 +50,7 @@ public sealed class IndexModel(
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
         RuntimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
         Metrics = await dashboardMetricsService.GetSnapshotAsync(Configuration, cancellationToken);
+        UpdateStatus = await updateCheckService.GetStatusAsync(cancellationToken);
         var loadedUtc = DateTimeOffset.UtcNow;
         SuspiciousLogins = await adminSecurityActivityService.GetSuspiciousLoginSummaryAsync(loadedUtc, cancellationToken);
 
@@ -136,6 +141,19 @@ public sealed class IndexModel(
         await runtimeStatusService.ResumeDeliveryAsync(User.Identity?.Name, cancellationToken);
         StatusMessage = "Outbound delivery resumed.";
         logger.LogInformation("Outbound delivery resume requested from dashboard. User={UserName}", User.Identity?.Name);
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostCheckForUpdatesAsync(CancellationToken cancellationToken)
+    {
+        var status = await updateCheckService.RefreshAsync(cancellationToken);
+        StatusMessage = status.Message ?? "Version check completed.";
+        logger.LogInformation(
+            "Manual version check requested from dashboard. User={UserName}; State={State}; CurrentVersion={CurrentVersion}; LatestVersion={LatestVersion}",
+            User.Identity?.Name,
+            status.State,
+            status.CurrentVersion,
+            status.LatestVersion);
         return RedirectToPage();
     }
 }

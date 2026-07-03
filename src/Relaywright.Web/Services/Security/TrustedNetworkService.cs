@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Security;
 
@@ -74,6 +75,11 @@ public sealed class TrustedNetworkService(
 
     public async Task AddOrUpdateAsync(TrustedNetwork network, CancellationToken cancellationToken)
     {
+        if (network.Id < 0)
+        {
+            throw new InvalidOperationException("Trusted network ID must be zero or greater.");
+        }
+
         var cidr = network.Cidr.Trim();
         var description = network.Description.Trim();
         var owner = NormalizeOptional(network.Owner);
@@ -84,6 +90,22 @@ public sealed class TrustedNetworkService(
             logger.LogWarning("Trusted network save rejected because CIDR/IP was invalid. Cidr={Cidr}", cidr);
             throw new InvalidOperationException("The trusted network must be a valid IP address or CIDR range.");
         }
+
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            throw new InvalidOperationException("Trusted network description is required.");
+        }
+
+        ValidateSingleLineText(description, "Trusted network description", 256);
+        ValidateSingleLineText(owner, "Trusted network owner", 256);
+        ValidateSingleLineText(location, "Trusted network location", 256);
+        ValidateSenderPolicyList(network.AllowedSenderAddresses, "Allowed sender addresses");
+        ValidateSenderPolicyList(network.BlockedSenderAddresses, "Blocked sender addresses");
+        ValidateRecipientDomainPolicyList(network.AllowedRecipientDomains, "Allowed recipient domains");
+        ValidateRecipientDomainPolicyList(network.BlockedRecipientDomains, "Blocked recipient domains");
+        ValidatePositive(network.MaxMessageSizeBytes, "Maximum message size");
+        ValidatePositive(network.MaxRecipientsPerMessage, "Maximum recipients per message");
+        ValidatePositive(network.RateLimitMessagesPerHour, "Rate limit messages per hour");
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var otherNetworks = await dbContext.TrustedNetworks
@@ -199,21 +221,76 @@ public sealed class TrustedNetworkService(
 
     private static string? NormalizePolicyList(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        var entries = value
-            .Split([',', ';', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return entries.Length == 0 ? null : string.Join(Environment.NewLine, entries);
+        return ValidationRules.NormalizeDelimitedList(value);
     }
 
     private static long? NormalizePositive(long? value) => value is > 0 ? value : null;
 
     private static int? NormalizePositive(int? value) => value is > 0 ? value : null;
+
+    private static void ValidateSingleLineText(string? value, string label, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (value.Length > maxLength)
+        {
+            throw new InvalidOperationException($"{label} must be {maxLength} characters or fewer.");
+        }
+
+        if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
+        {
+            throw new InvalidOperationException($"{label} contains an unsupported control character.");
+        }
+    }
+
+    private static void ValidateSenderPolicyList(string? value, string label)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
+        {
+            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
+        }
+
+        foreach (var entry in ValidationRules.SplitDelimitedList(value))
+        {
+            if (!ValidationRules.IsSenderPolicyPattern(entry))
+            {
+                throw new InvalidOperationException($"{label} contains an invalid sender entry: {entry}.");
+            }
+        }
+    }
+
+    private static void ValidateRecipientDomainPolicyList(string? value, string label)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
+        {
+            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
+        }
+
+        foreach (var entry in ValidationRules.SplitDelimitedList(value))
+        {
+            if (!ValidationRules.IsRecipientDomainPattern(entry))
+            {
+                throw new InvalidOperationException($"{label} contains an invalid domain entry: {entry}.");
+            }
+        }
+    }
+
+    private static void ValidatePositive(long? value, string label)
+    {
+        if (value is <= 0)
+        {
+            throw new InvalidOperationException($"{label} must be at least 1.");
+        }
+    }
+
+    private static void ValidatePositive(int? value, string label)
+    {
+        if (value is <= 0)
+        {
+            throw new InvalidOperationException($"{label} must be at least 1.");
+        }
+    }
 }

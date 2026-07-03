@@ -6,6 +6,7 @@ using Relaywright.Web.Services.ConfigurationHistory;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Settings;
 
@@ -37,6 +38,17 @@ public sealed class WebHttpsModel(
 
     public async Task<IActionResult> OnPostSaveListenerAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            await LoadPageStateAsync(cancellationToken);
+            logger.LogWarning(
+                "Admin web listener settings rejected by validation. ErrorCount={ErrorCount}; User={UserName}; RemoteIp={RemoteIp}",
+                ModelState.ErrorCount,
+                User.Identity?.Name,
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+            return Page();
+        }
+
         try
         {
             await configurationSnapshotService.CaptureAsync(
@@ -108,12 +120,12 @@ public sealed class WebHttpsModel(
 
     public sealed class ListenerInputModel
     {
-        [Range(1, 65535)]
+        [PortNumber]
         public int HttpsPort { get; set; } = AdminWebListenerConfiguration.DefaultHttpsPort;
 
         public bool EnableHttp { get; set; }
 
-        [Range(1, 65535)]
+        [PortNumber]
         public int HttpPort { get; set; } = AdminWebListenerConfiguration.DefaultHttpPort;
     }
 }

@@ -7,6 +7,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Infrastructure;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Events;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Backups;
 
@@ -61,6 +62,8 @@ public sealed class BackupService(
 
     public async Task SaveScheduleAsync(BackupScheduleState schedule, CancellationToken cancellationToken)
     {
+        ValidateSchedule(schedule);
+
         if (databaseConfiguration.IsExternalServer)
         {
             await eventService.WriteAsync(new OperationalEventRequest
@@ -81,8 +84,8 @@ public sealed class BackupService(
         }
 
         existing.IsEnabled = schedule.IsEnabled;
-        existing.IntervalHours = Math.Clamp(schedule.IntervalHours, 1, 720);
-        existing.RetentionCount = Math.Clamp(schedule.RetentionCount, 1, 100);
+        existing.IntervalHours = schedule.IntervalHours;
+        existing.RetentionCount = schedule.RetentionCount;
         existing.UpdatedUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -102,6 +105,8 @@ public sealed class BackupService(
         CancellationToken cancellationToken,
         string? encryptionPassword = null)
     {
+        ValidatePassword(encryptionPassword, "Backup encryption password");
+
         var encrypt = !string.IsNullOrWhiteSpace(encryptionPassword);
 
         var run = new BackupRun
@@ -235,6 +240,8 @@ public sealed class BackupService(
         CancellationToken cancellationToken,
         string? encryptionPassword = null)
     {
+        ValidatePassword(encryptionPassword, "Backup validation password");
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var run = await dbContext.BackupRuns.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (run is null)
@@ -582,6 +589,37 @@ public sealed class BackupService(
         if (Directory.Exists(directory))
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void ValidateSchedule(BackupScheduleState schedule)
+    {
+        if (schedule.IntervalHours is < 1 or > 720)
+        {
+            throw new InvalidOperationException("Backup interval must be between 1 and 720 hours.");
+        }
+
+        if (schedule.RetentionCount is < 1 or > 100)
+        {
+            throw new InvalidOperationException("Backup retention count must be between 1 and 100.");
+        }
+    }
+
+    private static void ValidatePassword(string? value, string label)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        if (value.Length > 1024)
+        {
+            throw new InvalidOperationException($"{label} must be 1024 characters or fewer.");
+        }
+
+        if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
+        {
+            throw new InvalidOperationException($"{label} contains an unsupported control character.");
         }
     }
 

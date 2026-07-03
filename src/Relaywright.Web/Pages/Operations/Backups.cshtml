@@ -41,9 +41,11 @@
     <section class="settings-block">
         <div class="settings-block-title">Manual Backup</div>
         <form method="post" asp-page-handler="Create" class="compact-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
             <label class="span-2">
                 <span>Encryption Password</span>
                 <input asp-for="EncryptionPassword" type="password" autocomplete="new-password" placeholder="Optional one-time password" />
+                <span asp-validation-for="EncryptionPassword"></span>
             </label>
             <div class="actions compact-actions">
                 <button type="submit">Create Backup</button>
@@ -55,6 +57,7 @@
     <section class="settings-block">
         <div class="settings-block-title">Schedule</div>
         <form method="post" asp-page-handler="SaveSchedule" class="compact-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
             <div class="toggle-field">
                 <label class="switch-control">
                     <input asp-for="Schedule.IsEnabled" type="checkbox" />
@@ -65,10 +68,12 @@
             <label>
                 <span>Interval (Hours)</span>
                 <input asp-for="Schedule.IntervalHours" type="number" />
+                <span asp-validation-for="Schedule.IntervalHours"></span>
             </label>
             <label>
                 <span>Retention Count</span>
                 <input asp-for="Schedule.RetentionCount" type="number" />
+                <span asp-validation-for="Schedule.RetentionCount"></span>
             </label>
             <div class="actions compact-actions">
                 <button type="submit">Save Schedule</button>
@@ -80,13 +85,16 @@
     <section class="settings-block">
         <div class="settings-block-title">Restore</div>
         <form method="post" asp-page-handler="StageRestore" enctype="multipart/form-data" class="compact-grid">
+            <div asp-validation-summary="ModelOnly" class="status error"></div>
             <label>
                 <span>Backup File</span>
                 <input asp-for="RestoreBackupFile" type="file" accept=".zip,.rwbak,application/zip,application/octet-stream" />
+                <span asp-validation-for="RestoreBackupFile"></span>
             </label>
             <label>
                 <span>Encryption Password</span>
                 <input asp-for="RestoreEncryptionPassword" type="password" autocomplete="new-password" placeholder="Required for encrypted backups" />
+                <span asp-validation-for="RestoreEncryptionPassword"></span>
             </label>
             <div class="actions compact-actions">
                 <button type="submit">Stage Restore</button>
@@ -144,6 +152,7 @@
                                             @if (run.IsEncrypted)
                                             {
                                                 <input name="ValidationPassword" type="password" autocomplete="new-password" placeholder="Password" />
+                                                <span asp-validation-for="ValidationPassword"></span>
                                             }
                                             <button type="submit" class="secondary-button">Validate</button>
                                         </form>

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Relaywright.Web.Data.Entities;
 
 public sealed class BackupScheduleState
@@ -6,8 +8,10 @@ public sealed class BackupScheduleState
 
     public bool IsEnabled { get; set; }
 
+    [Range(1, 720)]
     public int IntervalHours { get; set; } = 24;
 
+    [Range(1, 100)]
     public int RetentionCount { get; set; } = 7;
 
     public DateTimeOffset? LastRunUtc { get; set; }
