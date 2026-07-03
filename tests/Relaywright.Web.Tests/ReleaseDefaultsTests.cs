@@ -125,11 +125,16 @@ public sealed class ReleaseDefaultsTests
     {
         var guidelines = ReadRepositoryFile("docs", "DOCUMENTATION_GUIDELINES.md");
         var checklist = ReadRepositoryFile("docs", "RELEASE_CHECKLIST.md");
+        var wikiDraftsReadme = ReadRepositoryFile("docs", "wiki-drafts", "README.md");
         var dashboard = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Index.cshtml");
 
         Assert.Contains("Repository docs are the source of truth", guidelines, StringComparison.Ordinal);
         Assert.Contains("GitHub Wiki is the operator manual", guidelines, StringComparison.Ordinal);
+        Assert.Contains("docs/wiki-drafts/", guidelines, StringComparison.Ordinal);
         Assert.Contains("Website and Wiki have been reviewed", checklist, StringComparison.Ordinal);
+        Assert.Contains("docs/wiki-drafts/", checklist, StringComparison.Ordinal);
+        Assert.Contains("The GitHub Wiki repository is initialized", wikiDraftsReadme, StringComparison.Ordinal);
+        Assert.Contains("git push origin master", wikiDraftsReadme, StringComparison.Ordinal);
         Assert.Contains("https://github.com/dotwebster-development/Relaywright/wiki", dashboard, StringComparison.Ordinal);
     }
 

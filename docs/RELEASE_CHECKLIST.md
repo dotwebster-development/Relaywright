@@ -62,7 +62,7 @@ Record the tested commit/tag, artifact version, VM names, workflow run URLs, dev
 
 - Apply the docs impact check in [Documentation guidelines](DOCUMENTATION_GUIDELINES.md).
 - Keep repository docs as the release-reviewed source of truth.
-- Use the GitHub Wiki for practical operator pages, and sync it with the stable release before tagging.
+- Update the matching `docs/wiki-drafts/` pages for operator-facing behavior, then publish them to the GitHub Wiki before tagging.
 - Check website and Wiki links for the current release repository and public URL.
 
 ## Soak And Failure Checks

@@ -6,6 +6,7 @@ Relaywright keeps release-sensitive documentation in the repository and uses the
 
 - Repository docs are the source of truth for release-specific behavior, install and upgrade commands, validation evidence, architecture, security policy, and troubleshooting that must be reviewed with code.
 - The GitHub Wiki is the operator manual: task-focused pages for installing, configuring, operating, updating, backing up, restoring, diagnosing, and recovering Relaywright.
+- Reviewable Wiki source drafts live in `docs/wiki-drafts/`; publish those Markdown pages to the GitHub Wiki after the matching repository change is reviewed.
 - The public website is the short public overview: what Relaywright is, what it supports, where to download it, and where operators can find deeper docs.
 
 ## Docs Impact Check
@@ -22,6 +23,7 @@ If behavior changed, update the relevant repo docs first. If the behavior is ope
 ## Wiki Sync Rules
 
 - Keep Wiki pages practical and version-aware. Avoid claims that are broader than the current stable release.
+- Start substantial Wiki edits in `docs/wiki-drafts/` so the text can be reviewed with code, release, and validation changes.
 - Check Wiki install commands, screenshots, feature names, URLs, supported platforms, and troubleshooting steps before each stable release.
 - Do not put secrets, production hostnames, customer data, raw message bodies, SMTP transcripts, tokens, protected blobs, or private infrastructure details in Wiki pages or screenshots.
 - When a Wiki page needs substantial changes, draft the source text in the repository first under a tracked docs change or release PR so it can be reviewed.
