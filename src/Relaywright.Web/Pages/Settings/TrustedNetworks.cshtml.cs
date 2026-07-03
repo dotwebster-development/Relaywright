@@ -38,13 +38,7 @@ public sealed class TrustedNetworksModel(
     {
         if (!ModelState.IsValid)
         {
-            Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
-            logger.LogWarning(
-                "Trusted network save rejected by validation. Id={TrustedNetworkId}; ErrorCount={ErrorCount}; User={UserName}",
-                Input.Id,
-                ModelState.ErrorCount,
-                User.Identity?.Name);
-            return Page();
+            return await ReturnInvalidSavePageAsync(cancellationToken);
         }
 
         try
@@ -68,18 +62,7 @@ public sealed class TrustedNetworksModel(
         }
         catch (Exception exception)
         {
-            logger.LogError(
-                exception,
-                "Trusted network save failed from admin page. Id={TrustedNetworkId}; Cidr={Cidr}; Description={Description}; Enabled={Enabled}; User={UserName}",
-                Input.Id,
-                Input.Cidr,
-                Input.Description,
-                Input.IsEnabled,
-                User.Identity?.Name);
-
-            Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
-            ModelState.AddModelError(string.Empty, exception.Message);
-            return Page();
+            return await ReturnServiceErrorPageAsync(exception, cancellationToken);
         }
     }
 
@@ -145,5 +128,35 @@ public sealed class TrustedNetworksModel(
         {
             parts.Add($"{count:N0} {label}");
         }
+    }
+
+    private async Task<IActionResult> ReturnInvalidSavePageAsync(CancellationToken cancellationToken)
+    {
+        Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
+        logger.LogWarning(
+            "Trusted network save rejected by validation. Id={TrustedNetworkId}; ErrorCount={ErrorCount}; User={UserName}",
+            Input.Id,
+            ModelState.ErrorCount,
+            User.Identity?.Name);
+
+        return Page();
+    }
+
+    private async Task<IActionResult> ReturnServiceErrorPageAsync(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        logger.LogError(
+            exception,
+            "Trusted network save failed from admin page. Id={TrustedNetworkId}; Cidr={Cidr}; Description={Description}; Enabled={Enabled}; User={UserName}",
+            Input.Id,
+            Input.Cidr,
+            Input.Description,
+            Input.IsEnabled,
+            User.Identity?.Name);
+
+        Networks = await trustedNetworkService.GetAllAsync(cancellationToken);
+        ModelState.AddModelError(string.Empty, exception.Message);
+        return Page();
     }
 }

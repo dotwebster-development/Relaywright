@@ -1,0 +1,55 @@
+@model Relaywright.Web.Pages.Settings.RelayModel
+
+<section class="settings-block">
+    <div class="settings-block-title">Listener</div>
+    <div class="compact-grid">
+        <div class="toggle-field">
+            <label class="switch-control">
+                <input asp-for="BindToAllInterfaces" type="checkbox" data-bind-all />
+                <span class="switch-control-track" aria-hidden="true"></span>
+                <span>All Interfaces</span>
+            </label>
+        </div>
+        <label class="span-2 bind-address-field @(Model.BindToAllInterfaces ? "is-collapsed" : "")" data-bind-select>
+            <span>Specific IP</span>
+            <select asp-for="SelectedBindAddress" asp-items="Model.BindAddressOptions"></select>
+            <span asp-validation-for="SelectedBindAddress"></span>
+        </label>
+        <label>
+            <span>Port (TCP)</span>
+            <input asp-for="Input.ListenerPort" type="number" />
+            <span asp-validation-for="Input.ListenerPort"></span>
+        </label>
+        <label>
+            <span>Host Name</span>
+            <input asp-for="Input.ListenerHostName" />
+            <span asp-validation-for="Input.ListenerHostName"></span>
+        </label>
+        <label>
+            <span>Max Size (Bytes)</span>
+            <input asp-for="Input.MaxMessageSizeBytes" type="number" />
+            <span asp-validation-for="Input.MaxMessageSizeBytes"></span>
+        </label>
+        <div class="toggle-field">
+            <label class="switch-control">
+                <input asp-for="Input.EnableStartTls" type="checkbox" data-starttls-toggle />
+                <span class="switch-control-track" aria-hidden="true"></span>
+                <span>STARTTLS</span>
+            </label>
+        </div>
+        <div class="span-4 auth-panel" data-certificate-panel hidden="@(!Model.ShowCertificateFields)">
+            <div class="compact-grid compact-grid-nested">
+                <label class="span-2">
+                    <span>Certificate Path</span>
+                    <input asp-for="Input.CertificatePath" />
+                    <span asp-validation-for="Input.CertificatePath"></span>
+                </label>
+                <label class="span-2">
+                    <span>Certificate Password</span>
+                    <input asp-for="Input.CertificatePassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" />
+                    <span asp-validation-for="Input.CertificatePassword"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+</section>

@@ -40,13 +40,7 @@ public sealed class WebHttpsModel(
     {
         if (!ModelState.IsValid)
         {
-            await LoadPageStateAsync(cancellationToken);
-            logger.LogWarning(
-                "Admin web listener settings rejected by validation. ErrorCount={ErrorCount}; User={UserName}; RemoteIp={RemoteIp}",
-                ModelState.ErrorCount,
-                User.Identity?.Name,
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            return Page();
+            return await ReturnInvalidSavePageAsync(cancellationToken);
         }
 
         try
@@ -87,19 +81,38 @@ public sealed class WebHttpsModel(
         }
         catch (Exception exception)
         {
-            logger.LogWarning(
-                exception,
-                "Admin web listener settings save failed. HttpsPort={HttpsPort}; HttpEnabled={HttpEnabled}; HttpPort={HttpPort}; User={UserName}; RemoteIp={RemoteIp}",
-                ListenerInput.HttpsPort,
-                ListenerInput.EnableHttp,
-                ListenerInput.HttpPort,
-                User.Identity?.Name,
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-
-            await LoadPageStateAsync(cancellationToken);
-            ModelState.AddModelError(string.Empty, exception.Message);
-            return Page();
+            return await ReturnServiceErrorPageAsync(exception, cancellationToken);
         }
+    }
+
+    private async Task<IActionResult> ReturnInvalidSavePageAsync(CancellationToken cancellationToken)
+    {
+        await LoadPageStateAsync(cancellationToken);
+        logger.LogWarning(
+            "Admin web listener settings rejected by validation. ErrorCount={ErrorCount}; User={UserName}; RemoteIp={RemoteIp}",
+            ModelState.ErrorCount,
+            User.Identity?.Name,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        return Page();
+    }
+
+    private async Task<IActionResult> ReturnServiceErrorPageAsync(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        logger.LogWarning(
+            exception,
+            "Admin web listener settings save failed. HttpsPort={HttpsPort}; HttpEnabled={HttpEnabled}; HttpPort={HttpPort}; User={UserName}; RemoteIp={RemoteIp}",
+            ListenerInput.HttpsPort,
+            ListenerInput.EnableHttp,
+            ListenerInput.HttpPort,
+            User.Identity?.Name,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        await LoadPageStateAsync(cancellationToken);
+        ModelState.AddModelError(string.Empty, exception.Message);
+        return Page();
     }
 
     private async Task LoadPageStateAsync(CancellationToken cancellationToken)

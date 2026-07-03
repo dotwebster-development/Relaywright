@@ -1,0 +1,71 @@
+@model Relaywright.Web.Pages.Settings.RelayModel
+
+<section class="settings-block">
+    <div class="settings-block-title">Upstream</div>
+    <div class="compact-grid">
+        <label class="span-2">
+            <span>Host</span>
+            <input asp-for="Input.UpstreamHost" />
+            <span asp-validation-for="Input.UpstreamHost"></span>
+        </label>
+        <label>
+            <span>Port (TCP)</span>
+            <input asp-for="Input.UpstreamPort" type="number" />
+            <span asp-validation-for="Input.UpstreamPort"></span>
+        </label>
+        <label>
+            <span>TLS Mode</span>
+            <select asp-for="Input.UpstreamSecureSocketOptions" asp-items="Model.SecureSocketOptions"></select>
+            <span asp-validation-for="Input.UpstreamSecureSocketOptions"></span>
+        </label>
+        <label>
+            <span>Timeout (Seconds)</span>
+            <input asp-for="Input.UpstreamTimeoutSeconds" type="number" />
+            <span asp-validation-for="Input.UpstreamTimeoutSeconds"></span>
+        </label>
+        <div class="toggle-field">
+            <label class="switch-control">
+                <input asp-for="Input.UseUpstreamAuthentication" type="checkbox" data-auth-toggle />
+                <span class="switch-control-track" aria-hidden="true"></span>
+                <span>Authentication</span>
+            </label>
+        </div>
+        <div class="span-4 auth-panel" data-auth-panel hidden="@(!Model.ShowAuthenticationPanel)">
+            <div class="compact-grid compact-grid-nested">
+                <label class="span-2" data-auth-type hidden="@(!Model.ShowAuthenticationPanel)">
+                    <span>Auth Type</span>
+                    <select asp-for="Input.UpstreamAuthenticationMode" asp-items="Model.AuthenticationModes" data-auth-mode></select>
+                    <span asp-validation-for="Input.UpstreamAuthenticationMode"></span>
+                </label>
+                <label class="span-2" data-auth-identity hidden="@(!Model.ShowAuthenticationPanel)">
+                    <span data-auth-identity-label>@(Model.ShowMicrosoftAuthenticationFields ? "Mailbox" : "User Name")</span>
+                    <input asp-for="Input.UpstreamUserName" />
+                    <span asp-validation-for="Input.UpstreamUserName"></span>
+                </label>
+                <label class="span-2" data-auth-basic hidden="@(!Model.ShowBasicAuthenticationFields)">
+                    <span>Password</span>
+                    <input asp-for="Input.UpstreamPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" />
+                    <span asp-validation-for="Input.UpstreamPassword"></span>
+                </label>
+                <label data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                    <span>Tenant ID</span>
+                    <input asp-for="Input.MicrosoftTenantId" />
+                    <span asp-validation-for="Input.MicrosoftTenantId"></span>
+                </label>
+                <label data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                    <span>Client ID</span>
+                    <input asp-for="Input.MicrosoftClientId" />
+                    <span asp-validation-for="Input.MicrosoftClientId"></span>
+                </label>
+                <label class="span-2" data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                    <span>Client Secret</span>
+                    <input asp-for="Input.MicrosoftClientSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" />
+                    <span asp-validation-for="Input.MicrosoftClientSecret"></span>
+                </label>
+            </div>
+            <p class="field-hint" data-auth-microsoft hidden="@(!Model.ShowMicrosoftAuthenticationFields)">
+                Requires Microsoft Entra app consent, Exchange SMTP OAuth setup, and mailbox permission for the selected mailbox.
+            </p>
+        </div>
+    </div>
+</section>
