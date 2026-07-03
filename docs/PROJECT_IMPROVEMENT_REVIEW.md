@@ -6,6 +6,8 @@ Scope: source, config, docs, and tests. Generated `bin`/`obj` output and runtime
 
 Implementation note: most items from this review were implemented on 2026-06-20. See `docs/IMPLEMENTATION_SUMMARY.md` for the completed work and remaining caveats.
 
+Status note, 2026-07-03: this file is a historical review snapshot, not the current live backlog. Check `docs/IMPLEMENTATION_SUMMARY.md`, the latest release record, and the current code before treating any item below as still open.
+
 ## Top Improvement Backlog
 
 ### P0 - Reliability, Security, And Data Safety

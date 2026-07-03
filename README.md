@@ -51,6 +51,8 @@ The admin UI is HTTPS-first for production installs. The admin HTTP listener is 
 
 Download release artifacts from GitHub Releases.
 
+The task-focused operator manual lives in the [GitHub Wiki](https://github.com/dotwebster-development/Relaywright/wiki).
+
 Windows:
 
 ```powershell
@@ -120,6 +122,7 @@ Relaywright uses release-candidate artifacts for validation. The current release
 
 See:
 
+- [Operator Wiki](https://github.com/dotwebster-development/Relaywright/wiki)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development guidelines](docs/DEVELOPMENT_GUIDELINES.md)
 - [Documentation guidelines](docs/DOCUMENTATION_GUIDELINES.md)
