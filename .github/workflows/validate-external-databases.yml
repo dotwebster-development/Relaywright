@@ -1,0 +1,86 @@
+name: Validate External Databases
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Database provider to validate"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - sqlserver
+          - mysql
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: external-database-validation
+  cancel-in-progress: false
+
+jobs:
+  provider-tests:
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - relaywright
+      - test
+    environment: database-test
+    timeout-minutes: 20
+
+    env:
+      RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER: ${{ inputs.provider || 'both' }}
+      RELAYWRIGHT_TEST_SQLSERVER_CONNECTION_STRING: ${{ secrets.RELAYWRIGHT_EXTERNAL_SQLSERVER_CONNECTION_STRING }}
+      RELAYWRIGHT_TEST_MYSQL_CONNECTION_STRING: ${{ secrets.RELAYWRIGHT_EXTERNAL_MYSQL_CONNECTION_STRING }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          case "$RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER" in
+            both|sqlserver|mysql) ;;
+            *) echo "Unsupported provider '$RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER'." >&2; exit 2 ;;
+          esac
+
+          if [[ "$RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER" == "both" || "$RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER" == "sqlserver" ]]; then
+            if [[ -z "${RELAYWRIGHT_TEST_SQLSERVER_CONNECTION_STRING:-}" ]]; then
+              echo "::error::Missing RELAYWRIGHT_EXTERNAL_SQLSERVER_CONNECTION_STRING secret."
+              exit 1
+            fi
+          fi
+
+          if [[ "$RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER" == "both" || "$RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER" == "mysql" ]]; then
+            if [[ -z "${RELAYWRIGHT_TEST_MYSQL_CONNECTION_STRING:-}" ]]; then
+              echo "::error::Missing RELAYWRIGHT_EXTERNAL_MYSQL_CONNECTION_STRING secret."
+              exit 1
+            fi
+          fi
+
+      - name: Restore
+        run: dotnet restore Relaywright.sln
+
+      - name: Build
+        run: dotnet build Relaywright.sln --no-restore
+
+      - name: Test SQL Server provider
+        if: ${{ env.RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER == 'both' || env.RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER == 'sqlserver' }}
+        run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --no-build --filter "FullyQualifiedName~DatabaseProviderIntegrationTests.SqlServerProviderCanInitializeSeedAndRunCoreQueuePaths"
+
+      - name: Test MySQL provider
+        if: ${{ env.RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER == 'both' || env.RELAYWRIGHT_EXTERNAL_DATABASE_PROVIDER == 'mysql' }}
+        run: dotnet test tests/Relaywright.Web.Tests/Relaywright.Web.Tests.csproj --no-build --filter "FullyQualifiedName~DatabaseProviderIntegrationTests.MySqlProviderCanInitializeSeedAndRunCoreQueuePaths"
