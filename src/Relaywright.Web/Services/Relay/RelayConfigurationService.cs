@@ -158,7 +158,7 @@ public sealed class RelayConfigurationService(
         await eventService.WriteAsync(new OperationalEventRequest
         {
             Category = OperationalEventCategory.Configuration,
-            Message = "Relay configuration updated."
+            Message = OperationalEventMessages.RelayConfigurationUpdated
         }, cancellationToken);
     }
 

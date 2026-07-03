@@ -237,6 +237,36 @@ public sealed class TrustedNetworkIntegrationTests
     }
 
     [Fact]
+    public async Task TrustedNetworkWritesConsistentOperationalEventMessages()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var events = new RecordingOperationalEventService();
+        var trustedNetworkService = CreateTrustedNetworkService(database, events);
+
+        await trustedNetworkService.AddOrUpdateAsync(
+            new TrustedNetwork
+            {
+                Cidr = "10.65.0.0/16",
+                Description = "created",
+                IsEnabled = true
+            },
+            CancellationToken.None);
+        var saved = (await trustedNetworkService.GetAllAsync(CancellationToken.None)).Single();
+        saved.Description = "updated";
+
+        await trustedNetworkService.AddOrUpdateAsync(saved, CancellationToken.None);
+        await trustedNetworkService.DeleteAsync(saved.Id, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "Trusted network created: 10.65.0.0/16.",
+                "Trusted network updated: 10.65.0.0/16.",
+                "Trusted network deleted: 10.65.0.0/16."
+            ],
+            events.Events.Select(x => x.Message));
+    }
+
+    [Fact]
     public async Task AddOrUpdateRejectsNonPositiveLimits()
     {
         await using var database = await SqliteTestStore.CreateAsync();
@@ -259,10 +289,7 @@ public sealed class TrustedNetworkIntegrationTests
     public async Task SavePolicyRejectsInvalidRecipientDomainPattern()
     {
         await using var database = await SqliteTestStore.CreateAsync();
-        var policyService = new TrustedDevicePolicyService(
-            database.DbContextFactory,
-            new RecordingOperationalEventService(),
-            NullLogger<TrustedDevicePolicyService>.Instance);
+        var policyService = CreatePolicyService(database, new RecordingOperationalEventService());
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => policyService.SavePolicyAsync(
             new SubmissionPolicy
@@ -274,6 +301,18 @@ public sealed class TrustedNetworkIntegrationTests
             CancellationToken.None));
 
         Assert.Contains("invalid domain", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SavePolicyWritesConsistentOperationalEventMessage()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var events = new RecordingOperationalEventService();
+        var policyService = CreatePolicyService(database, events);
+
+        await policyService.SavePolicyAsync(new SubmissionPolicy { Id = 1, IsEnabled = true }, CancellationToken.None);
+
+        Assert.Contains(events.Events, x => x.Message == "Submission policy updated.");
     }
 
     [Fact]
@@ -311,10 +350,7 @@ public sealed class TrustedNetworkIntegrationTests
         RecordingOperationalEventService events)
     {
         var trustedNetworkService = CreateTrustedNetworkService(database, events);
-        var policyService = new TrustedDevicePolicyService(
-            database.DbContextFactory,
-            events,
-            NullLogger<TrustedDevicePolicyService>.Instance);
+        var policyService = CreatePolicyService(database, events);
 
         return new TrustedNetworkMailboxFilter(
             trustedNetworkService,
@@ -332,5 +368,15 @@ public sealed class TrustedNetworkIntegrationTests
             database.DbContextFactory,
             events,
             NullLogger<TrustedNetworkService>.Instance);
+    }
+
+    private static TrustedDevicePolicyService CreatePolicyService(
+        SqliteTestStore database,
+        RecordingOperationalEventService events)
+    {
+        return new TrustedDevicePolicyService(
+            database.DbContextFactory,
+            events,
+            NullLogger<TrustedDevicePolicyService>.Instance);
     }
 }
