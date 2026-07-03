@@ -31,18 +31,22 @@
                 <label>
                     <span>CIDR / IP</span>
                     <input asp-for="Input.Cidr" />
+                    <span asp-validation-for="Input.Cidr"></span>
                 </label>
                 <label>
                     <span>Description</span>
                     <input asp-for="Input.Description" />
+                    <span asp-validation-for="Input.Description"></span>
                 </label>
                 <label>
                     <span>Owner</span>
                     <input asp-for="Input.Owner" />
+                    <span asp-validation-for="Input.Owner"></span>
                 </label>
                 <label>
                     <span>Location</span>
                     <input asp-for="Input.Location" />
+                    <span asp-validation-for="Input.Location"></span>
                 </label>
                 <div class="toggle-field">
                     <label class="switch-control">
@@ -58,14 +62,17 @@
                 <label>
                     <span>Max Size (Bytes)</span>
                     <input asp-for="Input.MaxMessageSizeBytes" type="number" min="1" />
+                    <span asp-validation-for="Input.MaxMessageSizeBytes"></span>
                 </label>
                 <label>
                     <span>Max Recipients</span>
                     <input asp-for="Input.MaxRecipientsPerMessage" type="number" min="1" />
+                    <span asp-validation-for="Input.MaxRecipientsPerMessage"></span>
                 </label>
                 <label>
                     <span>Rate Limit (/Hour)</span>
                     <input asp-for="Input.RateLimitMessagesPerHour" type="number" min="1" />
+                    <span asp-validation-for="Input.RateLimitMessagesPerHour"></span>
                 </label>
             </div>
 
@@ -74,10 +81,12 @@
                 <label>
                     <span>Allowed Senders</span>
                     <textarea asp-for="Input.AllowedSenderAddresses" rows="6" placeholder="scanner&#64;example.com&#10;&#64;example.com"></textarea>
+                    <span asp-validation-for="Input.AllowedSenderAddresses"></span>
                 </label>
                 <label>
                     <span>Blocked Senders</span>
                     <textarea asp-for="Input.BlockedSenderAddresses" rows="6" placeholder="blocked&#64;example.com&#10;&#64;old-domain.test"></textarea>
+                    <span asp-validation-for="Input.BlockedSenderAddresses"></span>
                 </label>
             </div>
 
@@ -86,10 +95,12 @@
                 <label>
                     <span>Allowed Domains</span>
                     <textarea asp-for="Input.AllowedRecipientDomains" rows="6" placeholder="example.com&#10;*.partner.test"></textarea>
+                    <span asp-validation-for="Input.AllowedRecipientDomains"></span>
                 </label>
                 <label>
                     <span>Blocked Domains</span>
                     <textarea asp-for="Input.BlockedRecipientDomains" rows="6" placeholder="external.test&#10;*.blocked.test"></textarea>
+                    <span asp-validation-for="Input.BlockedRecipientDomains"></span>
                 </label>
             </div>
 

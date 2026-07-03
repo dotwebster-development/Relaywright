@@ -7,6 +7,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Relay;
 
@@ -219,9 +220,38 @@ public sealed class RelayConfigurationService(
             throw new InvalidOperationException("Listener host name is required.");
         }
 
+        ValidateHostOrIp(model.ListenerHostName, "Listener host name");
+
         if (model.MaxMessageSizeBytes < 1024)
         {
             throw new InvalidOperationException("Maximum message size must be at least 1024 bytes.");
+        }
+
+        if (model.EnableStartTls)
+        {
+            if (string.IsNullOrWhiteSpace(model.CertificatePath))
+            {
+                throw new InvalidOperationException("Certificate path is required when STARTTLS is enabled.");
+            }
+
+            ValidateFileExtension(
+                model.CertificatePath,
+                "Certificate path",
+                [".pfx", ".p12", ".cer", ".crt", ".pem"]);
+        }
+        else if (!string.IsNullOrWhiteSpace(model.CertificatePath))
+        {
+            ValidateFileExtension(
+                model.CertificatePath,
+                "Certificate path",
+                [".pfx", ".p12", ".cer", ".crt", ".pem"]);
+        }
+
+        ValidateOptionalSecret(model.CertificatePassword, "Certificate password");
+
+        if (!string.IsNullOrWhiteSpace(model.UpstreamHost))
+        {
+            ValidateHostOrIp(model.UpstreamHost, "Upstream host");
         }
 
         if (model.UpstreamPort is < 1 or > 65535)
@@ -274,6 +304,9 @@ public sealed class RelayConfigurationService(
             throw new InvalidOperationException("Upstream timeout must be at least 5 seconds.");
         }
 
+        ValidateOptionalSecret(model.UpstreamPassword, "Upstream password");
+        ValidateOptionalSecret(model.MicrosoftClientSecret, "Microsoft client secret");
+
         if (!model.UseUpstreamAuthentication)
         {
             return;
@@ -288,6 +321,8 @@ public sealed class RelayConfigurationService(
         {
             throw new InvalidOperationException("Authentication requires a user name or mailbox.");
         }
+
+        ValidateSingleLineText(model.UpstreamUserName, "Authentication user name");
 
         if (model.UpstreamAuthenticationMode is null)
         {
@@ -309,9 +344,24 @@ public sealed class RelayConfigurationService(
                     throw new InvalidOperationException("Microsoft 365 OAuth requires a tenant ID.");
                 }
 
+                if (!ValidationRules.IsMicrosoftTenantId(model.MicrosoftTenantId.Trim()))
+                {
+                    throw new InvalidOperationException("Microsoft 365 OAuth tenant ID must be a tenant GUID or tenant domain.");
+                }
+
                 if (string.IsNullOrWhiteSpace(model.MicrosoftClientId))
                 {
                     throw new InvalidOperationException("Microsoft 365 OAuth requires a client ID.");
+                }
+
+                if (!ValidationRules.IsGuidText(model.MicrosoftClientId.Trim()))
+                {
+                    throw new InvalidOperationException("Microsoft 365 OAuth client ID must be a GUID.");
+                }
+
+                if (!ValidationRules.IsMailboxAddress(model.UpstreamUserName.Trim()))
+                {
+                    throw new InvalidOperationException("Microsoft 365 OAuth requires a mailbox-style upstream user name.");
                 }
 
                 if (string.IsNullOrWhiteSpace(model.MicrosoftClientSecret) && !hasExistingMicrosoftClientSecret)
@@ -323,5 +373,39 @@ public sealed class RelayConfigurationService(
             default:
                 throw new InvalidOperationException("The selected upstream authentication mode is not supported.");
         }
+    }
+
+    private static void ValidateHostOrIp(string value, string label)
+    {
+        if (!ValidationRules.IsHostNameOrIpAddress(value.Trim()))
+        {
+            throw new InvalidOperationException($"{label} must be a hostname or IP address, not a URL or path.");
+        }
+    }
+
+    private static void ValidateFileExtension(string value, string label, IReadOnlyCollection<string> extensions)
+    {
+        if (!ValidationRules.HasAllowedExtension(value, extensions))
+        {
+            throw new InvalidOperationException($"{label} must use one of these file extensions: {string.Join(", ", extensions)}.");
+        }
+    }
+
+    private static void ValidateSingleLineText(string? value, string label)
+    {
+        if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
+        {
+            throw new InvalidOperationException($"{label} contains an unsupported control character.");
+        }
+    }
+
+    private static void ValidateOptionalSecret(string? value, string label)
+    {
+        if (value is not null && value.Length > 1024)
+        {
+            throw new InvalidOperationException($"{label} must be 1024 characters or fewer.");
+        }
+
+        ValidateSingleLineText(value, label);
     }
 }

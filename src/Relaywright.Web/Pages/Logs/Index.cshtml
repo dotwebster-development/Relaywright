@@ -39,6 +39,7 @@
             </nav>
 
             <form method="get" class="filter-row">
+                <div asp-validation-summary="ModelOnly" class="status error"></div>
                 <input asp-for="Category" type="hidden" />
                 <label>
                     <span>Severity</span>
@@ -49,9 +50,11 @@
                             <option value="@value">@value</option>
                         }
                     </select>
+                    <span asp-validation-for="Severity"></span>
                 </label>
                 <label>
                     <input asp-for="Search" type="search" placeholder="Message, detail, remote IP" aria-label="Search logs" />
+                    <span asp-validation-for="Search"></span>
                 </label>
                 <button type="submit">Filter</button>
                 <a asp-page="/Logs/Index" asp-route-category="@Model.Category">Clear</a>

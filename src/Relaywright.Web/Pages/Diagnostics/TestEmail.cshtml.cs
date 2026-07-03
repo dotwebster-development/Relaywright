@@ -7,6 +7,7 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Diagnostics;
 using Relaywright.Web.Services.Relay;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Diagnostics;
 
@@ -134,19 +135,23 @@ public sealed class TestEmailModel(
     public sealed class InputModel
     {
         [Required]
-        [EmailAddress]
+        [StringLength(512)]
+        [MailboxAddress]
         public string FromAddress { get; set; } = string.Empty;
 
         [Required]
-        [EmailAddress]
+        [StringLength(512)]
+        [MailboxAddress]
         public string ToAddress { get; set; } = string.Empty;
 
         [Required]
         [StringLength(200)]
+        [NoControlCharacters]
         public string Subject { get; set; } = string.Empty;
 
         [Required]
         [StringLength(4000)]
+        [NoControlCharacters(true)]
         public string Body { get; set; } = string.Empty;
     }
 }

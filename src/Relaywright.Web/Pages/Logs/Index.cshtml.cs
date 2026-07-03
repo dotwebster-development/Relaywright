@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Data.Sqlite;
@@ -5,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Options;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Logs;
 
@@ -24,9 +26,12 @@ public sealed class IndexModel(
     public OperationalEventCategory? Category { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    [StringLength(256)]
+    [NoControlCharacters]
     public string? Search { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    [Range(1, int.MaxValue)]
     public int PageNumber { get; set; } = 1;
 
     public int TotalCount { get; private set; }
@@ -62,6 +67,17 @@ public sealed class IndexModel(
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         PageNumber = Math.Max(1, PageNumber);
+
+        if (!ModelState.IsValid)
+        {
+            TotalCount = 0;
+            Events = [];
+            logger.LogWarning(
+                "Logs page rejected invalid query values. ErrorCount={ErrorCount}; User={UserName}",
+                ModelState.ErrorCount,
+                User.Identity?.Name);
+            return;
+        }
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var query = dbContext.OperationalEvents.AsNoTracking().AsQueryable();

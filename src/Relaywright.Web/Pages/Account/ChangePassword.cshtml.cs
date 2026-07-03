@@ -9,6 +9,7 @@ using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Account;
 
@@ -188,12 +189,18 @@ public sealed class ChangePasswordModel(
     public sealed class InputModel
     {
         [Required]
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string CurrentPassword { get; set; } = string.Empty;
 
         [Required]
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string NewPassword { get; set; } = string.Empty;
 
         [Required]
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 

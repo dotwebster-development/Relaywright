@@ -142,11 +142,13 @@
                         </span>
                     </label>
                 </div>
+                <span asp-validation-for="CertificateInput.Mode"></span>
 
                 <div class="certificate-panel" data-certificate-panel="selfsigned">
                     <label>
                         <span>DNS Names</span>
                         <input asp-for="CertificateInput.SelfSignedDnsNames" />
+                        <span asp-validation-for="CertificateInput.SelfSignedDnsNames"></span>
                     </label>
                     <label>
                         <span>Valid Years</span>
@@ -159,10 +161,12 @@
                     <label>
                         <span>PFX File</span>
                         <input asp-for="CertificateInput.PfxFile" type="file" accept=".pfx,.p12,application/x-pkcs12" />
+                        <span asp-validation-for="CertificateInput.PfxFile"></span>
                     </label>
                     <label>
                         <span>PFX Password</span>
                         <input asp-for="CertificateInput.PfxPassword" type="password" autocomplete="new-password" />
+                        <span asp-validation-for="CertificateInput.PfxPassword"></span>
                     </label>
                 </div>
 
@@ -170,14 +174,17 @@
                     <label>
                         <span>Certificate File</span>
                         <input asp-for="CertificateInput.CertificateFile" type="file" accept=".crt,.cer,.pem,application/x-pem-file" />
+                        <span asp-validation-for="CertificateInput.CertificateFile"></span>
                     </label>
                     <label>
                         <span>Private Key File</span>
                         <input asp-for="CertificateInput.KeyFile" type="file" accept=".key,.pem,application/x-pem-file" />
+                        <span asp-validation-for="CertificateInput.KeyFile"></span>
                     </label>
                     <label>
                         <span>Private Key Password</span>
                         <input asp-for="CertificateInput.KeyPassword" type="password" autocomplete="new-password" />
+                        <span asp-validation-for="CertificateInput.KeyPassword"></span>
                     </label>
                 </div>
 

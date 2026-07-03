@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Data.Sqlite;
@@ -6,6 +7,7 @@ using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Queueing;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Queue;
 
@@ -20,21 +22,29 @@ public sealed class IndexModel(
     public string SelectedStatus { get; private set; } = "active";
 
     [BindProperty(SupportsGet = true)]
+    [StringLength(256)]
+    [NoControlCharacters]
     public string? Search { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    [Range(1, int.MaxValue)]
     public int PageNumber { get; set; } = 1;
 
     [BindProperty]
     public List<Guid> SelectedMessageIds { get; set; } = [];
 
     [BindProperty]
+    [StringLength(256)]
+    [NoControlCharacters]
     public string? ReturnStatus { get; set; }
 
     [BindProperty]
+    [StringLength(256)]
+    [NoControlCharacters]
     public string? ReturnSearch { get; set; }
 
     [BindProperty]
+    [Range(1, int.MaxValue)]
     public int ReturnPageNumber { get; set; } = 1;
 
     [TempData]
@@ -52,8 +62,20 @@ public sealed class IndexModel(
 
     public async Task OnGetAsync(string? status, CancellationToken cancellationToken)
     {
-        SelectedStatus = string.IsNullOrWhiteSpace(status) ? "active" : status.ToLowerInvariant();
+        SelectedStatus = NormalizeStatus(status);
         PageNumber = Math.Max(1, PageNumber);
+
+        if (!ModelState.IsValid)
+        {
+            TotalCount = 0;
+            Messages = [];
+            logger.LogWarning(
+                "Queue page rejected invalid query values. Status={Status}; ErrorCount={ErrorCount}; User={UserName}",
+                status,
+                ModelState.ErrorCount,
+                User.Identity?.Name);
+            return;
+        }
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var query = dbContext.QueuedMessages
@@ -134,6 +156,12 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostBulkRetryAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            StatusMessage = "Queue action rejected because the request contained invalid values.";
+            return RedirectToPage();
+        }
+
         var result = await messageQueueService.RetryNowAsync(SelectedMessageIds, cancellationToken);
         StatusMessage = result.Message;
         logger.LogInformation(
@@ -148,6 +176,12 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostBulkPurgeAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            StatusMessage = "Queue action rejected because the request contained invalid values.";
+            return RedirectToPage();
+        }
+
         var result = await messageQueueService.PurgeAsync(SelectedMessageIds, cancellationToken);
         StatusMessage = result.Message;
         logger.LogInformation(
@@ -165,10 +199,24 @@ public sealed class IndexModel(
     {
         return RedirectToPage(new
         {
-            status = string.IsNullOrWhiteSpace(ReturnStatus) ? "active" : ReturnStatus,
+            status = NormalizeStatus(ReturnStatus),
             search = ReturnSearch,
             pageNumber = Math.Max(1, ReturnPageNumber)
         });
+    }
+
+    private static string NormalizeStatus(string? status)
+    {
+        return string.IsNullOrWhiteSpace(status)
+            ? "active"
+            : status.Trim().ToLowerInvariant() switch
+            {
+                "active" => "active",
+                "failed" => "failed",
+                "delivered" => "delivered",
+                "all" => "all",
+                _ => "active"
+            };
     }
 
     private static (string Sql, object[] Parameters) BuildPagedMessagesSql(

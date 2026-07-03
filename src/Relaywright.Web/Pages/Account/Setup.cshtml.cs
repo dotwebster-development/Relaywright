@@ -10,6 +10,7 @@ using Relaywright.Web.Identity;
 using Relaywright.Web.Options;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Account;
 
@@ -139,6 +140,13 @@ public sealed class SetupModel(
 
         CurrentStep = SetupStep.HttpsCertificate;
         RemoveModelStateEntries(nameof(Input));
+        ValidateCertificateInput();
+
+        if (!ModelState.IsValid)
+        {
+            await LoadPageStateAsync(adminExists: true, cancellationToken);
+            return Page();
+        }
 
         try
         {
@@ -280,6 +288,42 @@ public sealed class SetupModel(
             : throw new InvalidOperationException(message);
     }
 
+    private void ValidateCertificateInput()
+    {
+        switch (CertificateInput.Mode)
+        {
+            case AdminHttpsCertificateMode.Pfx:
+                AddMissingFileError(
+                    CertificateInput.PfxFile,
+                    $"{nameof(CertificateInput)}.{nameof(CertificateInputModel.PfxFile)}",
+                    "Select a PFX certificate file.");
+                break;
+            case AdminHttpsCertificateMode.Pem:
+                AddMissingFileError(
+                    CertificateInput.CertificateFile,
+                    $"{nameof(CertificateInput)}.{nameof(CertificateInputModel.CertificateFile)}",
+                    "Select a certificate file.");
+                AddMissingFileError(
+                    CertificateInput.KeyFile,
+                    $"{nameof(CertificateInput)}.{nameof(CertificateInputModel.KeyFile)}",
+                    "Select a private key file.");
+                break;
+            case AdminHttpsCertificateMode.SelfSigned:
+                break;
+            default:
+                ModelState.AddModelError($"{nameof(CertificateInput)}.{nameof(CertificateInputModel.Mode)}", "Choose a certificate option.");
+                break;
+        }
+    }
+
+    private void AddMissingFileError(IFormFile? file, string key, string message)
+    {
+        if (file is not { Length: > 0 })
+        {
+            ModelState.AddModelError(key, message);
+        }
+    }
+
     private void RemoveModelStateEntries(string prefix)
     {
         foreach (var key in ModelState.Keys.Where(x => x.StartsWith(prefix + ".", StringComparison.Ordinal)).ToArray())
@@ -307,13 +351,19 @@ public sealed class SetupModel(
     {
         [Required]
         [Display(Name = "User Name")]
+        [StringLength(256)]
+        [NoControlCharacters]
         public string UserName { get; set; } = string.Empty;
 
         [Required]
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string Password { get; set; } = string.Empty;
 
         [Required]
         [Display(Name = "Confirm Password")]
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 
@@ -321,16 +371,26 @@ public sealed class SetupModel(
     {
         public AdminHttpsCertificateMode Mode { get; set; } = AdminHttpsCertificateMode.SelfSigned;
 
+        [AllowedFileExtensions(".pfx", ".p12")]
         public IFormFile? PfxFile { get; set; }
 
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string? PfxPassword { get; set; }
 
+        [AllowedFileExtensions(".crt", ".cer", ".pem")]
         public IFormFile? CertificateFile { get; set; }
 
+        [AllowedFileExtensions(".key", ".pem")]
         public IFormFile? KeyFile { get; set; }
 
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string? KeyPassword { get; set; }
 
+        [StringLength(1024)]
+        [NoControlCharacters(true)]
+        [CertificateNames]
         public string SelfSignedDnsNames { get; set; } = GetDefaultCertificateNames();
 
         [Range(1, 10)]

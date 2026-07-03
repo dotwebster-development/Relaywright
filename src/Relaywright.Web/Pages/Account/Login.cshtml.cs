@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Identity;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Security;
+using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Account;
 
@@ -121,13 +122,19 @@ public sealed class LoginModel(
     public sealed class InputModel
     {
         [Required]
+        [StringLength(256)]
+        [NoControlCharacters]
         public string UserName { get; set; } = string.Empty;
 
         [Required]
+        [StringLength(1024)]
+        [NoControlCharacters]
         public string Password { get; set; } = string.Empty;
 
         public bool RememberMe { get; set; }
 
+        [StringLength(2048)]
+        [NoControlCharacters]
         public string? ReturnUrl { get; set; }
     }
 }

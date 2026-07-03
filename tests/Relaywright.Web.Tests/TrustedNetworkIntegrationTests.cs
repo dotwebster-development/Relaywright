@@ -218,6 +218,65 @@ public sealed class TrustedNetworkIntegrationTests
     }
 
     [Fact]
+    public async Task AddOrUpdateRejectsInvalidSenderPolicyEntry()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var trustedNetworkService = CreateTrustedNetworkService(database, new RecordingOperationalEventService());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => trustedNetworkService.AddOrUpdateAsync(
+            new TrustedNetwork
+            {
+                Cidr = "10.60.0.0/16",
+                Description = "invalid policy",
+                AllowedSenderAddresses = "not-a-mailbox",
+                IsEnabled = true
+            },
+            CancellationToken.None));
+
+        Assert.Contains("invalid sender", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AddOrUpdateRejectsNonPositiveLimits()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var trustedNetworkService = CreateTrustedNetworkService(database, new RecordingOperationalEventService());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => trustedNetworkService.AddOrUpdateAsync(
+            new TrustedNetwork
+            {
+                Cidr = "10.70.0.0/16",
+                Description = "invalid limit",
+                MaxRecipientsPerMessage = 0,
+                IsEnabled = true
+            },
+            CancellationToken.None));
+
+        Assert.Contains("at least 1", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SavePolicyRejectsInvalidRecipientDomainPattern()
+    {
+        await using var database = await SqliteTestStore.CreateAsync();
+        var policyService = new TrustedDevicePolicyService(
+            database.DbContextFactory,
+            new RecordingOperationalEventService(),
+            NullLogger<TrustedDevicePolicyService>.Instance);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => policyService.SavePolicyAsync(
+            new SubmissionPolicy
+            {
+                Id = 1,
+                BlockedRecipientDomains = "@example.test",
+                IsEnabled = true
+            },
+            CancellationToken.None));
+
+        Assert.Contains("invalid domain", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task FindMatchingUsesMostSpecificRangeWhenLegacyDataOverlaps()
     {
         await using var database = await SqliteTestStore.CreateAsync();
