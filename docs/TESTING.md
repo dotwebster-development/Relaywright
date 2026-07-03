@@ -50,13 +50,13 @@ Configure these GitHub environment or repository secrets before running it:
 - `RELAYWRIGHT_EXTERNAL_SQLSERVER_CONNECTION_STRING`
 - `RELAYWRIGHT_EXTERNAL_MYSQL_CONNECTION_STRING`
 
-The current shared-database test host is `test-sql01`. Use dedicated disposable test databases because `DatabaseProviderIntegrationTests` calls `EnsureDeletedAsync` and `EnsureCreatedAsync`.
+The current shared-database test host is `test-sql01`. Use dedicated disposable test databases because `DatabaseProviderIntegrationTests` calls `EnsureDeletedAsync` and `EnsureCreatedAsync`. The connection-string host must resolve from the self-hosted runner. If the runner cannot resolve `test-sql01`, use the shared test host IP address instead.
 
 Example secret values:
 
 ```text
-Server=test-sql01,1433;Database=RelaywrightProviderTests;User Id=relaywright_test;Password=...;Encrypt=True;TrustServerCertificate=True
-server=test-sql01;port=3306;database=RelaywrightProviderTests;user=relaywright_test;password=...;SslMode=Preferred;AllowPublicKeyRetrieval=True
+Server=172.16.10.117,1433;Database=RelaywrightProviderTests;User Id=relaywright_test;Password=...;Encrypt=True;TrustServerCertificate=True
+server=172.16.10.117;port=3306;database=RelaywrightProviderTests;user=relaywright_test;password=...;SslMode=Preferred;AllowPublicKeyRetrieval=True
 ```
 
 The SQL Server test login needs permission to drop and create `RelaywrightProviderTests`; `dbcreator` plus database ownership is sufficient. The MySQL test user needs permission to drop and recreate `RelaywrightProviderTests`, and the server must listen on TCP 3306 from the self-hosted runner.
