@@ -42,9 +42,9 @@ Use this for every release candidate.
 Inputs:
 
 ```text
-version=1.0.0-rc.5
+version=1.0.1-rc.1
 mode=clean-installer
-from_version=
+from_version=1.0.0
 ```
 
 The workflow downloads the real installer from the GitHub Release, verifies `SHA256SUMS.txt`, cleans the VM, installs silently with production defaults, validates HTTPS/HTTP/firewall/data/service behavior, uploads artifacts, and then cleans the VM again after success.
@@ -58,9 +58,9 @@ Use this when testing upgrade behavior from one published release artifact to an
 Inputs:
 
 ```text
-version=1.0.0-rc.6
+version=1.0.1-rc.1
 mode=update-package
-from_version=1.0.0-rc.5
+from_version=1.0.0
 ```
 
 The workflow installs the `from_version` Windows ZIP through `scripts/windows/Install-Relaywright.ps1`, creates preservation markers in the data directory, updates to `version`, verifies health/firewall/data preservation, uploads artifacts, and then cleans the VM after success.
@@ -74,9 +74,9 @@ Use this before promoting a release candidate.
 Inputs:
 
 ```text
-version=1.0.0-rc.6
+version=1.0.1-rc.1
 mode=full-release
-from_version=1.0.0-rc.5
+from_version=1.0.0
 ```
 
 The workflow cleans `test-windows01`, installs `from_version`, writes preservation markers for listener config, spool, backups, and Data Protection keys, updates to `version`, validates service/health/HTTPS/HTTP-disabled/firewall/data preservation, cleans again, then performs a fresh silent installer validation for `version`.
@@ -88,9 +88,9 @@ Use this to reset `test-windows01`.
 Inputs:
 
 ```text
-version=1.0.0-rc.5
+version=1.0.1-rc.1
 mode=cleanup-only
-from_version=
+from_version=1.0.0
 ```
 
 The workflow removes:

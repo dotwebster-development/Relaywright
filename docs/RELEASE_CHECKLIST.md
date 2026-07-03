@@ -27,7 +27,7 @@ The vulnerability report must not contain any project with vulnerable packages.
 - Confirm HTTPS is enabled and the admin HTTP listener is disabled unless explicitly selected.
 - Confirm Windows Firewall rules do not expose admin ports beyond the selected scope.
 - Configure trusted and untrusted SMTP clients, then verify accepted and denied submissions.
-- Upgrade an existing `0.1.0-beta.1` data directory to `1.0.0` and verify configuration, trusted networks, queue metadata, spool files, Data Protection keys, certificates, backups, and admin login state.
+- Upgrade an existing `1.0.0` data directory to the target release and verify configuration, trusted networks, queue metadata, spool files, Data Protection keys, certificates, backups, and admin login state.
 
 ## Linux Validation
 
@@ -37,7 +37,7 @@ The vulnerability report must not contain any project with vulnerable packages.
 - Clean install with `install-relaywright.sh --version <version>`.
 - Confirm the systemd service starts and `/health` returns `ok`.
 - Confirm HTTPS is enabled and HTTP is disabled unless a non-zero `--http-port` is supplied.
-- Upgrade an existing `0.1.0-beta.1` data directory with `--update`.
+- Upgrade an existing `1.0.0` data directory with `--update`.
 - Clean install on at least one ARM64 Linux runner or device with `runner_architecture=ARM64` before advertising ARM support for the release.
 - Treat ARMv7 as best-effort unless a real 32-bit ARMv7 runner or device is validated.
 - Verify firewall behavior on active `firewalld` or `ufw` hosts when `--configure-firewall` is used.
@@ -45,7 +45,7 @@ The vulnerability report must not contain any project with vulnerable packages.
 
 ## Release Promotion
 
-Do not tag stable `v1.0.0` until all of these are true:
+Do not tag the stable release until all of these are true:
 
 - Windows clean install validation passed.
 - Windows update validation passed.

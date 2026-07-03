@@ -5,7 +5,7 @@ Relaywright for Linux is distributed as self-contained x64 and ARM64 tarballs pl
 ## Quick Install
 
 ```bash
-curl -fsSL https://github.com/relaywright/relaywright/releases/latest/download/install-relaywright.sh \
+curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/latest/download/install-relaywright.sh \
   | sudo bash -s -- --version latest
 ```
 
@@ -17,7 +17,7 @@ The installer auto-detects the host architecture. Modern Raspberry Pi and simila
 
 ```bash
 sudo bash install-relaywright.sh \
-  --version 1.0.0 \
+  --version 1.0.1 \
   --runtime auto \
   --install-root /opt/relaywright \
   --data-directory /var/lib/relaywright \
@@ -50,7 +50,7 @@ Firewall changes are optional on Linux. Pass `--configure-firewall` only when yo
 
 The installer supports active `ufw` and `firewalld`. `ufw` is common on Ubuntu, `firewalld` is common on RHEL/Fedora, and some hosts intentionally use unmanaged firewalling. If `--configure-firewall` is requested but neither supported firewall is active, the installer prints a warning and continues.
 
-If the GitHub repository is not `relaywright/relaywright`, pass `--repo OWNER/REPO` or set:
+If the GitHub repository is not `dotwebster-development/Relaywright`, pass `--repo OWNER/REPO` or set:
 
 ```bash
 export RELAYWRIGHT_GITHUB_REPOSITORY=OWNER/REPO
