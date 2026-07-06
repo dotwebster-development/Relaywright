@@ -30,6 +30,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Validate site
+        shell: pwsh
+        run: ./scripts/Validate-PagesSite.ps1
+
       - name: Configure Pages
         uses: actions/configure-pages@v6
 

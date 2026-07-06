@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 960 600">
+  <title id="title">Queue review preview</title>
+  <desc id="desc">Relaywright queue view showing message state, age, attempts, retry schedule, and delivery history.</desc>
+  <rect width="960" height="600" fill="#f8fbfc"/>
+  <rect x="24" y="24" width="912" height="552" rx="10" fill="#ffffff" stroke="#d9e2e5"/>
+  <rect x="56" y="54" width="848" height="72" rx="8" fill="#182028"/>
+  <text x="84" y="99" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Queue</text>
+  <text x="752" y="96" fill="#9fd6dd" font-family="Segoe UI, Arial, sans-serif" font-size="15">Pending / Retry / Failed</text>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="56" y="154" width="172" height="78" rx="8" fill="#e6f6f8"/>
+    <text x="76" y="184" fill="#088090" font-size="15" font-weight="700">Pending</text>
+    <text x="76" y="214" fill="#182028" font-size="30" font-weight="700">12</text>
+    <rect x="248" y="154" width="172" height="78" rx="8" fill="#fff6df"/>
+    <text x="268" y="184" fill="#866000" font-size="15" font-weight="700">Retry scheduled</text>
+    <text x="268" y="214" fill="#182028" font-size="30" font-weight="700">3</text>
+    <rect x="440" y="154" width="172" height="78" rx="8" fill="#f8eeee"/>
+    <text x="460" y="184" fill="#9d322c" font-size="15" font-weight="700">Failed</text>
+    <text x="460" y="214" fill="#182028" font-size="30" font-weight="700">1</text>
+    <rect x="632" y="154" width="272" height="78" rx="8" fill="#e8f6ee"/>
+    <text x="652" y="184" fill="#1f8a5b" font-size="15" font-weight="700">Delivered today</text>
+    <text x="652" y="214" fill="#182028" font-size="30" font-weight="700">1,248</text>
+    <rect x="56" y="270" width="848" height="44" rx="6" fill="#e6f6f8"/>
+    <text x="78" y="298" fill="#283038" font-size="14" font-weight="700">State</text>
+    <text x="190" y="298" fill="#283038" font-size="14" font-weight="700">Message</text>
+    <text x="448" y="298" fill="#283038" font-size="14" font-weight="700">Age</text>
+    <text x="542" y="298" fill="#283038" font-size="14" font-weight="700">Attempts</text>
+    <text x="666" y="298" fill="#283038" font-size="14" font-weight="700">Next action</text>
+    <rect x="56" y="324" width="848" height="58" fill="#ffffff" stroke="#d9e2e5"/>
+    <rect x="78" y="345" width="82" height="22" rx="11" fill="#e6f6f8"/>
+    <text x="94" y="361" fill="#088090" font-size="13" font-weight="700">Pending</text>
+    <text x="190" y="359" fill="#283038" font-size="15">printer status digest</text>
+    <text x="448" y="359" fill="#68757d" font-size="15">2m</text>
+    <text x="542" y="359" fill="#68757d" font-size="15">0</text>
+    <text x="666" y="359" fill="#68757d" font-size="15">deliver now</text>
+    <rect x="56" y="392" width="848" height="58" fill="#ffffff" stroke="#d9e2e5"/>
+    <rect x="78" y="413" width="82" height="22" rx="11" fill="#fff6df"/>
+    <text x="98" y="429" fill="#866000" font-size="13" font-weight="700">Retry</text>
+    <text x="190" y="427" fill="#283038" font-size="15">ERP invoice batch</text>
+    <text x="448" y="427" fill="#68757d" font-size="15">18m</text>
+    <text x="542" y="427" fill="#68757d" font-size="15">2</text>
+    <text x="666" y="427" fill="#68757d" font-size="15">in 6 minutes</text>
+    <rect x="56" y="460" width="848" height="58" fill="#ffffff" stroke="#d9e2e5"/>
+    <rect x="78" y="481" width="82" height="22" rx="11" fill="#f8eeee"/>
+    <text x="98" y="497" fill="#9d322c" font-size="13" font-weight="700">Failed</text>
+    <text x="190" y="495" fill="#283038" font-size="15">scan delivery notice</text>
+    <text x="448" y="495" fill="#68757d" font-size="15">41m</text>
+    <text x="542" y="495" fill="#68757d" font-size="15">5</text>
+    <text x="666" y="495" fill="#68757d" font-size="15">auth failure</text>
+  </g>
+</svg>

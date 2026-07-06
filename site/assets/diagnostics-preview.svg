@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 960 600">
+  <title id="title">Diagnostics preview</title>
+  <desc id="desc">Relaywright diagnostics view showing upstream connectivity, submission policy flow, and test email checks.</desc>
+  <rect width="960" height="600" fill="#f8fbfc"/>
+  <rect x="24" y="24" width="912" height="552" rx="10" fill="#ffffff" stroke="#d9e2e5"/>
+  <text x="56" y="78" fill="#182028" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Diagnostics</text>
+  <text x="56" y="112" fill="#68757d" font-family="Segoe UI, Arial, sans-serif" font-size="16">Prove configuration before real message flow.</text>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="56" y="154" width="264" height="348" rx="8" fill="#eef5fb" stroke="#d9e2e5"/>
+    <text x="80" y="194" fill="#182028" font-size="20" font-weight="700">Connectivity</text>
+    <circle cx="88" cy="238" r="13" fill="#1f8a5b"/>
+    <text x="112" y="244" fill="#283038" font-size="15">DNS resolved</text>
+    <circle cx="88" cy="286" r="13" fill="#1f8a5b"/>
+    <text x="112" y="292" fill="#283038" font-size="15">TCP opened</text>
+    <circle cx="88" cy="334" r="13" fill="#1f8a5b"/>
+    <text x="112" y="340" fill="#283038" font-size="15">TLS negotiated</text>
+    <circle cx="88" cy="382" r="13" fill="#1f8a5b"/>
+    <text x="112" y="388" fill="#283038" font-size="15">Auth accepted</text>
+    <rect x="80" y="432" width="192" height="36" rx="18" fill="#088090"/>
+    <text x="119" y="456" fill="#ffffff" font-size="15" font-weight="700">Passed in 1.4s</text>
+    <rect x="348" y="154" width="264" height="348" rx="8" fill="#ffffff" stroke="#d9e2e5"/>
+    <text x="372" y="194" fill="#182028" font-size="20" font-weight="700">Submission flow</text>
+    <rect x="372" y="224" width="198" height="42" rx="6" fill="#e6f6f8"/>
+    <text x="388" y="251" fill="#283038" font-size="15">Source IP trusted</text>
+    <rect x="372" y="284" width="198" height="42" rx="6" fill="#e6f6f8"/>
+    <text x="388" y="311" fill="#283038" font-size="15">Sender allowed</text>
+    <rect x="372" y="344" width="198" height="42" rx="6" fill="#e6f6f8"/>
+    <text x="388" y="371" fill="#283038" font-size="15">Recipients allowed</text>
+    <rect x="372" y="404" width="198" height="42" rx="6" fill="#e6f6f8"/>
+    <text x="388" y="431" fill="#283038" font-size="15">Size within policy</text>
+    <rect x="640" y="154" width="264" height="348" rx="8" fill="#fff6df" stroke="#d9e2e5"/>
+    <text x="664" y="194" fill="#182028" font-size="20" font-weight="700">Test email</text>
+    <text x="664" y="236" fill="#68757d" font-size="15">Recipient</text>
+    <rect x="664" y="252" width="198" height="34" rx="5" fill="#ffffff" stroke="#d9e2e5"/>
+    <text x="676" y="275" fill="#283038" font-size="14">ops@example.com</text>
+    <text x="664" y="320" fill="#68757d" font-size="15">Result</text>
+    <rect x="664" y="338" width="198" height="80" rx="6" fill="#ffffff" stroke="#d9e2e5"/>
+    <text x="682" y="370" fill="#1f8a5b" font-size="16" font-weight="700">Accepted by upstream</text>
+    <text x="682" y="398" fill="#68757d" font-size="14">Message id recorded</text>
+  </g>
+</svg>
