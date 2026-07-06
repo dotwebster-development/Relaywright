@@ -16,6 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Validate Pages site
+        shell: pwsh
+        run: ./scripts/Validate-PagesSite.ps1
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
