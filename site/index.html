@@ -3,20 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Relaywright</title>
-  <meta name="description" content="Relaywright is a free, self-hosted SMTP relay gateway for trusted local devices and internal systems.">
+  <title>Relaywright - Self-hosted SMTP relay gateway</title>
+  <meta name="description" content="Relaywright is a free, self-hosted SMTP relay gateway for trusted local devices and internal systems that need a controlled path to an upstream smart host.">
+  <link rel="canonical" href="https://relaywright.com/">
+  <meta name="theme-color" content="#088090">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Relaywright">
+  <meta property="og:description" content="Self-hosted SMTP relay for trusted devices, durable queueing, diagnostics, backups, and auditable delivery operations.">
+  <meta property="og:url" content="https://relaywright.com/">
+  <meta property="og:image" content="https://relaywright.com/assets/dashboard-preview.png">
+  <meta property="og:image:alt" content="Relaywright admin dashboard showing queue status, runtime health, and operational events">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Relaywright">
+  <meta name="twitter:description" content="Self-hosted SMTP relay gateway for trusted local devices and internal systems.">
+  <meta name="twitter:image" content="https://relaywright.com/assets/dashboard-preview.png">
+  <link rel="preload" as="image" href="assets/dashboard-preview.png">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="assets/relaywright-logo.svg" type="image/svg+xml">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Relaywright",
+    "applicationCategory": "ServerApplication",
+    "operatingSystem": "Windows, Linux",
+    "softwareVersion": "1.0.1",
+    "datePublished": "2026-07-03",
+    "license": "https://github.com/dotwebster-development/Relaywright/blob/main/LICENSE",
+    "url": "https://relaywright.com/",
+    "downloadUrl": "https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.1",
+    "codeRepository": "https://github.com/dotwebster-development/Relaywright",
+    "description": "Self-hosted SMTP relay gateway for trusted local devices and internal systems."
+  }
+  </script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/">
+    <a class="brand" href="/" aria-label="Relaywright home">
       <img src="assets/relaywright-logo.svg" alt="Relaywright">
     </a>
     <nav class="nav" aria-label="Primary">
       <a href="#download">Download</a>
-      <a href="#capabilities">Capabilities</a>
-      <a href="#platforms">Platforms</a>
+      <a href="#setup">Setup</a>
+      <a href="#screens">Screens</a>
+      <a href="#security">Security</a>
       <a href="#docs">Docs</a>
       <a href="https://github.com/dotwebster-development/Relaywright">GitHub</a>
     </nav>
@@ -29,70 +59,185 @@
         <h1>Relaywright</h1>
         <p>Run a narrow, auditable relay for printers, scanners, line-of-business apps, and internal systems that need to send mail through one controlled upstream smart host.</p>
         <div class="actions">
-          <a class="button" href="https://github.com/dotwebster-development/Relaywright/releases/latest">Download latest</a>
-          <a class="button-secondary" href="#download">Install commands</a>
+          <a class="button" href="#download">Download v1.0.1</a>
+          <a class="button-secondary" href="#setup">Plan first setup</a>
         </div>
       </div>
-      <figure class="hero-preview">
-        <img src="assets/dashboard-preview.png" alt="Relaywright admin dashboard showing queue status, runtime health, and operational events">
-      </figure>
+      <div class="hero-side">
+        <figure class="hero-preview">
+          <img src="assets/dashboard-preview.png" alt="Relaywright admin dashboard showing queue status, runtime health, and operational events" width="1600" height="1040">
+        </figure>
+        <aside class="release-panel" aria-label="Current stable release">
+          <p class="eyebrow">Current stable</p>
+          <h2>v1.0.1</h2>
+          <p>Published July 3, 2026. Release artifacts are self-contained and include checksums.</p>
+          <div class="release-links">
+            <a href="https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.1">Release notes</a>
+            <a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/SHA256SUMS.txt">Checksums</a>
+          </div>
+        </aside>
+      </div>
     </section>
 
     <section id="capabilities" class="section">
       <div class="section-inner">
         <div class="section-heading">
           <p class="eyebrow">Operational control</p>
-          <h2>Built For Known Devices, Not Open Relay Exposure</h2>
+          <h2>Built for known devices, not open relay exposure</h2>
           <p>Relaywright focuses on the quiet work system engineers need from an internal SMTP relay: accept only what should be accepted, keep accepted messages durable, and make delivery state visible.</p>
         </div>
         <div class="grid">
           <article class="feature">
-            <h3>Trusted Device Intake</h3>
-            <p>Allow SMTP submission by IP or CIDR, with per-device owner, location, sender, recipient, size, and rate policy summaries in the admin UI.</p>
+            <h3>Trusted device intake</h3>
+            <p>Allow SMTP submission by IP or CIDR, with owner, location, sender, recipient, size, and rate policy summaries.</p>
           </article>
           <article class="feature">
-            <h3>Durable Queue</h3>
-            <p>Accepted DATA is written to disk before SMTP success. Operators can inspect age, attempts, retry schedule, expiry, failure category, and delivery history.</p>
+            <h3>Durable queue</h3>
+            <p>Accepted DATA is written to disk before SMTP success. Operators can inspect age, attempts, retry schedule, and failure category.</p>
           </article>
           <article class="feature">
-            <h3>Upstream Delivery</h3>
+            <h3>Upstream delivery</h3>
             <p>Relay to one upstream smart host with TLS settings, optional basic authentication, or Microsoft OAuth client credentials.</p>
           </article>
           <article class="feature">
             <h3>Diagnostics</h3>
-            <p>Run connectivity checks, submission-flow previews, and test email diagnostics without changing relay behavior or consuming production message flow.</p>
+            <p>Run connectivity checks, submission-flow previews, and test email diagnostics before pointing devices at the relay.</p>
           </article>
           <article class="feature">
-            <h3>Backups And Restore Staging</h3>
-            <p>Create SQLite backups, validate restore readiness, review retention, and stage restores with clear restart impact before they apply.</p>
+            <h3>Backups and restore staging</h3>
+            <p>Create SQLite backups, validate restore readiness, review retention, and stage restores with clear restart impact.</p>
           </article>
           <article class="feature">
-            <h3>Security Visibility</h3>
+            <h3>Security visibility</h3>
             <p>Review admin sign-in events, current session details, suspicious login warnings, HTTPS certificate status, and account recovery guidance.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section class="section band">
-      <div class="section-inner two-column">
-        <div>
-          <p class="eyebrow">Scope</p>
-          <h2>What Relaywright Is</h2>
-          <ul class="check-list">
-            <li>Self-hosted SMTP intake for trusted internal devices and apps.</li>
-            <li>A durable spool plus queue metadata before accepted clients get success.</li>
-            <li>An authenticated admin console for settings, logs, queue review, backups, alerts, diagnostics, and certificates.</li>
-          </ul>
+    <section id="setup" class="section band">
+      <div class="section-inner">
+        <div class="section-heading">
+          <p class="eyebrow">First 15 minutes</p>
+          <h2>Install, prove, then point devices at it</h2>
+          <p>Use the admin UI to finish configuration before any production device starts sending through Relaywright.</p>
         </div>
-        <div>
-          <p class="eyebrow">Boundaries</p>
-          <h2>What It Is Not</h2>
-          <ul class="check-list muted-list">
-            <li>Not a public MX, mailbox server, spam filter, mailing list tool, or general-purpose MTA.</li>
-            <li>Not an open relay; trusted-network checks happen before SMTP submission is accepted.</li>
-            <li>Not an automatic updater; installers and release artifacts remain the update mechanism.</li>
-          </ul>
+        <ol class="setup-steps">
+          <li>
+            <span>1</span>
+            <div>
+              <h3>Install the service</h3>
+              <p>Use the Windows installer or Linux install script for <code>v1.0.1</code>.</p>
+            </div>
+          </li>
+          <li>
+            <span>2</span>
+            <div>
+              <h3>Create the first admin</h3>
+              <p>Open the local admin URL and complete first-run setup.</p>
+            </div>
+          </li>
+          <li>
+            <span>3</span>
+            <div>
+              <h3>Configure upstream SMTP</h3>
+              <p>Set the smart host, TLS behavior, timeout, and authentication mode.</p>
+            </div>
+          </li>
+          <li>
+            <span>4</span>
+            <div>
+              <h3>Add trusted devices</h3>
+              <p>Allow only the source IPs or CIDRs that should submit mail.</p>
+            </div>
+          </li>
+          <li>
+            <span>5</span>
+            <div>
+              <h3>Run diagnostics</h3>
+              <p>Check connectivity, preview submission policy, and send a test email.</p>
+            </div>
+          </li>
+          <li>
+            <span>6</span>
+            <div>
+              <h3>Switch traffic deliberately</h3>
+              <p>Point one device at the relay, confirm queue and delivery history, then expand.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="screens" class="section">
+      <div class="section-inner">
+        <div class="section-heading">
+          <p class="eyebrow">Admin console</p>
+          <h2>Operator views for day-two work</h2>
+        </div>
+        <div class="screen-grid">
+          <figure class="screen-card wide">
+            <img src="assets/dashboard-preview.png" alt="Dashboard overview with relay health, queue totals, and recent operational events" width="1600" height="1040">
+            <figcaption>
+              <strong>Dashboard</strong>
+              <span>Runtime health, queue pressure, backup readiness, and recent events.</span>
+            </figcaption>
+          </figure>
+          <figure class="screen-card">
+            <img src="assets/trusted-devices-preview.svg" alt="Trusted devices preview showing CIDR rules and rate policy summaries" width="960" height="600">
+            <figcaption>
+              <strong>Trusted devices</strong>
+              <span>Source IP/CIDR allow rules with sender, recipient, and rate policy context.</span>
+            </figcaption>
+          </figure>
+          <figure class="screen-card">
+            <img src="assets/queue-preview.svg" alt="Queue preview showing message state, attempts, retry schedule, and failure category" width="960" height="600">
+            <figcaption>
+              <strong>Queue review</strong>
+              <span>State, age, attempts, retry schedule, and delivery history in one place.</span>
+            </figcaption>
+          </figure>
+          <figure class="screen-card">
+            <img src="assets/diagnostics-preview.svg" alt="Diagnostics preview showing upstream connectivity, submission flow, and test email stages" width="960" height="600">
+            <figcaption>
+              <strong>Diagnostics</strong>
+              <span>Connectivity, flow-check, and test-mail stages before production traffic.</span>
+            </figcaption>
+          </figure>
+          <figure class="screen-card">
+            <img src="assets/backups-security-preview.svg" alt="Backups and security preview showing restore readiness and admin session checks" width="960" height="600">
+            <figcaption>
+              <strong>Backups and security</strong>
+              <span>Restore readiness, retained backup sets, HTTPS status, and admin sign-in events.</span>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="security" class="section band">
+      <div class="section-inner">
+        <div class="section-heading">
+          <p class="eyebrow">Security model</p>
+          <h2>Narrow intake and auditable operations</h2>
+        </div>
+        <div class="security-grid">
+          <article class="security-point">
+            <h3>No open relay posture</h3>
+            <p>SMTP submission is constrained by trusted IP or CIDR rules before message content is accepted.</p>
+          </article>
+          <article class="security-point">
+            <h3>Durability before success</h3>
+            <p>Accepted DATA is durably spooled and queue metadata is saved before clients receive SMTP success.</p>
+          </article>
+          <article class="security-point">
+            <h3>Protected admin surface</h3>
+            <p>Production installs are HTTPS-first, with admin HTTP disabled unless deliberately enabled.</p>
+          </article>
+          <article class="security-point">
+            <h3>Secret-aware operations</h3>
+            <p>Relay secrets are protected at rest, and diagnostics avoid storing message bodies, passwords, tokens, or private SMTP transcripts.</p>
+          </article>
         </div>
       </div>
     </section>
@@ -101,26 +246,26 @@
       <div class="section-inner">
         <div class="section-heading">
           <p class="eyebrow">Validated release line</p>
-          <h2>Windows And Linux Packages</h2>
+          <h2>Windows and Linux packages</h2>
           <p>Release builds are self-contained. The target machine does not need a separate .NET runtime.</p>
         </div>
-        <div class="grid compact">
-          <article class="feature">
-            <h3>Windows x64</h3>
-            <p>Installer-based service setup with HTTPS-first admin defaults, optional scoped Windows Firewall rules, and side-by-side release updates.</p>
-          </article>
-          <article class="feature">
-            <h3>Linux x64</h3>
-            <p>Installer script for systemd hosts with checksum verification, service management, optional firewall configuration, and retained release folders.</p>
-          </article>
-          <article class="feature">
-            <h3>Linux ARM64</h3>
-            <p>Validated ARM64 package for small-office ARM devices and modern Raspberry Pi class systems running a 64-bit OS.</p>
-          </article>
-          <article class="feature">
-            <h3>Linux ARMv7</h3>
-            <p>Best-effort 32-bit ARM package is published until dedicated ARMv7 validation hardware is available.</p>
-          </article>
+        <div class="release-proof">
+          <div>
+            <strong>Windows x64</strong>
+            <span>Installer and service validation</span>
+          </div>
+          <div>
+            <strong>Linux x64</strong>
+            <span>systemd install and update validation</span>
+          </div>
+          <div>
+            <strong>Linux ARM64</strong>
+            <span>Clean-install validation</span>
+          </div>
+          <div>
+            <strong>SMTP smoke</strong>
+            <span>Trusted and untrusted submission checks</span>
+          </div>
         </div>
       </div>
     </section>
@@ -129,52 +274,51 @@
       <div class="section-inner">
         <div class="section-heading">
           <p class="eyebrow">Install</p>
-          <h2>Download Relaywright</h2>
-          <p>Use the latest GitHub Release for production installs. Release artifacts include checksums in <code>SHA256SUMS.txt</code>.</p>
+          <h2>Download Relaywright v1.0.1</h2>
+          <p>Use the release artifacts and verify them with <code>SHA256SUMS.txt</code> before installing on production hosts. The <a href="https://github.com/dotwebster-development/Relaywright/releases/latest">latest release page</a> always points at the current stable build.</p>
         </div>
         <div class="install-grid">
           <article class="install">
             <h3>Windows</h3>
             <p>Download the Windows x64 installer and run it as Administrator.</p>
-            <p><a href="https://github.com/dotwebster-development/Relaywright/releases/latest">Relaywright Windows releases</a></p>
+            <ul class="artifact-list">
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/Relaywright-1.0.1-windows-x64-installer.exe">Relaywright-1.0.1-windows-x64-installer.exe</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-windows-x64.zip">relaywright-1.0.1-windows-x64.zip</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/SHA256SUMS.txt">SHA256SUMS.txt</a></li>
+            </ul>
           </article>
           <article class="install">
             <h3>Linux</h3>
-            <p>The Linux installer selects x64, ARM64, or ARMv7 packages automatically.</p>
-            <pre><code>curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/latest/download/install-relaywright.sh \
-  | sudo bash -s -- --repo dotwebster-development/Relaywright --version latest</code></pre>
+            <p>The installer selects x64, ARM64, or ARMv7 packages automatically.</p>
+            <pre><code>curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/install-relaywright.sh \
+  -o install-relaywright.sh
+sudo bash install-relaywright.sh --repo dotwebster-development/Relaywright --version 1.0.1</code></pre>
+            <p>To track the current stable version after reviewing release notes, use <code>--repo dotwebster-development/Relaywright --version latest</code>.</p>
+            <ul class="artifact-list">
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-linux-x64.tar.gz">relaywright-1.0.1-linux-x64.tar.gz</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-linux-arm64.tar.gz">relaywright-1.0.1-linux-arm64.tar.gz</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-linux-arm.tar.gz">relaywright-1.0.1-linux-arm.tar.gz</a></li>
+            </ul>
           </article>
         </div>
       </div>
     </section>
 
-    <section id="docs" class="section">
+    <section id="docs" class="section band">
       <div class="section-inner">
         <div class="section-heading">
           <p class="eyebrow">References</p>
-          <h2>Operator Docs</h2>
+          <h2>Task-based operator docs</h2>
         </div>
-        <div class="grid compact">
-          <article class="feature">
-            <h3>Windows Install</h3>
-            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/INSTALL_WINDOWS.md">Installer options and service setup</a></p>
-          </article>
-          <article class="feature">
-            <h3>Linux Install</h3>
-            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/INSTALL_LINUX.md">systemd install, update, and uninstall</a></p>
-          </article>
-          <article class="feature">
-            <h3>Upgrade Notes</h3>
-            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/UPGRADE.md">Backup, update, and rollback guidance</a></p>
-          </article>
-          <article class="feature">
-            <h3>Operator Wiki</h3>
-            <p><a href="https://github.com/dotwebster-development/Relaywright/wiki">Practical setup and operations manual</a></p>
-          </article>
-          <article class="feature">
-            <h3>Security</h3>
-            <p><a href="https://github.com/dotwebster-development/Relaywright/blob/main/SECURITY.md">Supported versions and reporting guidance</a></p>
-          </article>
+        <div class="docs-grid">
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Install-Relaywright">Install Relaywright</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Configure-Upstream-SMTP">Configure upstream SMTP</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Trusted-Networks">Add trusted devices</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Queue-Operations">Operate the queue</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Diagnostics">Run diagnostics</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Backups-And-Restore">Backups and restore</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/wiki/Troubleshooting">Troubleshooting</a>
+          <a href="https://github.com/dotwebster-development/Relaywright/blob/main/SECURITY.md">Security policy</a>
         </div>
       </div>
     </section>
@@ -183,7 +327,7 @@
   <footer class="footer">
     <div class="footer-inner">
       <span>Relaywright is free software under the MIT License.</span>
-      <a href="https://github.com/dotwebster-development/Relaywright/releases/latest">Latest release</a>
+      <a href="https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.1">Latest stable release</a>
     </div>
   </footer>
 </body>
