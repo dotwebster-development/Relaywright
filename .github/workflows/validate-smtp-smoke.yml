@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version to smoke test, without leading v"
         required: true
-        default: "1.0.2-rc.1"
+        default: "1.0.2-rc.2"
       target_host:
         description: "Optional test-linux01 IPv4 address or DNS name for the untrusted smoke"
         required: false

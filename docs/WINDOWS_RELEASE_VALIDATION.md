@@ -42,7 +42,7 @@ Use this for every release candidate.
 Inputs:
 
 ```text
-version=1.0.2-rc.1
+version=1.0.2-rc.2
 mode=clean-installer
 from_version=1.0.1
 ```
@@ -58,7 +58,7 @@ Use this when testing upgrade behavior from one published Windows installer arti
 Inputs:
 
 ```text
-version=1.0.2-rc.1
+version=1.0.2-rc.2
 mode=update-package
 from_version=1.0.1
 ```
@@ -74,7 +74,7 @@ Use this before promoting a release candidate.
 Inputs:
 
 ```text
-version=1.0.2-rc.1
+version=1.0.2-rc.2
 mode=full-release
 from_version=1.0.1
 ```
@@ -88,7 +88,7 @@ Use this to reset `test-windows01`.
 Inputs:
 
 ```text
-version=1.0.2-rc.1
+version=1.0.2-rc.2
 mode=cleanup-only
 from_version=1.0.1
 ```

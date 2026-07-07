@@ -46,7 +46,7 @@ Name: "{group}\Relaywright Admin"; Filename: "https://localhost:5443"
 Name: "{group}\Uninstall Relaywright"; Filename: "{uninstallexe}"
 
 [UninstallRun]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$ErrorActionPreference='SilentlyContinue'; $service='Relaywright'; $svc=Get-Service -Name $service -ErrorAction SilentlyContinue; if($svc -and $svc.Status -ne 'Stopped'){Stop-Service -Name $service -Force}; if(Get-Service -Name $service -ErrorAction SilentlyContinue){sc.exe delete $service | Out-Host}; if(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue){Get-NetFirewallRule -Group 'Relaywright' -ErrorAction SilentlyContinue | Remove-NetFirewallRule}"""; Flags: runhidden waituntilterminated; RunOnceId: "RelaywrightServiceUninstall"
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$ErrorActionPreference='SilentlyContinue'; $service='Relaywright'; $svc=Get-Service -Name $service -ErrorAction SilentlyContinue; if($svc -and $svc.Status -ne 'Stopped'){{Stop-Service -Name $service -Force}}; if(Get-Service -Name $service -ErrorAction SilentlyContinue){{sc.exe delete $service | Out-Host}}; if(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue){{Get-NetFirewallRule -Group 'Relaywright' -ErrorAction SilentlyContinue | Remove-NetFirewallRule}}"""; Flags: runhidden waituntilterminated; RunOnceId: "RelaywrightServiceUninstall"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\package"

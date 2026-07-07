@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version to soak test, without leading v"
         required: true
-        default: "1.0.2-rc.1"
+        default: "1.0.2-rc.2"
       mode:
         description: "Validation mode"
         required: true
