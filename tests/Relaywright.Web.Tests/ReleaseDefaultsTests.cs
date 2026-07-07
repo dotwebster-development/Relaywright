@@ -19,23 +19,34 @@ public sealed class ReleaseDefaultsTests
     public void WindowsInstallerDefaultsUseStableVersionHttpsOnlyAndLocalSubnetFirewall()
     {
         var installer = ReadRepositoryFile("installer", "windows", "Relaywright.iss");
-        var script = ReadRepositoryFile("scripts", "windows", "Install-Relaywright.ps1");
+        var engine = ReadRepositoryFile("installer", "windows", "RelaywrightInstallerEngine.ps1");
+        var installDocs = ReadRepositoryFile("INSTALL_WINDOWS.md");
 
-        Assert.Contains("#define AppVersion \"1.0.1\"", installer, StringComparison.Ordinal);
-        Assert.Contains("OptionPage.Values[0] := False;", installer, StringComparison.Ordinal);
-        Assert.Contains("FirewallPage.Values[0] := 'LocalSubnet';", installer, StringComparison.Ordinal);
-        Assert.Contains("[switch]$EnableHttp", script, StringComparison.Ordinal);
-        Assert.Contains("[string]$FirewallRemoteAddress = \"LocalSubnet\"", script, StringComparison.Ordinal);
-        Assert.Contains("[string]$DatabaseProvider = \"\"", script, StringComparison.Ordinal);
-        Assert.Contains("[string]$DatabaseConnectionStringFile = \"\"", script, StringComparison.Ordinal);
-        Assert.Contains("Database__Provider=$($databaseSettings.Provider)", script, StringComparison.Ordinal);
-        Assert.Contains("Database__ConnectionString=$($databaseSettings.ConnectionString)", script, StringComparison.Ordinal);
+        Assert.Contains("#define AppVersion \"1.0.2\"", installer, StringComparison.Ordinal);
+        Assert.DoesNotContain("Install-Relaywright.ps1", installer, StringComparison.Ordinal);
+        Assert.Contains("RelaywrightInstallerEngine.ps1", installer, StringComparison.Ordinal);
+        Assert.Contains("Relaywright - SMTP relay gateway", installer, StringComparison.Ordinal);
+        Assert.Contains("CommandLineParameter('FIREWALL_REMOTE_ADDRESS', 'LocalSubnet')", installer, StringComparison.Ordinal);
+        Assert.Contains("CommandLineBoolean('ENABLE_HTTP', False)", installer, StringComparison.Ordinal);
+        Assert.DoesNotContain("Generate a self-signed HTTPS certificate if needed", installer, StringComparison.Ordinal);
         Assert.Contains("DatabasePage := CreateInputOptionPage", installer, StringComparison.Ordinal);
         Assert.Contains("SQLite local database", installer, StringComparison.Ordinal);
         Assert.Contains("Microsoft SQL Server", installer, StringComparison.Ordinal);
         Assert.Contains("MySQL", installer, StringComparison.Ordinal);
-        Assert.Contains("relaywright-database-connection.txt", installer, StringComparison.Ordinal);
-        Assert.Contains("-DatabaseConnectionStringFile", installer, StringComparison.Ordinal);
+        Assert.Contains("DatabaseModePage := CreateInputOptionPage", installer, StringComparison.Ordinal);
+        Assert.Contains("Server name:", installer, StringComparison.Ordinal);
+        Assert.Contains("Database name:", installer, StringComparison.Ordinal);
+        Assert.Contains("User name:", installer, StringComparison.Ordinal);
+        Assert.Contains("Password:", installer, StringComparison.Ordinal);
+        Assert.Contains("Use default ports", installer, StringComparison.Ordinal);
+        Assert.Contains("Enable admin HTTP", installer, StringComparison.Ordinal);
+        Assert.Contains("ReviewPage := CreateOutputMsgMemoPage", installer, StringComparison.Ordinal);
+        Assert.Contains("Database__Provider=$provider", engine, StringComparison.Ordinal);
+        Assert.Contains("Database__ConnectionString=$databaseConnectionString", engine, StringComparison.Ordinal);
+        Assert.Contains("Restore-ServiceSnapshot", engine, StringComparison.Ordinal);
+        Assert.Contains("/DATABASE_SERVER=sql01.example.local", installDocs, StringComparison.Ordinal);
+        Assert.Contains("/ENABLE_HTTP=0", installDocs, StringComparison.Ordinal);
+        Assert.Contains("/FIREWALL_REMOTE_ADDRESS=LocalSubnet", installDocs, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -45,7 +56,7 @@ public sealed class ReleaseDefaultsTests
         var script = ReadRepositoryFile("scripts", "linux", "install-relaywright.sh");
 
         Assert.Contains("repo=\"${RELAYWRIGHT_GITHUB_REPOSITORY:-dotwebster-development/Relaywright}\"", script, StringComparison.Ordinal);
-        Assert.Contains("version=\"1.0.1\"", script, StringComparison.Ordinal);
+        Assert.Contains("version=\"1.0.2\"", script, StringComparison.Ordinal);
         Assert.Contains("enable_http=false", script, StringComparison.Ordinal);
         Assert.Contains("runtime_identifier=\"${RELAYWRIGHT_LINUX_RUNTIME:-}\"", script, StringComparison.Ordinal);
         Assert.Contains("--runtime RID", script, StringComparison.Ordinal);
@@ -90,8 +101,8 @@ public sealed class ReleaseDefaultsTests
     {
         var props = ReadRepositoryFile("Directory.Build.props");
 
-        Assert.Contains("<VersionPrefix Condition=\"'$(VersionPrefix)' == ''\">1.0.1</VersionPrefix>", props, StringComparison.Ordinal);
-        Assert.Contains("<AssemblyVersion Condition=\"'$(AssemblyVersion)' == ''\">1.0.1.0</AssemblyVersion>", props, StringComparison.Ordinal);
+        Assert.Contains("<VersionPrefix Condition=\"'$(VersionPrefix)' == ''\">1.0.2</VersionPrefix>", props, StringComparison.Ordinal);
+        Assert.Contains("<AssemblyVersion Condition=\"'$(AssemblyVersion)' == ''\">1.0.2.0</AssemblyVersion>", props, StringComparison.Ordinal);
         Assert.DoesNotContain("beta.1", props, StringComparison.OrdinalIgnoreCase);
     }
 

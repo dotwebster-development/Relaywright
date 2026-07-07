@@ -27,11 +27,11 @@
     "name": "Relaywright",
     "applicationCategory": "ServerApplication",
     "operatingSystem": "Windows, Linux",
-    "softwareVersion": "1.0.1",
+    "softwareVersion": "1.0.2",
     "datePublished": "2026-07-03",
     "license": "https://github.com/dotwebster-development/Relaywright/blob/main/LICENSE",
     "url": "https://relaywright.com/",
-    "downloadUrl": "https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.1",
+    "downloadUrl": "https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.2",
     "codeRepository": "https://github.com/dotwebster-development/Relaywright",
     "description": "Self-hosted SMTP relay gateway for trusted local devices and internal systems."
   }
@@ -59,7 +59,7 @@
         <h1>Relaywright</h1>
         <p>Run a narrow, auditable relay for printers, scanners, line-of-business apps, and internal systems that need to send mail through one controlled upstream smart host.</p>
         <div class="actions">
-          <a class="button" href="#download">Download v1.0.1</a>
+          <a class="button" href="#download">Download v1.0.2</a>
           <a class="button-secondary" href="#setup">Plan first setup</a>
         </div>
       </div>
@@ -69,11 +69,11 @@
         </figure>
         <aside class="release-panel" aria-label="Current stable release">
           <p class="eyebrow">Current stable</p>
-          <h2>v1.0.1</h2>
+          <h2>v1.0.2</h2>
           <p>Published July 3, 2026. Release artifacts are self-contained and include checksums.</p>
           <div class="release-links">
-            <a href="https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.1">Release notes</a>
-            <a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/SHA256SUMS.txt">Checksums</a>
+            <a href="https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.2">Release notes</a>
+            <a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/SHA256SUMS.txt">Checksums</a>
           </div>
         </aside>
       </div>
@@ -127,7 +127,7 @@
             <span>1</span>
             <div>
               <h3>Install the service</h3>
-              <p>Use the Windows installer or Linux install script for <code>v1.0.1</code>.</p>
+              <p>Use the Windows installer or Linux install script for <code>v1.0.2</code>.</p>
             </div>
           </li>
           <li>
@@ -274,30 +274,30 @@
       <div class="section-inner">
         <div class="section-heading">
           <p class="eyebrow">Install</p>
-          <h2>Download Relaywright v1.0.1</h2>
+          <h2>Download Relaywright v1.0.2</h2>
           <p>Use the release artifacts and verify them with <code>SHA256SUMS.txt</code> before installing on production hosts. The <a href="https://github.com/dotwebster-development/Relaywright/releases/latest">latest release page</a> always points at the current stable build.</p>
         </div>
         <div class="install-grid">
           <article class="install">
             <h3>Windows</h3>
-            <p>Download the Windows x64 installer and run it as Administrator.</p>
+            <p>Download the Windows x64 installer and run it as Administrator. The zip package is available for manual inspection or advanced recovery.</p>
             <ul class="artifact-list">
-              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/Relaywright-1.0.1-windows-x64-installer.exe">Relaywright-1.0.1-windows-x64-installer.exe</a></li>
-              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-windows-x64.zip">relaywright-1.0.1-windows-x64.zip</a></li>
-              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/SHA256SUMS.txt">SHA256SUMS.txt</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/Relaywright-1.0.2-windows-x64-installer.exe">Relaywright-1.0.2-windows-x64-installer.exe</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/relaywright-1.0.2-windows-x64.zip">relaywright-1.0.2-windows-x64.zip</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/SHA256SUMS.txt">SHA256SUMS.txt</a></li>
             </ul>
           </article>
           <article class="install">
             <h3>Linux</h3>
             <p>The installer selects x64, ARM64, or ARMv7 packages automatically.</p>
-            <pre><code>curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/install-relaywright.sh \
+            <pre><code>curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/install-relaywright.sh \
   -o install-relaywright.sh
-sudo bash install-relaywright.sh --repo dotwebster-development/Relaywright --version 1.0.1</code></pre>
+sudo bash install-relaywright.sh --repo dotwebster-development/Relaywright --version 1.0.2</code></pre>
             <p>To track the current stable version after reviewing release notes, use <code>--repo dotwebster-development/Relaywright --version latest</code>.</p>
             <ul class="artifact-list">
-              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-linux-x64.tar.gz">relaywright-1.0.1-linux-x64.tar.gz</a></li>
-              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-linux-arm64.tar.gz">relaywright-1.0.1-linux-arm64.tar.gz</a></li>
-              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.1/relaywright-1.0.1-linux-arm.tar.gz">relaywright-1.0.1-linux-arm.tar.gz</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/relaywright-1.0.2-linux-x64.tar.gz">relaywright-1.0.2-linux-x64.tar.gz</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/relaywright-1.0.2-linux-arm64.tar.gz">relaywright-1.0.2-linux-arm64.tar.gz</a></li>
+              <li><a href="https://github.com/dotwebster-development/Relaywright/releases/download/v1.0.2/relaywright-1.0.2-linux-arm.tar.gz">relaywright-1.0.2-linux-arm.tar.gz</a></li>
             </ul>
           </article>
         </div>
@@ -327,7 +327,7 @@ sudo bash install-relaywright.sh --repo dotwebster-development/Relaywright --ver
   <footer class="footer">
     <div class="footer-inner">
       <span>Relaywright is free software under the MIT License.</span>
-      <a href="https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.1">Latest stable release</a>
+      <a href="https://github.com/dotwebster-development/Relaywright/releases/tag/v1.0.2">Latest stable release</a>
     </div>
   </footer>
 </body>

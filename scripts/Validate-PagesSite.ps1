@@ -1,6 +1,6 @@
 param(
     [string]$SitePath = "site",
-    [string]$ExpectedStableVersion = $(if ($env:RELAYWRIGHT_SITE_EXPECTED_VERSION) { $env:RELAYWRIGHT_SITE_EXPECTED_VERSION } else { "1.0.1" })
+    [string]$ExpectedStableVersion = $(if ($env:RELAYWRIGHT_SITE_EXPECTED_VERSION) { $env:RELAYWRIGHT_SITE_EXPECTED_VERSION } else { "1.0.2" })
 )
 
 $ErrorActionPreference = "Stop"
