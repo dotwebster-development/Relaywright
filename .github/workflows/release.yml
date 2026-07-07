@@ -256,10 +256,11 @@ jobs:
 
           Release notes:
           - Maintenance release on the stable 1.0 release line.
-          - Adds typed admin field validation across user-editable settings and operations forms.
-          - Adds in-app update status checks and refreshed public website content.
-          - Adds Linux ARM64 and best-effort ARMv7 release packages with installer runtime auto-detection.
-          - Keeps admin web HTTP disabled by default and scoped firewall defaults for production installs.
+          - Overhauls the Windows installer around data, database, ports, firewall, bootstrap admin, and review choices.
+          - Integrates Windows install, update, uninstall, preflight checks, redacted diagnostics, health verification, and update rollback into the installer.
+          - Replaces raw SQL connection-string entry with structured SQLite, Microsoft SQL Server, and MySQL fields.
+          - Keeps the Windows service name stable as Relaywright and sets the display name to Relaywright - SMTP relay gateway.
+          - Keeps admin web HTTP disabled by default, generates or reuses a self-signed HTTPS certificate, and scopes firewall defaults to LocalSubnet.
           - See UPGRADE.md before upgrading existing beta installations.
 
           Downloads:
