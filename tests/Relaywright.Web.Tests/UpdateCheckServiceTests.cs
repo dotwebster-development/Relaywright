@@ -33,11 +33,55 @@ public sealed class UpdateCheckServiceTests
     }
 
     [Fact]
-    public void SemanticVersionRejectsInvalidTags()
+    public void SemanticVersionOrdersNumericPrereleaseIdentifiersByValue()
     {
-        Assert.False(SemanticVersionInfo.TryParse("release-one", out _));
-        Assert.False(SemanticVersionInfo.TryParse("1.0.0.7", out _));
-        Assert.False(SemanticVersionInfo.TryParse("1.0.0-", out _));
+        Assert.True(SemanticVersionInfo.TryParse("1.0.1-rc.2", out var earlier));
+        Assert.True(SemanticVersionInfo.TryParse("1.0.1-rc.10", out var later));
+
+        Assert.True(earlier!.CompareTo(later) < 0);
+        Assert.True(later!.CompareTo(earlier) > 0);
+    }
+
+    [Theory]
+    [InlineData("release-one")]
+    [InlineData("1")]
+    [InlineData("1.0")]
+    [InlineData("1.0.0.7")]
+    [InlineData("1.0.0-")]
+    [InlineData("1.0.0+")]
+    [InlineData("1.0.0-rc_1")]
+    [InlineData("01.0.0")]
+    [InlineData("1.02.0")]
+    [InlineData("1.0.03")]
+    [InlineData("1.0.0.00")]
+    [InlineData("1.0.0-rc.01")]
+    public void SemanticVersionRejectsInvalidTags(string value)
+    {
+        Assert.False(SemanticVersionInfo.TryParse(value, out _));
+    }
+
+    [Fact]
+    public void UpdateCheckOptionsClampDurationsToDocumentedBounds()
+    {
+        var below = new UpdateCheckOptions
+        {
+            IntervalHours = -10,
+            TimeoutSeconds = -10,
+            StartupDelaySeconds = -10
+        };
+        var above = new UpdateCheckOptions
+        {
+            IntervalHours = UpdateCheckOptions.MaximumIntervalHours + 1,
+            TimeoutSeconds = UpdateCheckOptions.MaximumTimeoutSeconds + 1,
+            StartupDelaySeconds = UpdateCheckOptions.MaximumStartupDelaySeconds + 1
+        };
+
+        Assert.Equal(TimeSpan.FromHours(UpdateCheckOptions.MinimumIntervalHours), below.GetInterval());
+        Assert.Equal(TimeSpan.FromSeconds(UpdateCheckOptions.MinimumTimeoutSeconds), below.GetTimeout());
+        Assert.Equal(TimeSpan.FromSeconds(UpdateCheckOptions.MinimumStartupDelaySeconds), below.GetStartupDelay());
+        Assert.Equal(TimeSpan.FromHours(UpdateCheckOptions.MaximumIntervalHours), above.GetInterval());
+        Assert.Equal(TimeSpan.FromSeconds(UpdateCheckOptions.MaximumTimeoutSeconds), above.GetTimeout());
+        Assert.Equal(TimeSpan.FromSeconds(UpdateCheckOptions.MaximumStartupDelaySeconds), above.GetStartupDelay());
     }
 
     [Fact]

@@ -96,16 +96,16 @@ public sealed class TrustedNetworkService(
             throw new InvalidOperationException("Trusted network description is required.");
         }
 
-        ValidateSingleLineText(description, "Trusted network description", 256);
-        ValidateSingleLineText(owner, "Trusted network owner", 256);
-        ValidateSingleLineText(location, "Trusted network location", 256);
+        ServiceValidation.RequireSingleLineText(description, "Trusted network description", 256);
+        ServiceValidation.RequireSingleLineText(owner, "Trusted network owner", 256);
+        ServiceValidation.RequireSingleLineText(location, "Trusted network location", 256);
         ValidateSenderPolicyList(network.AllowedSenderAddresses, "Allowed sender addresses");
         ValidateSenderPolicyList(network.BlockedSenderAddresses, "Blocked sender addresses");
         ValidateRecipientDomainPolicyList(network.AllowedRecipientDomains, "Allowed recipient domains");
         ValidateRecipientDomainPolicyList(network.BlockedRecipientDomains, "Blocked recipient domains");
-        ValidatePositive(network.MaxMessageSizeBytes, "Maximum message size");
-        ValidatePositive(network.MaxRecipientsPerMessage, "Maximum recipients per message");
-        ValidatePositive(network.RateLimitMessagesPerHour, "Rate limit messages per hour");
+        ServiceValidation.RequirePositive(network.MaxMessageSizeBytes, "Maximum message size");
+        ServiceValidation.RequirePositive(network.MaxRecipientsPerMessage, "Maximum recipients per message");
+        ServiceValidation.RequirePositive(network.RateLimitMessagesPerHour, "Rate limit messages per hour");
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var otherNetworks = await dbContext.TrustedNetworks
@@ -184,7 +184,7 @@ public sealed class TrustedNetworkService(
         await eventService.WriteAsync(new OperationalEventRequest
         {
             Category = OperationalEventCategory.Configuration,
-            Message = $"Trusted network {(created ? "created" : "updated")}: {cidr}"
+            Message = OperationalEventMessages.TrustedNetworkSaved(created, cidr)
         }, cancellationToken);
     }
 
@@ -210,7 +210,7 @@ public sealed class TrustedNetworkService(
         await eventService.WriteAsync(new OperationalEventRequest
         {
             Category = OperationalEventCategory.Configuration,
-            Message = $"Trusted network deleted: {existing.Cidr}"
+            Message = OperationalEventMessages.TrustedNetworkDeleted(existing.Cidr)
         }, cancellationToken);
     }
 
@@ -228,30 +228,9 @@ public sealed class TrustedNetworkService(
 
     private static int? NormalizePositive(int? value) => value is > 0 ? value : null;
 
-    private static void ValidateSingleLineText(string? value, string label, int maxLength)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return;
-        }
-
-        if (value.Length > maxLength)
-        {
-            throw new InvalidOperationException($"{label} must be {maxLength} characters or fewer.");
-        }
-
-        if (ValidationRules.ContainsDisallowedControlCharacter(value, allowLineBreaks: false, out _))
-        {
-            throw new InvalidOperationException($"{label} contains an unsupported control character.");
-        }
-    }
-
     private static void ValidateSenderPolicyList(string? value, string label)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
-        {
-            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
-        }
+        ServiceValidation.RequirePolicyListLength(value, label);
 
         foreach (var entry in ValidationRules.SplitDelimitedList(value))
         {
@@ -264,10 +243,7 @@ public sealed class TrustedNetworkService(
 
     private static void ValidateRecipientDomainPolicyList(string? value, string label)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
-        {
-            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
-        }
+        ServiceValidation.RequirePolicyListLength(value, label);
 
         foreach (var entry in ValidationRules.SplitDelimitedList(value))
         {
@@ -278,19 +254,4 @@ public sealed class TrustedNetworkService(
         }
     }
 
-    private static void ValidatePositive(long? value, string label)
-    {
-        if (value is <= 0)
-        {
-            throw new InvalidOperationException($"{label} must be at least 1.");
-        }
-    }
-
-    private static void ValidatePositive(int? value, string label)
-    {
-        if (value is <= 0)
-        {
-            throw new InvalidOperationException($"{label} must be at least 1.");
-        }
-    }
 }

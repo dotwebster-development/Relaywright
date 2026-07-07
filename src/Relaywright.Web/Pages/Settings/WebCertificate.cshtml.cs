@@ -41,14 +41,7 @@ public sealed class WebCertificateModel(
         ValidateCertificateInput();
         if (!ModelState.IsValid)
         {
-            await LoadPageStateAsync(cancellationToken);
-            logger.LogWarning(
-                "Admin web HTTPS certificate save rejected by validation. Mode={Mode}; ErrorCount={ErrorCount}; User={UserName}; RemoteIp={RemoteIp}",
-                Input.Mode,
-                ModelState.ErrorCount,
-                User.Identity?.Name,
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            return Page();
+            return await ReturnInvalidSavePageAsync(cancellationToken);
         }
 
         try
@@ -93,17 +86,37 @@ public sealed class WebCertificateModel(
         }
         catch (Exception exception)
         {
-            logger.LogWarning(
-                exception,
-                "Admin web HTTPS certificate save failed from settings page. Mode={Mode}; User={UserName}; RemoteIp={RemoteIp}",
-                Input.Mode,
-                User.Identity?.Name,
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-
-            await LoadPageStateAsync(cancellationToken);
-            ModelState.AddModelError(string.Empty, exception.Message);
-            return Page();
+            return await ReturnServiceErrorPageAsync(exception, cancellationToken);
         }
+    }
+
+    private async Task<IActionResult> ReturnInvalidSavePageAsync(CancellationToken cancellationToken)
+    {
+        await LoadPageStateAsync(cancellationToken);
+        logger.LogWarning(
+            "Admin web HTTPS certificate save rejected by validation. Mode={Mode}; ErrorCount={ErrorCount}; User={UserName}; RemoteIp={RemoteIp}",
+            Input.Mode,
+            ModelState.ErrorCount,
+            User.Identity?.Name,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        return Page();
+    }
+
+    private async Task<IActionResult> ReturnServiceErrorPageAsync(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        logger.LogWarning(
+            exception,
+            "Admin web HTTPS certificate save failed from settings page. Mode={Mode}; User={UserName}; RemoteIp={RemoteIp}",
+            Input.Mode,
+            User.Identity?.Name,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        await LoadPageStateAsync(cancellationToken);
+        ModelState.AddModelError(string.Empty, exception.Message);
+        return Page();
     }
 
     private async Task LoadPageStateAsync(CancellationToken cancellationToken)
@@ -163,7 +176,7 @@ public sealed class WebCertificateModel(
         [AllowedFileExtensions(".pfx", ".p12")]
         public IFormFile? PfxFile { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string? PfxPassword { get; set; }
 
@@ -173,11 +186,11 @@ public sealed class WebCertificateModel(
         [AllowedFileExtensions(".key", ".pem")]
         public IFormFile? KeyFile { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string? KeyPassword { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumTextLength)]
         [NoControlCharacters(true)]
         [CertificateNames]
         public string SelfSignedDnsNames { get; set; } = GetDefaultCertificateNames();

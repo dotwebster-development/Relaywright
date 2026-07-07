@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 repo="${RELAYWRIGHT_GITHUB_REPOSITORY:-dotwebster-development/Relaywright}"
-version="1.0.1"
+version="1.0.2"
 install_root="/opt/relaywright"
 data_directory="/var/lib/relaywright"
 database_provider="${RELAYWRIGHT_DATABASE_PROVIDER:-}"
@@ -42,7 +42,7 @@ Usage:
   install-relaywright.sh [options]
 
 Options:
-  --version VERSION               Release version to install, for example 1.0.1 or latest.
+  --version VERSION               Release version to install, for example 1.0.2 or latest.
   --repo OWNER/REPO               GitHub repository that hosts Relaywright releases.
   --runtime RID                   Linux runtime package: auto, linux-x64, linux-arm64, or linux-arm.
   --install-root PATH             Install root. Default: /opt/relaywright

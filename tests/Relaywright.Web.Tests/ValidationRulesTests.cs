@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Relaywright.Web.Validation;
 using Xunit;
 
@@ -90,5 +91,45 @@ public sealed class ValidationRulesTests
     public void AllowedExtensionValidationMatchesExtensions(string value, bool expected)
     {
         Assert.Equal(expected, ValidationRules.HasAllowedExtension(value, [".pfx", ".crt"]));
+    }
+
+    [Fact]
+    public void PortAttributeUsesSharedPortBoundsAndMessage()
+    {
+        var attribute = new PortNumberAttribute();
+
+        Assert.Equal(ValidationLimits.MinimumPort, attribute.Minimum);
+        Assert.Equal(ValidationLimits.MaximumPort, attribute.Maximum);
+        Assert.Equal("SMTP port must be between 1 and 65535.", attribute.FormatErrorMessage("SMTP port"));
+    }
+
+    [Fact]
+    public void FileExtensionAttributeUsesSharedMessageFormat()
+    {
+        var attribute = new AllowedFileExtensionsAttribute(".pfx", ".pem");
+        var context = new ValidationContext(new object())
+        {
+            DisplayName = "Certificate file"
+        };
+
+        var result = attribute.GetValidationResult("certificate.txt", context);
+
+        Assert.NotNull(result);
+        Assert.Equal("Certificate file must use one of these file extensions: .pfx, .pem.", result!.ErrorMessage);
+    }
+
+    [Fact]
+    public void ControlCharacterAttributeUsesSharedMessageFormat()
+    {
+        var attribute = new NoControlCharactersAttribute();
+        var context = new ValidationContext(new object())
+        {
+            DisplayName = "Search"
+        };
+
+        var result = attribute.GetValidationResult("bad\u0001text", context);
+
+        Assert.NotNull(result);
+        Assert.Equal("Search contains an unsupported control character.", result!.ErrorMessage);
     }
 }

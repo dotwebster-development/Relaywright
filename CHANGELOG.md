@@ -4,6 +4,14 @@ All notable Relaywright release changes are tracked here.
 
 ## Unreleased
 
+## 1.0.2
+
+- Overhauls the Windows installer around operator choices for data location, database provider, ports, firewall scope, optional bootstrap admin, and final review.
+- Integrates Windows install, update, uninstall, preflight checks, redacted diagnostics, health verification, and update rollback into the installer package.
+- Replaces raw SQL connection-string entry with structured SQLite, SQL Server, and MySQL fields while keeping passwords out of installer logs and review output.
+- Keeps the Windows service name stable as `Relaywright` and sets the display name to `Relaywright - SMTP relay gateway`.
+- Shortens retention for large generated GitHub Actions package handoff artifacts so release and deployment workflows do not exhaust Actions storage.
+
 ## 1.0.1
 
 - Adds typed server-side validation and browser hints across user-editable admin fields, including relay settings, trusted networks, submission policy, alerts, backups, web listener/certificates, diagnostics, account forms, queue search, and log search.

@@ -24,12 +24,12 @@ public sealed class BackupsModel(
     public BackupScheduleState Schedule { get; set; } = new();
 
     [BindProperty]
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumSecretLength)]
     [NoControlCharacters]
     public string? EncryptionPassword { get; set; }
 
     [BindProperty]
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumSecretLength)]
     [NoControlCharacters]
     public string? ValidationPassword { get; set; }
 
@@ -38,7 +38,7 @@ public sealed class BackupsModel(
     public IFormFile? RestoreBackupFile { get; set; }
 
     [BindProperty]
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumSecretLength)]
     [NoControlCharacters]
     public string? RestoreEncryptionPassword { get; set; }
 

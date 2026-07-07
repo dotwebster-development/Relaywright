@@ -25,12 +25,12 @@ public sealed class RelayConfigurationEditModel : IValidatableObject
 
     public bool EnableStartTls { get; set; }
 
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumTextLength)]
     [NoControlCharacters]
     [AllowedFileExtensions(".pfx", ".p12", ".cer", ".crt", ".pem")]
     public string? CertificatePath { get; set; }
 
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumSecretLength)]
     [NoControlCharacters]
     public string? CertificatePassword { get; set; }
 
@@ -51,7 +51,7 @@ public sealed class RelayConfigurationEditModel : IValidatableObject
     [NoControlCharacters]
     public string? UpstreamUserName { get; set; }
 
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumSecretLength)]
     [NoControlCharacters]
     public string? UpstreamPassword { get; set; }
 
@@ -63,7 +63,7 @@ public sealed class RelayConfigurationEditModel : IValidatableObject
     [GuidText]
     public string? MicrosoftClientId { get; set; }
 
-    [StringLength(1024)]
+    [StringLength(ValidationLimits.MaximumSecretLength)]
     [NoControlCharacters]
     public string? MicrosoftClientSecret { get; set; }
 

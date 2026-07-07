@@ -7,8 +7,8 @@ Relaywright uses a standard stable/default branch flow.
 - `main` is the stable default branch and should stay protected.
 - `development` is where normal feature and bug-fix work lands.
 - Create short feature branches from `development`, then merge by PR back into `development`. See [Branch workflow](BRANCH_WORKFLOW.md) for the protected-branch PR flow and recovery steps after rejected direct pushes.
-- Create release branches from `development`, for example `release/1.0.1`.
-- Tag release candidates from the release branch, for example `v1.0.1-rc.1`.
+- Create release branches from `development`, for example `release/1.0.2`.
+- Tag release candidates from the release branch, for example `v1.0.2-rc.1`.
 - Run release validation against the RC artifacts, not local build output.
 - When validation passes, merge the release branch into `main`, tag the stable version from `main`, and merge `main` back into `development`.
 - For urgent production fixes after 1.0, create `hotfix/x.y.z` from `main`, tag the hotfix from `main`, then merge `main` back into `development`.

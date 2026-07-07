@@ -356,13 +356,13 @@ public sealed class SetupModel(
         public string UserName { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string Password { get; set; } = string.Empty;
 
         [Required]
         [Display(Name = "Confirm Password")]
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
@@ -374,7 +374,7 @@ public sealed class SetupModel(
         [AllowedFileExtensions(".pfx", ".p12")]
         public IFormFile? PfxFile { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string? PfxPassword { get; set; }
 
@@ -384,11 +384,11 @@ public sealed class SetupModel(
         [AllowedFileExtensions(".key", ".pem")]
         public IFormFile? KeyFile { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string? KeyPassword { get; set; }
 
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumTextLength)]
         [NoControlCharacters(true)]
         [CertificateNames]
         public string SelfSignedDnsNames { get; set; } = GetDefaultCertificateNames();

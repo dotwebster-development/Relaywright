@@ -127,7 +127,7 @@ public sealed class LoginModel(
         public string UserName { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string Password { get; set; } = string.Empty;
 

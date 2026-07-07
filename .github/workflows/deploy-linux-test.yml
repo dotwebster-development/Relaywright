@@ -53,6 +53,7 @@ jobs:
           name: relaywright-linux-x64
           path: artifacts/relaywright-linux-x64
           if-no-files-found: error
+          retention-days: 3
 
   deploy-linux-test:
     needs: build-publish

@@ -85,14 +85,7 @@ public sealed class RelayModel(
 
         if (!ModelState.IsValid)
         {
-            logger.LogWarning(
-                "Relay settings save rejected by validation. User={UserName}; ErrorCount={ErrorCount}; BindToAllInterfaces={BindToAllInterfaces}; SelectedBindAddress={SelectedBindAddress}",
-                User.Identity?.Name,
-                ModelState.ErrorCount,
-                BindToAllInterfaces,
-                SelectedBindAddress);
-
-            return Page();
+            return ReturnInvalidSavePage();
         }
 
         try
@@ -117,18 +110,35 @@ public sealed class RelayModel(
         }
         catch (Exception exception)
         {
-            logger.LogError(
-                exception,
-                "Relay settings save failed. User={UserName}; Listener={ListenerBindAddress}:{ListenerPort}; UpstreamConfigured={UpstreamConfigured}; AuthMode={AuthMode}",
-                User.Identity?.Name,
-                Input.ListenerBindAddress,
-                Input.ListenerPort,
-                !string.IsNullOrWhiteSpace(Input.UpstreamHost),
-                Input.UpstreamAuthenticationMode);
-
-            ModelState.AddModelError(string.Empty, exception.Message);
-            return Page();
+            return ReturnServiceErrorPage(exception);
         }
+    }
+
+    private IActionResult ReturnInvalidSavePage()
+    {
+        logger.LogWarning(
+            "Relay settings save rejected by validation. User={UserName}; ErrorCount={ErrorCount}; BindToAllInterfaces={BindToAllInterfaces}; SelectedBindAddress={SelectedBindAddress}",
+            User.Identity?.Name,
+            ModelState.ErrorCount,
+            BindToAllInterfaces,
+            SelectedBindAddress);
+
+        return Page();
+    }
+
+    private IActionResult ReturnServiceErrorPage(Exception exception)
+    {
+        logger.LogError(
+            exception,
+            "Relay settings save failed. User={UserName}; Listener={ListenerBindAddress}:{ListenerPort}; UpstreamConfigured={UpstreamConfigured}; AuthMode={AuthMode}",
+            User.Identity?.Name,
+            Input.ListenerBindAddress,
+            Input.ListenerPort,
+            !string.IsNullOrWhiteSpace(Input.UpstreamHost),
+            Input.UpstreamAuthenticationMode);
+
+        ModelState.AddModelError(string.Empty, exception.Message);
+        return Page();
     }
 
     private void InitializeBindSelectionFromModel()

@@ -50,7 +50,7 @@ public sealed class TrustedDevicePolicyService(
         await eventService.WriteAsync(new OperationalEventRequest
         {
             Category = OperationalEventCategory.Configuration,
-            Message = "Submission policy updated."
+            Message = OperationalEventMessages.SubmissionPolicyUpdated
         }, cancellationToken);
     }
 
@@ -297,16 +297,13 @@ public sealed class TrustedDevicePolicyService(
         ValidateSenderPolicyList(policy.BlockedSenderAddresses, "Blocked sender addresses");
         ValidateRecipientDomainPolicyList(policy.AllowedRecipientDomains, "Allowed recipient domains");
         ValidateRecipientDomainPolicyList(policy.BlockedRecipientDomains, "Blocked recipient domains");
-        ValidatePositive(policy.MaxMessageSizeBytes, "Maximum message size");
-        ValidatePositive(policy.MaxRecipientsPerMessage, "Maximum recipients per message");
+        ServiceValidation.RequirePositive(policy.MaxMessageSizeBytes, "Maximum message size");
+        ServiceValidation.RequirePositive(policy.MaxRecipientsPerMessage, "Maximum recipients per message");
     }
 
     private static void ValidateSenderPolicyList(string? value, string label)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
-        {
-            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
-        }
+        ServiceValidation.RequirePolicyListLength(value, label);
 
         foreach (var entry in ValidationRules.SplitDelimitedList(value))
         {
@@ -319,10 +316,7 @@ public sealed class TrustedDevicePolicyService(
 
     private static void ValidateRecipientDomainPolicyList(string? value, string label)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value.Length > 4096)
-        {
-            throw new InvalidOperationException($"{label} must be 4096 characters or fewer.");
-        }
+        ServiceValidation.RequirePolicyListLength(value, label);
 
         foreach (var entry in ValidationRules.SplitDelimitedList(value))
         {
@@ -333,19 +327,4 @@ public sealed class TrustedDevicePolicyService(
         }
     }
 
-    private static void ValidatePositive(long? value, string label)
-    {
-        if (value is <= 0)
-        {
-            throw new InvalidOperationException($"{label} must be at least 1.");
-        }
-    }
-
-    private static void ValidatePositive(int? value, string label)
-    {
-        if (value is <= 0)
-        {
-            throw new InvalidOperationException($"{label} must be at least 1.");
-        }
-    }
 }

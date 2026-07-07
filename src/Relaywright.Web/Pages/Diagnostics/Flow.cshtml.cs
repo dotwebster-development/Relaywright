@@ -66,7 +66,7 @@ public sealed class FlowModel(
         public string EnvelopeFrom { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(4096)]
+        [StringLength(ValidationLimits.MaximumPolicyListLength)]
         [NoControlCharacters(true)]
         [MailboxList]
         public string Recipients { get; set; } = string.Empty;

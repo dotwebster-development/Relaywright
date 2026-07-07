@@ -189,17 +189,17 @@ public sealed class ChangePasswordModel(
     public sealed class InputModel
     {
         [Required]
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string CurrentPassword { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string NewPassword { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(1024)]
+        [StringLength(ValidationLimits.MaximumSecretLength)]
         [NoControlCharacters]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
