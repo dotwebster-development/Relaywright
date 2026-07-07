@@ -6,7 +6,7 @@ Before updating:
 
 1. Open the admin UI.
 2. Create and validate a backup from `System -> Backups`.
-3. Confirm the install root, data directory, service name, and admin HTTPS port.
+3. Confirm the install root, data directory, and admin HTTPS port. The Windows service name is `Relaywright`.
 4. Review the release notes.
 
 ## Windows Update
@@ -19,7 +19,8 @@ The installer:
 - installs the new release side-by-side under `releases`;
 - updates the Windows service path;
 - preserves the data directory;
-- starts Relaywright and waits for `/health`.
+- starts Relaywright and waits for `/health`;
+- restores the previous service path and service environment if the new release fails health validation.
 
 ## Linux Update
 
@@ -39,7 +40,9 @@ The installer:
 
 ## Rollback
 
-If a new release fails during install, keep the previous release directory and data directory intact.
+If a new Windows release fails during install, the installer attempts rollback automatically. Review `C:\ProgramData\Relaywright\logs\installer-*.log` for the health-check and rollback result.
+
+If manual rollback is required, keep the previous release directory and data directory intact.
 
 Rollback approach:
 

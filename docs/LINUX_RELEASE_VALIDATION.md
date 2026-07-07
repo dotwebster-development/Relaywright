@@ -35,9 +35,9 @@ Use `runner_architecture=X64` for the normal Linux validation VM. Use `runner_ar
 Use this for every release candidate.
 
 ```text
-version=1.0.1-rc.1
+version=1.0.2-rc.1
 mode=clean-installer
-from_version=1.0.0
+from_version=1.0.1
 ```
 
 The workflow downloads `install-relaywright.sh` and `SHA256SUMS.txt` from the GitHub Release, verifies the checksum, cleans the VM, runs the installer with HTTPS-only defaults and scoped firewall rules, validates systemd/health/data/firewall behavior, uploads artifacts, and then cleans the VM after success.
@@ -47,9 +47,9 @@ The workflow downloads `install-relaywright.sh` and `SHA256SUMS.txt` from the Gi
 Use this to test upgrade behavior from one published release to another.
 
 ```text
-version=1.0.1-rc.1
+version=1.0.2-rc.1
 mode=update-package
-from_version=1.0.0
+from_version=1.0.1
 ```
 
 The workflow installs `from_version`, creates preservation markers for listener config, spool, backups, and Data Protection keys, updates to `version`, validates health and data preservation, uploads artifacts, and then cleans the VM after success.
@@ -59,9 +59,9 @@ The workflow installs `from_version`, creates preservation markers for listener 
 Use this before promoting a release candidate.
 
 ```text
-version=1.0.1-rc.1
+version=1.0.2-rc.1
 mode=full-release
-from_version=1.0.0
+from_version=1.0.1
 ```
 
 This runs the update validation, cleans the VM, runs the fresh install validation, and cleans again after success.

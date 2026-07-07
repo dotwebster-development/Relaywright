@@ -2,8 +2,8 @@
 param(
     [ValidateSet("clean-installer", "update-package", "full-release", "cleanup-only")]
     [string]$Mode = "clean-installer",
-    [string]$Version = "1.0.1-rc.1",
-    [string]$FromVersion = "1.0.0",
+    [string]$Version = "1.0.2-rc.1",
+    [string]$FromVersion = "1.0.1",
     [string]$Repository = $env:GITHUB_REPOSITORY,
     [string]$GitHubToken = $env:GITHUB_TOKEN,
     [string]$ArtifactsDirectory = (Join-Path $PWD "artifacts\windows-release-validation"),
@@ -27,7 +27,6 @@ $InstallerSmtpPort = 25
 $UpdateHttpsPort = 5543
 $UpdateHttpPort = 5580
 $UpdateSmtpPort = 2526
-$InstallScriptPath = Join-Path $PSScriptRoot "Install-Relaywright.ps1"
 
 function Write-Step {
     param([string]$Message)
@@ -274,13 +273,16 @@ function Remove-KnownDirectory {
 }
 
 function Invoke-InnoUninstallerIfPresent {
-    $uninstallerPath = Join-Path $InstallerInstallRoot "unins000.exe"
+    param([string]$InstallRoot)
+
+    $uninstallerPath = Join-Path $InstallRoot "unins000.exe"
     if (-not (Test-Path -LiteralPath $uninstallerPath)) {
         return
     }
 
-    $logPath = Join-Path $ArtifactsDirectory "inno-uninstall.log"
-    Write-Step "Running Inno uninstaller"
+    $safeName = (Split-Path -Leaf $InstallRoot) -replace '[^a-zA-Z0-9.-]', '-'
+    $logPath = Join-Path $ArtifactsDirectory "inno-uninstall-$safeName.log"
+    Write-Step "Running Inno uninstaller from $InstallRoot"
     $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$logPath`""
     $process = Start-Process -FilePath $uninstallerPath -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -ne 0) {
@@ -290,7 +292,8 @@ function Invoke-InnoUninstallerIfPresent {
 
 function Invoke-ReleaseValidationCleanup {
     Write-Step "Cleaning Relaywright validation state"
-    Invoke-InnoUninstallerIfPresent
+    Invoke-InnoUninstallerIfPresent -InstallRoot $InstallerInstallRoot
+    Invoke-InnoUninstallerIfPresent -InstallRoot $UpdateInstallRoot
 
     Remove-ValidationService -Name $InstallerServiceName
     Remove-ValidationService -Name $UpdateServiceName
@@ -502,63 +505,18 @@ function Assert-FirewallRules {
     }
 }
 
-function ConvertTo-PowerShellSingleQuotedString {
-    param([string]$Value)
-    return "'$($Value.Replace("'", "''"))'"
-}
+function Assert-InstallerDiagnostics {
+    param([string]$DataDirectory)
 
-function Invoke-InstallerScriptReplay {
-    $scriptPath = Join-Path $InstallerInstallRoot "tools\Install-Relaywright.ps1"
-    $packagePath = Join-Path $InstallerInstallRoot "package"
-    if (-not (Test-Path -LiteralPath $scriptPath)) {
-        Write-ArtifactText -Name "installer-script-replay.txt" -Content "Install script was not found at '$scriptPath'."
-        return
+    $logsPath = Join-Path $DataDirectory "logs"
+    Assert-PathExists -Path $logsPath -Name "Installer diagnostics directory"
+    $logs = @(Get-ChildItem -LiteralPath $logsPath -File -Filter "installer-*.log" -ErrorAction SilentlyContinue)
+    if ($logs.Count -eq 0) {
+        throw "No installer diagnostics log was found under '$logsPath'."
     }
 
-    if (-not (Test-Path -LiteralPath $packagePath)) {
-        Write-ArtifactText -Name "installer-script-replay.txt" -Content "Package directory was not found at '$packagePath'."
-        return
-    }
-
-    $stdoutPath = Join-Path $ArtifactsDirectory "installer-script-replay.stdout.log"
-    $stderrPath = Join-Path $ArtifactsDirectory "installer-script-replay.stderr.log"
-    $exitCodePath = Join-Path $ArtifactsDirectory "installer-script-replay-exit-code.txt"
-
-    $command = @(
-        "&",
-        (ConvertTo-PowerShellSingleQuotedString -Value $scriptPath),
-        "-PackagePath",
-        (ConvertTo-PowerShellSingleQuotedString -Value $packagePath),
-        "-InstallRoot",
-        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerInstallRoot),
-        "-DataDirectory",
-        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerDataDirectory),
-        "-ServiceName",
-        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerServiceName),
-        "-DisplayName",
-        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerServiceName),
-        "-HttpsPort",
-        "$InstallerHttpsPort",
-        "-HttpPort",
-        "$InstallerHttpPort",
-        "-SmtpPort",
-        "$InstallerSmtpPort",
-        "-FirewallRulePrefix",
-        (ConvertTo-PowerShellSingleQuotedString -Value $InstallerFirewallGroup),
-        "-FirewallRemoteAddress",
-        "'LocalSubnet'",
-        "-BootstrapUserName",
-        "'admin'",
-        "-BootstrapEmail",
-        "'admin@localhost'",
-        "-GenerateSelfSignedCertificate:`$true",
-        "-NonInteractive",
-        "-ConfigureFirewall"
-    ) -join " "
-
-    Write-Step "Replaying embedded install script for diagnostics"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $command > $stdoutPath 2> $stderrPath
-    Set-Content -LiteralPath $exitCodePath -Value ([string]$LASTEXITCODE) -Encoding ASCII
+    $latest = $logs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    Write-ArtifactText -Name "installer-diagnostics-$($latest.BaseName).log" -Content (Get-Content -LiteralPath $latest.FullName -Raw)
 }
 
 function Get-FirewallSnapshot {
@@ -632,18 +590,13 @@ function Invoke-CleanInstallerValidation {
         throw "Relaywright installer exited with code $($process.ExitCode)."
     }
 
-    try {
-        Wait-ServiceStatus -Name $InstallerServiceName -Status "Running" -TimeoutSeconds 60
-    }
-    catch {
-        Invoke-InstallerScriptReplay
-        throw
-    }
+    Wait-ServiceStatus -Name $InstallerServiceName -Status "Running" -TimeoutSeconds 60
 
     Assert-Health -Url "https://127.0.0.1:$InstallerHttpsPort/health"
     Assert-TcpPortClosed -HostName "127.0.0.1" -Port $InstallerHttpPort
     Assert-SetupPage -Url "https://127.0.0.1:$InstallerHttpsPort/Account/Setup"
     Assert-DataLayout -DataDirectory $InstallerDataDirectory
+    Assert-InstallerDiagnostics -DataDirectory $InstallerDataDirectory
     Assert-FirewallRules `
         -GroupName $InstallerFirewallGroup `
         -ExpectedPorts @($InstallerHttpsPort, $InstallerSmtpPort) `
@@ -655,59 +608,64 @@ function New-ValidationPassword {
     return "ReleaseTest42$suffix"
 }
 
-function Invoke-PackageInstall {
+function Invoke-InstallerInstall {
     param(
-        [string]$PackagePath,
-        [switch]$Update
+        [string]$InstallerPath,
+        [string]$InstallRoot,
+        [string]$DataDirectory,
+        [int]$HttpsPort,
+        [int]$HttpPort,
+        [int]$SmtpPort
     )
 
-    if (-not (Test-Path -LiteralPath $InstallScriptPath)) {
-        throw "Install script was not found at '$InstallScriptPath'."
+    if (-not (Test-Path -LiteralPath $InstallerPath)) {
+        throw "Installer was not found at '$InstallerPath'."
     }
 
-    $arguments = @{
-        PackagePath = $PackagePath
-        InstallRoot = $UpdateInstallRoot
-        DataDirectory = $UpdateDataDirectory
-        ServiceName = $UpdateServiceName
-        DisplayName = "Relaywright Release Validation"
-        EnvironmentName = "Production"
-        HttpsPort = $UpdateHttpsPort
-        HttpPort = $UpdateHttpPort
-        SmtpPort = $UpdateSmtpPort
-        FirewallRulePrefix = $UpdateFirewallGroup
-        FirewallRemoteAddress = "LocalSubnet"
-        FirewallProfiles = "Any"
-        BootstrapUserName = "release-validator"
-        BootstrapEmail = "release-validator@localhost"
-        BootstrapPassword = (New-ValidationPassword)
-        HealthTimeoutSeconds = 120
-    }
+    $logName = "inno-install-$((Split-Path -Leaf $InstallRoot) -replace '[^a-zA-Z0-9.-]', '-').log"
+    $logPath = Join-Path $ArtifactsDirectory $logName
+    $arguments = @(
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/LOG=`"$logPath`"",
+        "/DIR=`"$InstallRoot`"",
+        "/DATA_DIR=`"$DataDirectory`"",
+        "/DATABASE_PROVIDER=Sqlite",
+        "/HTTPS_PORT=$HttpsPort",
+        "/ENABLE_HTTP=0",
+        "/HTTP_PORT=$HttpPort",
+        "/SMTP_PORT=$SmtpPort",
+        "/CONFIGURE_FIREWALL=1",
+        "/FIREWALL_REMOTE_ADDRESS=LocalSubnet",
+        "/BOOTSTRAP_USERNAME=release-validator",
+        "/BOOTSTRAP_EMAIL=release-validator@localhost",
+        "/BOOTSTRAP_PASSWORD=$(New-ValidationPassword)"
+    ) -join " "
 
-    if ($Update) {
-        & $InstallScriptPath @arguments -GenerateSelfSignedCertificate:$true -ConfigureFirewall -Update -NonInteractive
-    }
-    else {
-        & $InstallScriptPath @arguments -GenerateSelfSignedCertificate:$true -ConfigureFirewall -NonInteractive
+    Write-Step "Running Windows installer $(Split-Path -Leaf $InstallerPath)"
+    $process = Start-Process -FilePath $InstallerPath -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+    if ($process.ExitCode -ne 0) {
+        throw "Relaywright installer exited with code $($process.ExitCode)."
     }
 }
 
 function Initialize-UpdatePreservationMarkers {
-    New-Item -ItemType Directory -Path (Join-Path $UpdateDataDirectory "spool\release-validation") -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $UpdateDataDirectory "backups") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $InstallerDataDirectory "spool\release-validation") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $InstallerDataDirectory "backups") -Force | Out-Null
 
-    $spoolMarker = Join-Path $UpdateDataDirectory "spool\release-validation\preserve.eml"
-    $backupMarker = Join-Path $UpdateDataDirectory "backups\release-validation-preserve.txt"
+    $spoolMarker = Join-Path $InstallerDataDirectory "spool\release-validation\preserve.eml"
+    $backupMarker = Join-Path $InstallerDataDirectory "backups\release-validation-preserve.txt"
     Set-Content -LiteralPath $spoolMarker -Value "Subject: Relaywright release validation`r`n`r`nPreserve this spool marker across update." -Encoding ASCII
     Set-Content -LiteralPath $backupMarker -Value "Relaywright release validation backup marker." -Encoding ASCII
 
     $listenerConfig = @{
-        httpsPort = $UpdateHttpsPort
+        httpsPort = $InstallerHttpsPort
         enableHttp = $false
-        httpPort = $UpdateHttpPort
+        httpPort = $InstallerHttpPort
         updatedUtc = [DateTimeOffset]::UtcNow.ToString("O")
     } | ConvertTo-Json
-    Set-Content -LiteralPath (Join-Path $UpdateDataDirectory "admin-web-listener.json") -Value $listenerConfig -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $InstallerDataDirectory "admin-web-listener.json") -Value $listenerConfig -Encoding UTF8
 }
 
 function Get-FileFingerprint {
@@ -727,7 +685,7 @@ function Get-FileFingerprint {
 
 function Get-UpdateDataFingerprint {
     $keyFiles = @()
-    $keysPath = Join-Path $UpdateDataDirectory "keys"
+    $keysPath = Join-Path $InstallerDataDirectory "keys"
     if (Test-Path -LiteralPath $keysPath) {
         foreach ($file in @(Get-ChildItem -LiteralPath $keysPath -File -Filter "*.xml" -ErrorAction SilentlyContinue)) {
             $keyFiles += Get-FileFingerprint -Path $file.FullName
@@ -735,10 +693,10 @@ function Get-UpdateDataFingerprint {
     }
 
     return [pscustomobject]@{
-        DatabaseExists = Test-Path -LiteralPath (Join-Path $UpdateDataDirectory "relay.db")
-        SpoolMarker = Get-FileFingerprint -Path (Join-Path $UpdateDataDirectory "spool\release-validation\preserve.eml")
-        BackupMarker = Get-FileFingerprint -Path (Join-Path $UpdateDataDirectory "backups\release-validation-preserve.txt")
-        ListenerConfig = Get-FileFingerprint -Path (Join-Path $UpdateDataDirectory "admin-web-listener.json")
+        DatabaseExists = Test-Path -LiteralPath (Join-Path $InstallerDataDirectory "relay.db")
+        SpoolMarker = Get-FileFingerprint -Path (Join-Path $InstallerDataDirectory "spool\release-validation\preserve.eml")
+        BackupMarker = Get-FileFingerprint -Path (Join-Path $InstallerDataDirectory "backups\release-validation-preserve.txt")
+        ListenerConfig = Get-FileFingerprint -Path (Join-Path $InstallerDataDirectory "admin-web-listener.json")
         KeyFiles = $keyFiles
     }
 }
@@ -786,32 +744,45 @@ function Invoke-UpdatePackageValidation {
 
     $fromVersionName = Normalize-Version -Value $FromVersion
     $toVersionName = Normalize-Version -Value $Version
-    $fromAsset = "relaywright-$fromVersionName-windows-x64.zip"
-    $toAsset = "relaywright-$toVersionName-windows-x64.zip"
+    $fromAsset = "Relaywright-$fromVersionName-windows-x64-installer.exe"
+    $toAsset = "Relaywright-$toVersionName-windows-x64-installer.exe"
 
     $fromAssets = Save-ReleaseAssetSet -ReleaseVersion $FromVersion -AssetNames @($fromAsset)
     $toAssets = Save-ReleaseAssetSet -ReleaseVersion $Version -AssetNames @($toAsset)
 
     Invoke-ReleaseValidationCleanup
 
-    Write-Step "Installing baseline package $fromVersionName"
-    Invoke-PackageInstall -PackagePath $fromAssets[$fromAsset]
-    Wait-ServiceStatus -Name $UpdateServiceName -Status "Running" -TimeoutSeconds 60
-    Assert-Health -Url "https://127.0.0.1:$UpdateHttpsPort/health"
-    Invoke-InsecureWebRequest -Url "https://127.0.0.1:$UpdateHttpsPort/Account/Login" -TimeoutSeconds 15 | Out-Null
-    Assert-DataLayout -DataDirectory $UpdateDataDirectory
-    Assert-FirewallRules -GroupName $UpdateFirewallGroup -ExpectedPorts @($UpdateHttpsPort, $UpdateSmtpPort) -ForbiddenPorts @($UpdateHttpPort)
+    Write-Step "Installing baseline installer $fromVersionName"
+    Invoke-InstallerInstall `
+        -InstallerPath $fromAssets[$fromAsset] `
+        -InstallRoot $InstallerInstallRoot `
+        -DataDirectory $InstallerDataDirectory `
+        -HttpsPort $InstallerHttpsPort `
+        -HttpPort $InstallerHttpPort `
+        -SmtpPort $InstallerSmtpPort
+    Wait-ServiceStatus -Name $InstallerServiceName -Status "Running" -TimeoutSeconds 60
+    Assert-Health -Url "https://127.0.0.1:$InstallerHttpsPort/health"
+    Invoke-InsecureWebRequest -Url "https://127.0.0.1:$InstallerHttpsPort/Account/Login" -TimeoutSeconds 15 | Out-Null
+    Assert-DataLayout -DataDirectory $InstallerDataDirectory
+    Assert-FirewallRules -GroupName $InstallerFirewallGroup -ExpectedPorts @($InstallerHttpsPort, $InstallerSmtpPort) -ForbiddenPorts @($InstallerHttpPort)
 
     Initialize-UpdatePreservationMarkers
     $before = Get-UpdateDataFingerprint
     Write-ArtifactJson -Name "update-fingerprint-before.json" -Value $before
 
-    Write-Step "Updating package to $toVersionName"
-    Invoke-PackageInstall -PackagePath $toAssets[$toAsset] -Update
-    Wait-ServiceStatus -Name $UpdateServiceName -Status "Running" -TimeoutSeconds 60
-    Assert-Health -Url "https://127.0.0.1:$UpdateHttpsPort/health"
-    Assert-DataLayout -DataDirectory $UpdateDataDirectory
-    Assert-FirewallRules -GroupName $UpdateFirewallGroup -ExpectedPorts @($UpdateHttpsPort, $UpdateSmtpPort) -ForbiddenPorts @($UpdateHttpPort)
+    Write-Step "Updating installer to $toVersionName"
+    Invoke-InstallerInstall `
+        -InstallerPath $toAssets[$toAsset] `
+        -InstallRoot $InstallerInstallRoot `
+        -DataDirectory $InstallerDataDirectory `
+        -HttpsPort $InstallerHttpsPort `
+        -HttpPort $InstallerHttpPort `
+        -SmtpPort $InstallerSmtpPort
+    Wait-ServiceStatus -Name $InstallerServiceName -Status "Running" -TimeoutSeconds 60
+    Assert-Health -Url "https://127.0.0.1:$InstallerHttpsPort/health"
+    Assert-DataLayout -DataDirectory $InstallerDataDirectory
+    Assert-InstallerDiagnostics -DataDirectory $InstallerDataDirectory
+    Assert-FirewallRules -GroupName $InstallerFirewallGroup -ExpectedPorts @($InstallerHttpsPort, $InstallerSmtpPort) -ForbiddenPorts @($InstallerHttpPort)
 
     $after = Get-UpdateDataFingerprint
     Write-ArtifactJson -Name "update-fingerprint-after.json" -Value $after

@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 mode="clean-installer"
-version="1.0.1-rc.1"
-from_version="1.0.0"
+version="1.0.2-rc.1"
+from_version="1.0.1"
 repository="${GITHUB_REPOSITORY:-dotwebster-development/Relaywright}"
 github_token="${GITHUB_TOKEN:-}"
 artifacts_directory="$PWD/artifacts/linux-release-validation"

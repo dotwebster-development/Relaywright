@@ -53,6 +53,7 @@ jobs:
           name: relaywright-win-x64
           path: artifacts/relaywright-win-x64
           if-no-files-found: error
+          retention-days: 3
 
   deploy-windows-test:
     needs: build-publish

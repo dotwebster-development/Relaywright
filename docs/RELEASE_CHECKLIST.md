@@ -21,13 +21,14 @@ The vulnerability report must not contain any project with vulnerable packages.
 ## Windows Validation
 
 - Run the `Validate Windows Release` workflow in `full-release` mode against the release candidate on `test-windows01`.
-- If diagnosing separately, run `clean-installer` and `update-package` modes against the same release candidate artifacts.
+- If diagnosing separately, run `clean-installer` and `update-package` modes against the same release candidate artifacts; `update-package` validates installer-to-installer updates.
 - Clean install the Windows installer on a disposable VM.
 - Confirm first-run setup works without a bootstrap password.
 - Confirm HTTPS is enabled and the admin HTTP listener is disabled unless explicitly selected.
 - Confirm Windows Firewall rules do not expose admin ports beyond the selected scope.
+- Confirm the installer diagnostics log is written under the data directory and does not contain secrets.
 - Configure trusted and untrusted SMTP clients, then verify accepted and denied submissions.
-- Upgrade an existing `1.0.0` data directory to the target release and verify configuration, trusted networks, queue metadata, spool files, Data Protection keys, certificates, backups, and admin login state.
+- Upgrade an existing `1.0.1` data directory to the target release and verify configuration, trusted networks, queue metadata, spool files, Data Protection keys, certificates, backups, and admin login state.
 
 ## Linux Validation
 
@@ -37,7 +38,7 @@ The vulnerability report must not contain any project with vulnerable packages.
 - Clean install with `install-relaywright.sh --version <version>`.
 - Confirm the systemd service starts and `/health` returns `ok`.
 - Confirm HTTPS is enabled and HTTP is disabled unless a non-zero `--http-port` is supplied.
-- Upgrade an existing `1.0.0` data directory with `--update`.
+- Upgrade an existing `1.0.1` data directory with `--update`.
 - Clean install on at least one ARM64 Linux runner or device with `runner_architecture=ARM64` before advertising ARM support for the release.
 - Treat ARMv7 as best-effort unless a real 32-bit ARMv7 runner or device is validated.
 - Verify firewall behavior on active `firewalld` or `ufw` hosts when `--configure-firewall` is used.

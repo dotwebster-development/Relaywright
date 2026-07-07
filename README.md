@@ -68,7 +68,7 @@ curl -fsSL https://github.com/dotwebster-development/Relaywright/releases/downlo
   | sudo bash -s -- --repo dotwebster-development/Relaywright --version <version>
 ```
 
-Replace `<version>` with a published version such as `1.0.1`.
+Replace `<version>` with a published version such as `1.0.2`.
 
 The Linux installer auto-selects the matching package for x64, ARM64, or 32-bit ARMv7 hosts. For Raspberry Pi class devices, prefer a 64-bit OS so the installer selects the validated `linux-arm64` package; `linux-arm` is best-effort until dedicated ARMv7 validation is available.
 
@@ -88,7 +88,7 @@ Runtime data includes:
 - `backups` for backup bundles;
 - `certs` for generated/admin certificate material.
 
-SQL Server and MySQL are installer-time choices for new installs with pre-created empty databases. Existing SQLite installs stay on SQLite unless a future migration tool is introduced. In SQL Server/MySQL mode, database backups are managed outside Relaywright with the database platform's normal backup tooling.
+SQL Server and MySQL are installer-time choices configured with structured server, port, database, user, and password fields. Existing SQLite installs stay on SQLite unless a future migration tool is introduced. In SQL Server/MySQL mode, database backups are managed outside Relaywright with the database platform's normal backup tooling.
 
 Do not commit runtime data, Data Protection keys, certificates, or backups to source control.
 

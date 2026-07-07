@@ -9,7 +9,7 @@ on:
       version:
         description: "Release version without leading v"
         required: true
-        default: "1.0.1"
+        default: "1.0.2"
 
 permissions:
   contents: write
@@ -116,6 +116,7 @@ jobs:
           name: release-windows
           path: artifacts/release/*
           if-no-files-found: error
+          retention-days: 3
 
   linux:
     runs-on: ubuntu-latest
@@ -205,6 +206,7 @@ jobs:
           name: release-linux
           path: artifacts/release/*
           if-no-files-found: error
+          retention-days: 3
 
   publish-release:
     needs:
