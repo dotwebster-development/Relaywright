@@ -17,6 +17,7 @@ public sealed class IndexModel(
     IRelayConfigurationService relayConfigurationService,
     IRuntimeStatusService runtimeStatusService,
     IDashboardMetricsService dashboardMetricsService,
+    IDashboardReadinessService dashboardReadinessService,
     IAdminSecurityActivityService adminSecurityActivityService,
     IUpdateCheckService updateCheckService,
     DatabaseConfiguration databaseConfiguration,
@@ -27,6 +28,8 @@ public sealed class IndexModel(
     public RuntimeStatusSnapshot RuntimeStatus { get; private set; } = new();
 
     public DashboardMetricsSnapshot Metrics { get; private set; } = new();
+
+    public DashboardReadinessSnapshot Readiness { get; private set; } = DashboardReadinessSnapshot.Empty;
 
     public SuspiciousLoginSummary SuspiciousLogins { get; private set; } = SuspiciousLoginSummary.Empty;
 
@@ -50,6 +53,10 @@ public sealed class IndexModel(
         Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
         RuntimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
         Metrics = await dashboardMetricsService.GetSnapshotAsync(Configuration, cancellationToken);
+        Readiness = await dashboardReadinessService.GetSnapshotAsync(
+            Configuration,
+            Metrics.BackupReadiness,
+            cancellationToken);
         UpdateStatus = await updateCheckService.GetStatusAsync(cancellationToken);
         var loadedUtc = DateTimeOffset.UtcNow;
         SuspiciousLogins = await adminSecurityActivityService.GetSuspiciousLoginSummaryAsync(loadedUtc, cancellationToken);
@@ -103,12 +110,14 @@ public sealed class IndexModel(
                 .ToListAsync(cancellationToken);
 
         logger.LogDebug(
-            "Dashboard loaded. Pending={PendingCount}; Retry={RetryCount}; Failed={FailedCount}; DeliveredToday={DeliveredTodayCount}; RecentEventCount={RecentEventCount}; Listener={ListenerBindAddress}:{ListenerPort}; User={UserName}",
+            "Dashboard loaded. Pending={PendingCount}; Retry={RetryCount}; Failed={FailedCount}; DeliveredToday={DeliveredTodayCount}; RecentEventCount={RecentEventCount}; Readiness={ReadinessComplete}/{ReadinessTotal}; Listener={ListenerBindAddress}:{ListenerPort}; User={UserName}",
             PendingCount,
             RetryCount,
             FailedCount,
             DeliveredTodayCount,
             RecentEvents.Count,
+            Readiness.CompletedRequiredCount,
+            Readiness.RequiredCount,
             Configuration.ListenerBindAddress,
             Configuration.ListenerPort,
             User.Identity?.Name);

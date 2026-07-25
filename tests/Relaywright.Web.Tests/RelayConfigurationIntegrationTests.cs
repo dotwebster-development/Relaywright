@@ -27,15 +27,18 @@ public sealed class RelayConfigurationIntegrationTests
             upstreamPassword: "smtp-secret",
             microsoftSecret: "oauth-secret"), CancellationToken.None);
 
+        DateTimeOffset storedUpdatedUtc;
         await using (var dbContext = database.CreateDbContext())
         {
             var stored = await dbContext.RelayConfigurations.AsNoTracking().SingleAsync();
             Assert.DoesNotContain("cert-secret", stored.ProtectedCertificatePassword, StringComparison.Ordinal);
             Assert.DoesNotContain("smtp-secret", stored.ProtectedUpstreamPassword, StringComparison.Ordinal);
             Assert.DoesNotContain("oauth-secret", stored.ProtectedMicrosoftClientSecret, StringComparison.Ordinal);
+            storedUpdatedUtc = stored.UpdatedUtc;
         }
 
         var snapshot = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(storedUpdatedUtc, snapshot.UpdatedUtc);
         Assert.Equal("cert-secret", snapshot.CertificatePassword);
         Assert.Equal("smtp-secret", snapshot.UpstreamPassword);
         Assert.Equal("oauth-secret", snapshot.MicrosoftClientSecret);
