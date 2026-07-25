@@ -146,6 +146,30 @@ public sealed class RazorPageOrderingTests
     }
 
     [Fact]
+    public async Task DashboardLoadsSetupReadiness()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var readiness = new DashboardReadinessSnapshot(
+        [
+            new DashboardReadinessItem(
+                "upstream",
+                "Upstream relay",
+                "Configured",
+                "Configured.",
+                "status-enabled",
+                "/Settings/Relay",
+                "Review settings",
+                true)
+        ]);
+        var model = fixture.CreateDashboardModel(readiness: readiness);
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Same(readiness, model.Readiness);
+        Assert.True(model.Readiness.IsReady);
+    }
+
+    [Fact]
     public async Task DashboardManualUpdateCheckRefreshesCachedStatus()
     {
         await using var fixture = await PageFixture.CreateAsync();
@@ -251,13 +275,20 @@ public sealed class RazorPageOrderingTests
 
         public DashboardIndexModel CreateDashboardModel(
             SuspiciousLoginSummary? suspiciousLogins = null,
-            IUpdateCheckService? updateCheckService = null)
+            IUpdateCheckService? updateCheckService = null,
+            DashboardReadinessSnapshot? readiness = null)
         {
+            var readinessService = new StaticDashboardReadinessService
+            {
+                Snapshot = readiness ?? DashboardReadinessSnapshot.Empty
+            };
+
             return AttachPageContext(new DashboardIndexModel(
                 _dbContextFactory,
                 new TestRelayConfigurationService(),
                 new StaticRuntimeStatusService(),
                 new TestDashboardMetricsService(),
+                readinessService,
                 new TestAdminSecurityActivityService(suspiciousLogins),
                 updateCheckService ?? new TestUpdateCheckService(),
                 TestDatabaseConfiguration.Sqlite,

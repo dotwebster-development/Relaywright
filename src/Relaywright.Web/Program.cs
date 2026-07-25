@@ -120,6 +120,7 @@ builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
 builder.Services.AddSingleton<IApplicationRestartService, ApplicationRestartService>();
 builder.Services.AddSingleton<IOutboundRouteProbe, OutboundRouteProbe>();
 builder.Services.AddSingleton<IDashboardMetricsService, DashboardMetricsService>();
+builder.Services.AddSingleton<IDashboardReadinessService, DashboardReadinessService>();
 builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
 builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
 builder.Services.AddSingleton<IBackupCoordinator, BackupCoordinator>();

@@ -166,6 +166,7 @@ public sealed class RelayConfigurationService(
     {
         return new RelayConfigurationSnapshot
         {
+            UpdatedUtc = entity.UpdatedUtc,
             ListenerBindAddress = entity.ListenerBindAddress,
             ListenerPort = entity.ListenerPort,
             ListenerHostName = entity.ListenerHostName,

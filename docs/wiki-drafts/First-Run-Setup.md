@@ -29,8 +29,15 @@ Certificate changes are picked up after the service restarts.
 
 ## Next Steps
 
-1. Review [[Admin HTTPS And Certificates|Admin-HTTPS-And-Certificates]].
+The dashboard keeps a production-readiness checklist visible after setup. Each item links directly to the relevant page and completes from recorded configuration or successful operational evidence rather than a dismissible acknowledgement.
+
+1. Review [[Admin HTTPS And Certificates|Admin-HTTPS-And-Certificates]] and keep the managed HTTP listener disabled unless it is deliberately required.
 2. Configure [[Upstream SMTP|Configure-Upstream-SMTP]].
-3. Add [[Trusted Networks|Trusted-Networks]].
-4. Set a global [[Submission Policy|Submission-Policy]].
-5. Run [[Diagnostics|Diagnostics]] before pointing devices at the relay.
+3. Add at least one non-loopback [[Trusted Network|Trusted-Networks]] for a real submitting device.
+4. Review and save the global [[Submission Policy|Submission-Policy]].
+5. Run a successful upstream connectivity check in [[Diagnostics|Diagnostics]].
+6. Send a successful diagnostic test email.
+7. Create and validate a [[Backup|Backups-And-Restore]], or confirm the external database backup responsibility shown for SQL Server/MySQL.
+8. Optionally configure alert email recipients under [[Alerts|Alerts]].
+
+Connectivity and test-email evidence is considered current only when it was recorded after the latest relay configuration save. Rerun both checks after changing the upstream relay.

@@ -1,6 +1,6 @@
 param(
     [string]$SitePath = "site",
-    [string]$ExpectedStableVersion = $(if ($env:RELAYWRIGHT_SITE_EXPECTED_VERSION) { $env:RELAYWRIGHT_SITE_EXPECTED_VERSION } else { "1.0.2" })
+    [string]$ExpectedStableVersion = $env:RELAYWRIGHT_SITE_EXPECTED_VERSION
 )
 
 $ErrorActionPreference = "Stop"
@@ -127,6 +127,22 @@ function Assert-FileExists {
 
 $siteRoot = Resolve-RepoPath -Path $SitePath
 $indexPath = Join-Path $siteRoot "index.html"
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $siteRoot ".."))
+
+if ([string]::IsNullOrWhiteSpace($ExpectedStableVersion)) {
+    $buildPropsPath = Join-Path $repoRoot "Directory.Build.props"
+    if (-not (Test-Path -LiteralPath $buildPropsPath -PathType Leaf)) {
+        throw "Directory.Build.props was not found at $buildPropsPath"
+    }
+
+    [xml]$buildProps = Get-Content -LiteralPath $buildPropsPath -Raw
+    $versionPrefix = $buildProps.SelectSingleNode("/Project/PropertyGroup/VersionPrefix")
+    if ($null -eq $versionPrefix -or [string]::IsNullOrWhiteSpace($versionPrefix.InnerText)) {
+        throw "Directory.Build.props does not define VersionPrefix."
+    }
+
+    $ExpectedStableVersion = $versionPrefix.InnerText.Trim()
+}
 
 if (-not (Test-Path -LiteralPath $indexPath -PathType Leaf)) {
     throw "Missing site index: $indexPath"
@@ -196,7 +212,6 @@ foreach ($match in $referenceMatches) {
     [void]$validatedFiles.Add($path)
 }
 
-$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $siteRoot ".."))
 $repoLinkMatches = [regex]::Matches($html, 'https://github\.com/dotwebster-development/Relaywright/blob/main/([^"#?]+)')
 foreach ($match in $repoLinkMatches) {
     $repoRelative = [System.Uri]::UnescapeDataString($match.Groups[1].Value) -replace "/", [System.IO.Path]::DirectorySeparatorChar

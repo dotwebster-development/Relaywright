@@ -1,0 +1,118 @@
+name: Bug report
+description: Report a reproducible Relaywright product defect.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Do not include credentials, tokens, message bodies, spool files, private SMTP transcripts, certificates, private keys, production connection strings, or other sensitive infrastructure data.
+
+        For security vulnerabilities, stop and use the private process in SECURITY.md.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I reviewed the operator manual and troubleshooting guide.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: This report contains no credentials, message content, private keys, tokens, or other sensitive data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Relaywright version
+      description: Use the version displayed in the admin console or release package.
+      placeholder: 1.0.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows x64 installer
+        - Windows x64 zip/manual deployment
+        - Linux x64
+        - Linux ARM64
+        - Linux ARMv7
+        - Local development/source run
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      placeholder: Windows Server 2025 or Ubuntu 24.04 ARM64
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database provider
+      options:
+        - SQLite
+        - SQL Server
+        - MySQL
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Affected workflow
+      description: Describe what you were trying to do and the relevant configuration without including secrets.
+      placeholder: Configure upstream SMTP, submit from a trusted printer, retry a failed queue item, restore a backup...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest repeatable sequence.
+      placeholder: |
+        1. Open ...
+        2. Configure ...
+        3. Select ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include redacted error text, queue state, failure category, and timestamps when relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: changes
+    attributes:
+      label: Recent changes
+      description: Note whether this began after installation, update, restart, certificate change, or configuration change.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional safe context
+      description: Add only redacted, non-sensitive information that materially helps reproduce the issue.

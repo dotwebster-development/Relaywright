@@ -70,6 +70,47 @@
         </div>
     }
 
+    <section class="panel readiness-panel">
+        <div class="readiness-header">
+            <div>
+                <p class="page-eyebrow">Setup readiness</p>
+                <h2>Production checklist</h2>
+                <p>Use recorded configuration and successful checks to verify the relay before expanding production traffic.</p>
+            </div>
+            <span class="status-badge @(Model.Readiness.IsReady ? "status-enabled" : "severity-warning")">
+                @(Model.Readiness.IsReady ? "Ready" : $"{Model.Readiness.CompletedRequiredCount} of {Model.Readiness.RequiredCount} required")
+            </span>
+        </div>
+        <div class="readiness-meter-row">
+            <progress class="readiness-meter"
+                      value="@Model.Readiness.CompletedRequiredCount"
+                      max="@Model.Readiness.RequiredCount"
+                      aria-label="@($"{Model.Readiness.CompletedRequiredCount} of {Model.Readiness.RequiredCount} required readiness checks complete")">
+                @Model.Readiness.CompletionPercent%
+            </progress>
+            <span>@(Model.Readiness.CompletionPercent)%</span>
+        </div>
+        <ol class="readiness-list">
+            @foreach (var item in Model.Readiness.Items)
+            {
+                <li class="readiness-item @(item.IsComplete ? "is-complete" : null)">
+                    <div class="readiness-item-heading">
+                        <div>
+                            <h3>@item.Label</h3>
+                            @if (!item.IsRequired)
+                            {
+                                <small>Recommended</small>
+                            }
+                        </div>
+                        <span class="status-badge @item.BadgeClass">@item.Status</span>
+                    </div>
+                    <p>@item.Detail</p>
+                    <a asp-page="@item.Page">@item.ActionLabel</a>
+                </li>
+            }
+        </ol>
+    </section>
+
     <div class="stats-grid">
         <article class="stat">
             <h2>Pending</h2>
