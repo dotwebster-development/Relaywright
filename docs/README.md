@@ -6,9 +6,11 @@ Use this page as the starting point for repository documentation. The GitHub Wik
 
 - [GitHub Wiki](https://github.com/dotwebster-development/Relaywright/wiki) - task-focused install, setup, configuration, operations, backups, diagnostics, updates, and troubleshooting guidance.
 - [Wiki drafts](wiki-drafts/README.md) - reviewable source drafts before publishing pages to the GitHub Wiki.
+- [Support](../SUPPORT.md) - support routes, bug-report preparation, and safe diagnostic-information guidance.
 
 ## Developer Docs
 
+- [Contributing](../CONTRIBUTING.md) - development and pull-request expectations.
 - [Architecture](ARCHITECTURE.md) - runtime flow, service boundaries, storage, queueing, delivery, diagnostics, and security model.
 - [Development guidelines](DEVELOPMENT_GUIDELINES.md) - engineering rules for changing Relaywright safely.
 - [Branch workflow](BRANCH_WORKFLOW.md) - protected-branch and PR workflow.

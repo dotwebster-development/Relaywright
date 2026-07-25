@@ -1,0 +1,66 @@
+name: Feature request
+description: Propose a scoped Relaywright improvement or operator use case.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Relaywright is a controlled internal SMTP relay to one upstream smart host. Explain the operator problem first so the proposal can be evaluated against that scope.
+
+        Do not include credentials, message content, private infrastructure details, or other sensitive data.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues for a similar request.
+          required: true
+        - label: This request fits Relaywright's controlled internal relay scope.
+          required: true
+        - label: This request contains no sensitive or production-identifying information.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operator problem
+      description: What operational task, risk, or limitation needs to be addressed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workflow
+      description: How is the task handled today, including any safe workaround?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the result rather than prescribing an implementation when possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and affected devices
+      description: Identify relevant platform, database provider, device types, or upstream SMTP service without exposing private infrastructure details.
+
+  - type: textarea
+    id: safety
+    attributes:
+      label: Security and operational considerations
+      description: Note effects on trusted networks, message durability, secrets, queue state, auditing, backups, or service restarts.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add safe diagrams, examples, or alternatives if they materially clarify the request.
