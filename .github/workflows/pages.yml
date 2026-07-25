@@ -7,6 +7,8 @@ on:
       - master
     paths:
       - "site/**"
+      - "Directory.Build.props"
+      - "scripts/Validate-PagesSite.ps1"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

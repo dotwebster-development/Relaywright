@@ -22,7 +22,7 @@ public sealed class ReleaseDefaultsTests
         var engine = ReadRepositoryFile("installer", "windows", "RelaywrightInstallerEngine.ps1");
         var installDocs = ReadRepositoryFile("INSTALL_WINDOWS.md");
 
-        Assert.Contains("#define AppVersion \"1.0.2\"", installer, StringComparison.Ordinal);
+        Assert.Contains("#define AppVersion \"1.1.0\"", installer, StringComparison.Ordinal);
         Assert.DoesNotContain("Install-Relaywright.ps1", installer, StringComparison.Ordinal);
         Assert.Contains("RelaywrightInstallerEngine.ps1", installer, StringComparison.Ordinal);
         Assert.Contains("Relaywright - SMTP relay gateway", installer, StringComparison.Ordinal);
@@ -56,7 +56,7 @@ public sealed class ReleaseDefaultsTests
         var script = ReadRepositoryFile("scripts", "linux", "install-relaywright.sh");
 
         Assert.Contains("repo=\"${RELAYWRIGHT_GITHUB_REPOSITORY:-dotwebster-development/Relaywright}\"", script, StringComparison.Ordinal);
-        Assert.Contains("version=\"1.0.2\"", script, StringComparison.Ordinal);
+        Assert.Contains("version=\"1.1.0\"", script, StringComparison.Ordinal);
         Assert.Contains("enable_http=false", script, StringComparison.Ordinal);
         Assert.Contains("runtime_identifier=\"${RELAYWRIGHT_LINUX_RUNTIME:-}\"", script, StringComparison.Ordinal);
         Assert.Contains("--runtime RID", script, StringComparison.Ordinal);
@@ -101,8 +101,8 @@ public sealed class ReleaseDefaultsTests
     {
         var props = ReadRepositoryFile("Directory.Build.props");
 
-        Assert.Contains("<VersionPrefix Condition=\"'$(VersionPrefix)' == ''\">1.0.2</VersionPrefix>", props, StringComparison.Ordinal);
-        Assert.Contains("<AssemblyVersion Condition=\"'$(AssemblyVersion)' == ''\">1.0.2.0</AssemblyVersion>", props, StringComparison.Ordinal);
+        Assert.Contains("<VersionPrefix Condition=\"'$(VersionPrefix)' == ''\">1.1.0</VersionPrefix>", props, StringComparison.Ordinal);
+        Assert.Contains("<AssemblyVersion Condition=\"'$(AssemblyVersion)' == ''\">1.1.0.0</AssemblyVersion>", props, StringComparison.Ordinal);
         Assert.DoesNotContain("beta.1", props, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -114,6 +114,7 @@ public sealed class ReleaseDefaultsTests
 
         Assert.Contains("https://github.com/dotwebster-development/Relaywright/releases/latest", site, StringComparison.Ordinal);
         Assert.Contains("https://github.com/dotwebster-development/Relaywright/wiki", site, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/dotwebster-development/Relaywright/blob/main/SUPPORT.md", site, StringComparison.Ordinal);
         Assert.Contains("--repo dotwebster-development/Relaywright --version latest", site, StringComparison.Ordinal);
         Assert.DoesNotContain("github.com/relaywright/relaywright", site, StringComparison.OrdinalIgnoreCase);
     }
@@ -155,6 +156,61 @@ public sealed class ReleaseDefaultsTests
         Assert.Contains("The GitHub Wiki repository is initialized", wikiDraftsReadme, StringComparison.Ordinal);
         Assert.Contains("git push origin master", wikiDraftsReadme, StringComparison.Ordinal);
         Assert.Contains("https://github.com/dotwebster-development/Relaywright/wiki", dashboard, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void PublicRepositoryHasProfessionalSupportAndContributionEntryPoints()
+    {
+        var readme = ReadRepositoryFile("README.md");
+        var support = ReadRepositoryFile("SUPPORT.md");
+        var contributing = ReadRepositoryFile("CONTRIBUTING.md");
+        var issueConfig = ReadRepositoryFile(".github", "ISSUE_TEMPLATE", "config.yml");
+        var bugReport = ReadRepositoryFile(".github", "ISSUE_TEMPLATE", "bug_report.yml");
+        var featureRequest = ReadRepositoryFile(".github", "ISSUE_TEMPLATE", "feature_request.yml");
+        var pullRequestTemplate = ReadRepositoryFile(".github", "pull_request_template.md");
+
+        Assert.Contains("relaywright-logo.svg", readme, StringComparison.Ordinal);
+        Assert.Contains("releases/latest", readme, StringComparison.Ordinal);
+        Assert.Contains("[Support](SUPPORT.md)", readme, StringComparison.Ordinal);
+        Assert.Contains("[CONTRIBUTING.md](CONTRIBUTING.md)", readme, StringComparison.Ordinal);
+        Assert.Contains("Choose The Right Route", support, StringComparison.Ordinal);
+        Assert.Contains("Never post:", support, StringComparison.Ordinal);
+        Assert.Contains("Pull Requests", contributing, StringComparison.Ordinal);
+        Assert.Contains("blank_issues_enabled: false", issueConfig, StringComparison.Ordinal);
+        Assert.Contains("name: Bug report", bugReport, StringComparison.Ordinal);
+        Assert.Contains("name: Feature request", featureRequest, StringComparison.Ordinal);
+        Assert.Contains("Safety And Operations", pullRequestTemplate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void PagesValidationUsesTheProductVersionAsItsDefault()
+    {
+        var validator = ReadRepositoryFile("scripts", "Validate-PagesSite.ps1");
+        var workflow = ReadRepositoryFile(".github", "workflows", "pages.yml");
+
+        Assert.Contains("Directory.Build.props", validator, StringComparison.Ordinal);
+        Assert.Contains("VersionPrefix", validator, StringComparison.Ordinal);
+        Assert.DoesNotContain("else { \"1.1.0\" }", validator, StringComparison.Ordinal);
+        Assert.Contains("\"Directory.Build.props\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("\"scripts/Validate-PagesSite.ps1\"", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DashboardRendersTheRecordedReadinessChecklist()
+    {
+        var dashboard = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Index.cshtml");
+        var styles = ReadRepositoryFile("src", "Relaywright.Web", "wwwroot", "css", "site.css");
+        var firstRunGuide = ReadRepositoryFile("docs", "wiki-drafts", "First-Run-Setup.md");
+
+        Assert.Contains("Production checklist", dashboard, StringComparison.Ordinal);
+        Assert.Contains("Model.Readiness.Items", dashboard, StringComparison.Ordinal);
+        Assert.Contains("readiness-meter", dashboard, StringComparison.Ordinal);
+        Assert.Contains(".readiness-list", styles, StringComparison.Ordinal);
+        Assert.Contains("production-readiness checklist", firstRunGuide, StringComparison.Ordinal);
+        Assert.Contains("after the latest relay configuration save", firstRunGuide, StringComparison.Ordinal);
     }
 
     [Fact]

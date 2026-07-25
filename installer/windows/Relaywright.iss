@@ -1,6 +1,6 @@
 #define AppVersion GetEnv("RELAYWRIGHT_VERSION")
 #if AppVersion == ""
-#define AppVersion "1.0.2"
+#define AppVersion "1.1.0"
 #endif
 
 #define SourceDir GetEnv("RELAYWRIGHT_SOURCE_DIR")

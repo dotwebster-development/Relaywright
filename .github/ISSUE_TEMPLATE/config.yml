@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Operator manual
+    url: https://github.com/dotwebster-development/Relaywright/wiki
+    about: Review installation, configuration, operation, and troubleshooting guidance.
+  - name: Support guidance
+    url: https://github.com/dotwebster-development/Relaywright/blob/main/SUPPORT.md
+    about: Choose the correct support route and prepare safe diagnostic information.
+  - name: Security vulnerability
+    url: https://github.com/dotwebster-development/Relaywright/security/policy
+    about: Report suspected vulnerabilities privately. Do not open a public issue.

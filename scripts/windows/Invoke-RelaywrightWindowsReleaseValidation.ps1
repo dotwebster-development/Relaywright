@@ -2,8 +2,8 @@
 param(
     [ValidateSet("clean-installer", "update-package", "full-release", "cleanup-only")]
     [string]$Mode = "clean-installer",
-    [string]$Version = "1.0.2-rc.2",
-    [string]$FromVersion = "1.0.1",
+    [string]$Version = "1.1.0-rc.1",
+    [string]$FromVersion = "1.0.2",
     [string]$Repository = $env:GITHUB_REPOSITORY,
     [string]$GitHubToken = $env:GITHUB_TOKEN,
     [string]$ArtifactsDirectory = (Join-Path $PWD "artifacts\windows-release-validation"),

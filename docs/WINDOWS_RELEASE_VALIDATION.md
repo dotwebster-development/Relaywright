@@ -42,9 +42,9 @@ Use this for every release candidate.
 Inputs:
 
 ```text
-version=1.0.2-rc.2
+version=1.1.0-rc.1
 mode=clean-installer
-from_version=1.0.1
+from_version=1.0.2
 ```
 
 The workflow downloads the real installer from the GitHub Release, verifies `SHA256SUMS.txt`, cleans the VM, installs silently with production defaults, validates HTTPS/HTTP/firewall/data/service behavior, uploads artifacts, and then cleans the VM again after success.
@@ -58,9 +58,9 @@ Use this when testing upgrade behavior from one published Windows installer arti
 Inputs:
 
 ```text
-version=1.0.2-rc.2
+version=1.1.0-rc.1
 mode=update-package
-from_version=1.0.1
+from_version=1.0.2
 ```
 
 The workflow installs the `from_version` Windows installer with silent parameters, creates preservation markers in the data directory, updates to `version` by running the newer installer against the same install root/data directory, verifies health/firewall/data preservation, uploads artifacts, and then cleans the VM after success.
@@ -74,9 +74,9 @@ Use this before promoting a release candidate.
 Inputs:
 
 ```text
-version=1.0.2-rc.2
+version=1.1.0-rc.1
 mode=full-release
-from_version=1.0.1
+from_version=1.0.2
 ```
 
 The workflow cleans `test-windows01`, installs the `from_version` installer, writes preservation markers for listener config, spool, backups, and Data Protection keys, updates to `version` with the newer installer, validates service/health/HTTPS/HTTP-disabled/firewall/data preservation, cleans again, then performs a fresh silent installer validation for `version`.
@@ -88,9 +88,9 @@ Use this to reset `test-windows01`.
 Inputs:
 
 ```text
-version=1.0.2-rc.2
+version=1.1.0-rc.1
 mode=cleanup-only
-from_version=1.0.1
+from_version=1.0.2
 ```
 
 The workflow removes:

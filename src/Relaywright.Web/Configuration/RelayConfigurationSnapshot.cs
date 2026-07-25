@@ -5,6 +5,8 @@ namespace Relaywright.Web.Configuration;
 
 public sealed class RelayConfigurationSnapshot
 {
+    public DateTimeOffset UpdatedUtc { get; init; } = DateTimeOffset.MinValue;
+
     public string ListenerBindAddress { get; init; } = "0.0.0.0";
 
     public int ListenerPort { get; init; } = 25;
