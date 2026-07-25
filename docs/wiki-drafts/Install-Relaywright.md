@@ -96,7 +96,7 @@ Common explicit install:
 
 ```bash
 sudo bash install-relaywright.sh \
-  --version 1.0.2 \
+  --version 1.1.0 \
   --runtime auto \
   --install-root /opt/relaywright \
   --data-directory /var/lib/relaywright \

@@ -9,7 +9,7 @@ on:
       version:
         description: "Release version without leading v"
         required: true
-        default: "1.0.2"
+        default: "1.1.0"
 
 permissions:
   contents: write
@@ -255,13 +255,13 @@ jobs:
           Relaywright ${RELAYWRIGHT_VERSION}
 
           Release notes:
-          - Maintenance release on the stable 1.0 release line.
-          - Overhauls the Windows installer around data, database, ports, firewall, bootstrap admin, and review choices.
-          - Integrates Windows install, update, uninstall, preflight checks, redacted diagnostics, health verification, and update rollback into the installer.
-          - Replaces raw SQL connection-string entry with structured SQLite, Microsoft SQL Server, and MySQL fields.
-          - Keeps the Windows service name stable as Relaywright and sets the display name to Relaywright - SMTP relay gateway.
-          - Keeps admin web HTTP disabled by default, generates or reuses a self-signed HTTPS certificate, and scopes firewall defaults to LocalSubnet.
-          - See UPGRADE.md before upgrading existing beta installations.
+          - Adds an evidence-backed production-readiness checklist to the dashboard.
+          - Links readiness items directly to HTTPS, upstream relay, trusted-device, submission-policy, diagnostics, backup, and alert configuration.
+          - Counts successful connectivity and test-email diagnostics only when recorded after the latest relay configuration save.
+          - Refreshes the README and product website with real sanitized screenshots and clearer installation and safety guidance.
+          - Adds structured issue forms, a pull-request template, contribution guidance, and safe support-reporting guidance.
+          - Keeps SMTP durability, trusted-network enforcement, queue state transitions, secret protection, and spool cleanup behavior unchanged.
+          - See UPGRADE.md before upgrading an existing installation.
 
           Downloads:
           - Relaywright-${RELAYWRIGHT_VERSION}-windows-x64-installer.exe

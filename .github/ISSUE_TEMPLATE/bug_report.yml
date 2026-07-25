@@ -30,7 +30,7 @@ body:
     attributes:
       label: Relaywright version
       description: Use the version displayed in the admin console or release package.
-      placeholder: 1.0.2
+      placeholder: 1.1.0
     validations:
       required: true
 

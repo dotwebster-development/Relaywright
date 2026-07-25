@@ -22,7 +22,7 @@ public sealed class ReleaseDefaultsTests
         var engine = ReadRepositoryFile("installer", "windows", "RelaywrightInstallerEngine.ps1");
         var installDocs = ReadRepositoryFile("INSTALL_WINDOWS.md");
 
-        Assert.Contains("#define AppVersion \"1.0.2\"", installer, StringComparison.Ordinal);
+        Assert.Contains("#define AppVersion \"1.1.0\"", installer, StringComparison.Ordinal);
         Assert.DoesNotContain("Install-Relaywright.ps1", installer, StringComparison.Ordinal);
         Assert.Contains("RelaywrightInstallerEngine.ps1", installer, StringComparison.Ordinal);
         Assert.Contains("Relaywright - SMTP relay gateway", installer, StringComparison.Ordinal);
@@ -56,7 +56,7 @@ public sealed class ReleaseDefaultsTests
         var script = ReadRepositoryFile("scripts", "linux", "install-relaywright.sh");
 
         Assert.Contains("repo=\"${RELAYWRIGHT_GITHUB_REPOSITORY:-dotwebster-development/Relaywright}\"", script, StringComparison.Ordinal);
-        Assert.Contains("version=\"1.0.2\"", script, StringComparison.Ordinal);
+        Assert.Contains("version=\"1.1.0\"", script, StringComparison.Ordinal);
         Assert.Contains("enable_http=false", script, StringComparison.Ordinal);
         Assert.Contains("runtime_identifier=\"${RELAYWRIGHT_LINUX_RUNTIME:-}\"", script, StringComparison.Ordinal);
         Assert.Contains("--runtime RID", script, StringComparison.Ordinal);
@@ -101,8 +101,8 @@ public sealed class ReleaseDefaultsTests
     {
         var props = ReadRepositoryFile("Directory.Build.props");
 
-        Assert.Contains("<VersionPrefix Condition=\"'$(VersionPrefix)' == ''\">1.0.2</VersionPrefix>", props, StringComparison.Ordinal);
-        Assert.Contains("<AssemblyVersion Condition=\"'$(AssemblyVersion)' == ''\">1.0.2.0</AssemblyVersion>", props, StringComparison.Ordinal);
+        Assert.Contains("<VersionPrefix Condition=\"'$(VersionPrefix)' == ''\">1.1.0</VersionPrefix>", props, StringComparison.Ordinal);
+        Assert.Contains("<AssemblyVersion Condition=\"'$(AssemblyVersion)' == ''\">1.1.0.0</AssemblyVersion>", props, StringComparison.Ordinal);
         Assert.DoesNotContain("beta.1", props, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -192,7 +192,7 @@ public sealed class ReleaseDefaultsTests
 
         Assert.Contains("Directory.Build.props", validator, StringComparison.Ordinal);
         Assert.Contains("VersionPrefix", validator, StringComparison.Ordinal);
-        Assert.DoesNotContain("else { \"1.0.2\" }", validator, StringComparison.Ordinal);
+        Assert.DoesNotContain("else { \"1.1.0\" }", validator, StringComparison.Ordinal);
         Assert.Contains("\"Directory.Build.props\"", workflow, StringComparison.Ordinal);
         Assert.Contains("\"scripts/Validate-PagesSite.ps1\"", workflow, StringComparison.Ordinal);
     }
