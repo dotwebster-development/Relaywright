@@ -4,6 +4,14 @@ All notable Relaywright release changes are tracked here.
 
 ## Unreleased
 
+## 1.1.0
+
+- Adds an evidence-backed production-readiness checklist to the dashboard for HTTPS posture, upstream relay configuration, trusted devices, submission policy, current diagnostics, backup readiness, and optional alert routing.
+- Treats connectivity and test-email evidence as current only when it was recorded after the latest relay configuration save.
+- Refreshes the public README and GitHub Pages site with real sanitized product screenshots and clearer install, safety, support, and contribution entry points.
+- Adds structured bug-report and feature-request forms, a pull-request template, contribution guidance, and safe support-reporting guidance.
+- Keeps Pages version validation synchronized with `Directory.Build.props`.
+
 ## 1.0.2
 
 - Overhauls the Windows installer around operator choices for data location, database provider, ports, firewall scope, optional bootstrap admin, and final review.
