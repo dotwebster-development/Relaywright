@@ -169,12 +169,14 @@ jobs:
       - name: Install Chromium for deployed browser validation
         shell: bash
         run: |
-          if ! command -v pwsh >/dev/null 2>&1; then
-            echo "PowerShell (pwsh) is required to install Playwright Chromium on the Linux deployment runner." >&2
+          playwright_root="tests/Relaywright.Web.BrowserTests/bin/Debug/net10.0/.playwright"
+          node_path="$(find "$playwright_root/node" -maxdepth 2 -type f -name node -print -quit)"
+          if [[ -z "$node_path" || ! -x "$node_path" ]]; then
+            echo "The Playwright package did not contain an executable Linux Node driver." >&2
             exit 1
           fi
 
-          pwsh tests/Relaywright.Web.BrowserTests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+          "$node_path" "$playwright_root/package/cli.js" install --with-deps chromium
 
       - name: Validate deployed admin UI in Chromium
         shell: bash
