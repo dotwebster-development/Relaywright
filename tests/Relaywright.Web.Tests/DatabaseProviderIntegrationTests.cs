@@ -26,6 +26,14 @@ namespace Relaywright.Web.Tests;
 public sealed class DatabaseProviderIntegrationTests
 {
     [Fact]
+    public void ProviderFixtureCanResolveSchemaAwareSeeder()
+    {
+        using var provider = CreateServiceProvider(TestDatabaseConfiguration.Sqlite);
+
+        Assert.NotNull(provider.GetRequiredService<DataSeeder>());
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public async Task SqlServerProviderCanInitializeSeedAndRunCoreQueuePaths()
     {
@@ -233,6 +241,7 @@ public sealed class DatabaseProviderIntegrationTests
             .AddIdentity<ApplicationUser, IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
+        services.AddSingleton<ISqliteSchemaUpgrade, LegacyBaselineSqliteSchemaUpgrade>();
         services.AddSingleton<DatabaseSchemaInitializer>();
         services.AddSingleton<DataSeeder>();
         return services.BuildServiceProvider();
