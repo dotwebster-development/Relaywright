@@ -147,9 +147,13 @@
                             <td><span class="status-badge @(item.IsEnabled ? "status-enabled" : "status-disabled")">@(item.IsEnabled ? "Enabled" : "Disabled")</span></td>
                             <td class="row-actions">
                                 <a asp-page="/Settings/TrustedNetworks" asp-route-editId="@item.Id">Edit</a>
-                                <form method="post" asp-page-handler="Delete" class="inline-form" onsubmit="return confirm('Delete this trusted network?');">
+                                <form method="post" asp-page-handler="Delete" class="inline-form">
                                     <input type="hidden" name="id" value="@item.Id" />
-                                    <button type="submit" class="secondary-button">Delete</button>
+                                    <button type="submit"
+                                            class="secondary-button"
+                                            rw-confirm="Delete trusted network @item.Description (@item.Cidr)? Devices in this range will no longer be allowed to submit mail."
+                                            rw-confirm-title="Delete trusted network"
+                                            rw-confirm-action="Delete">Delete</button>
                                 </form>
                             </td>
                         </tr>

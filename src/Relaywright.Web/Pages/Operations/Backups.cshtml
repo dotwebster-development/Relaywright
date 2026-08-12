@@ -156,8 +156,12 @@
                                             }
                                             <button type="submit" class="secondary-button">Validate</button>
                                         </form>
-                                        <form method="post" asp-page-handler="Delete" asp-route-id="@run.Id" class="inline-form" onsubmit="return confirm('Delete this backup file?');">
-                                            <button type="submit" class="secondary-button">Delete</button>
+                                        <form method="post" asp-page-handler="Delete" asp-route-id="@run.Id" class="inline-form">
+                                            <button type="submit"
+                                                    class="secondary-button"
+                                                    rw-confirm="Delete backup @run.FileName? This removes the backup file and cannot be undone."
+                                                    rw-confirm-title="Delete backup"
+                                                    rw-confirm-action="Delete">Delete</button>
                                         </form>
                                     }
                                 </div>

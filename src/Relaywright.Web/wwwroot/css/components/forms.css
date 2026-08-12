@@ -1,0 +1,217 @@
+.compact-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+.compact-grid-nested {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-grid label:not(.toggle-control):not(.switch-control):not(.checkbox),
+.form-grid label:not(.switch-control):not(.checkbox) {
+    display: grid;
+    gap: 5px;
+}
+
+.compact-grid label:not(.toggle-control):not(.switch-control):not(.checkbox) > span,
+.form-grid label:not(.switch-control):not(.checkbox) > span,
+.filter-row label > span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.compact-grid .toggle-field {
+    display: flex;
+    align-items: start;
+}
+
+.compact-grid input,
+.compact-grid select,
+.compact-grid textarea,
+.form-grid input,
+.form-grid select,
+.form-grid textarea,
+.page-actions input,
+.page-actions select,
+.filter-row input,
+.filter-row select {
+    width: 100%;
+    min-height: 36px;
+    padding: 7px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text);
+}
+
+.compact-grid input:focus,
+.compact-grid select:focus,
+.compact-grid textarea:focus,
+.form-grid input:focus,
+.form-grid select:focus,
+.form-grid textarea:focus,
+.page-actions input:focus,
+.page-actions select:focus,
+.filter-row input:focus,
+.filter-row select:focus {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+}
+
+.form-grid textarea {
+    min-height: 140px;
+    resize: vertical;
+}
+
+.compact-grid textarea {
+    min-height: 118px;
+    resize: vertical;
+}
+
+.compact-grid .span-2 {
+    grid-column: span 2;
+}
+
+.compact-grid .span-4 {
+    grid-column: 1 / -1;
+}
+
+.page .form-grid > .actions,
+.page .compact-grid > .actions,
+.page .panel > .actions,
+.page .panel > form.actions {
+    justify-content: flex-end;
+}
+
+.bind-address-field.is-collapsed {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.checkbox,
+.toggle-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.checkbox input,
+.toggle-control input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+.auth-panel {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-muted);
+}
+
+.compact-list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+}
+
+.compact-list li + li {
+    margin-top: 4px;
+}
+
+.field-hint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+}
+
+button,
+.button-link,
+.page-actions a,
+.actions a,
+.row-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 11px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+}
+
+button,
+.button-link {
+    border: 1px solid var(--accent-hover);
+    background: var(--accent);
+    color: #ffffff;
+    cursor: pointer;
+}
+
+button:hover,
+.button-link:hover {
+    background: var(--accent-hover);
+    text-decoration: none;
+}
+
+.secondary-button,
+.page-actions a,
+.actions a,
+.row-actions a {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text);
+}
+
+.secondary-button:hover,
+.page-actions a:hover,
+.actions a:hover,
+.row-actions a:hover {
+    background: var(--bg-muted);
+    text-decoration: none;
+}
+
+.inline-form {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.status {
+    margin: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius);
+    background: var(--info-bg);
+    color: var(--info);
+    font-weight: 600;
+}
+
+.status.error {
+    border-color: #fac5c0;
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.status.ok {
+    border-color: #b7e3c4;
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.status.warning {
+    border-color: var(--warning);
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.validation-summary-valid {
+    display: none;
+}

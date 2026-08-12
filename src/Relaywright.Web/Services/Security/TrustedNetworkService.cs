@@ -10,6 +10,7 @@ namespace Relaywright.Web.Services.Security;
 public sealed class TrustedNetworkService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IOperationalEventService eventService,
+    SubmissionPolicyValidator policyValidator,
     ILogger<TrustedNetworkService> logger) : ITrustedNetworkService
 {
     public async Task<bool> IsTrustedAsync(IPAddress? remoteAddress, CancellationToken cancellationToken)
@@ -99,12 +100,7 @@ public sealed class TrustedNetworkService(
         ServiceValidation.RequireSingleLineText(description, "Trusted network description", 256);
         ServiceValidation.RequireSingleLineText(owner, "Trusted network owner", 256);
         ServiceValidation.RequireSingleLineText(location, "Trusted network location", 256);
-        ValidateSenderPolicyList(network.AllowedSenderAddresses, "Allowed sender addresses");
-        ValidateSenderPolicyList(network.BlockedSenderAddresses, "Blocked sender addresses");
-        ValidateRecipientDomainPolicyList(network.AllowedRecipientDomains, "Allowed recipient domains");
-        ValidateRecipientDomainPolicyList(network.BlockedRecipientDomains, "Blocked recipient domains");
-        ServiceValidation.RequirePositive(network.MaxMessageSizeBytes, "Maximum message size");
-        ServiceValidation.RequirePositive(network.MaxRecipientsPerMessage, "Maximum recipients per message");
+        policyValidator.ValidateProfile(network);
         ServiceValidation.RequirePositive(network.RateLimitMessagesPerHour, "Rate limit messages per hour");
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -139,12 +135,12 @@ public sealed class TrustedNetworkService(
                 Description = description,
                 Owner = owner,
                 Location = location,
-                AllowedSenderAddresses = NormalizePolicyList(network.AllowedSenderAddresses),
-                BlockedSenderAddresses = NormalizePolicyList(network.BlockedSenderAddresses),
-                AllowedRecipientDomains = NormalizePolicyList(network.AllowedRecipientDomains),
-                BlockedRecipientDomains = NormalizePolicyList(network.BlockedRecipientDomains),
-                MaxMessageSizeBytes = NormalizePositive(network.MaxMessageSizeBytes),
-                MaxRecipientsPerMessage = NormalizePositive(network.MaxRecipientsPerMessage),
+                AllowedSenderAddresses = policyValidator.NormalizeList(network.AllowedSenderAddresses),
+                BlockedSenderAddresses = policyValidator.NormalizeList(network.BlockedSenderAddresses),
+                AllowedRecipientDomains = policyValidator.NormalizeList(network.AllowedRecipientDomains),
+                BlockedRecipientDomains = policyValidator.NormalizeList(network.BlockedRecipientDomains),
+                MaxMessageSizeBytes = policyValidator.NormalizePositive(network.MaxMessageSizeBytes),
+                MaxRecipientsPerMessage = policyValidator.NormalizePositive(network.MaxRecipientsPerMessage),
                 RateLimitMessagesPerHour = NormalizePositive(network.RateLimitMessagesPerHour),
                 IsEnabled = network.IsEnabled,
                 CreatedUtc = DateTimeOffset.UtcNow,
@@ -159,12 +155,12 @@ public sealed class TrustedNetworkService(
             existing.Description = description;
             existing.Owner = owner;
             existing.Location = location;
-            existing.AllowedSenderAddresses = NormalizePolicyList(network.AllowedSenderAddresses);
-            existing.BlockedSenderAddresses = NormalizePolicyList(network.BlockedSenderAddresses);
-            existing.AllowedRecipientDomains = NormalizePolicyList(network.AllowedRecipientDomains);
-            existing.BlockedRecipientDomains = NormalizePolicyList(network.BlockedRecipientDomains);
-            existing.MaxMessageSizeBytes = NormalizePositive(network.MaxMessageSizeBytes);
-            existing.MaxRecipientsPerMessage = NormalizePositive(network.MaxRecipientsPerMessage);
+            existing.AllowedSenderAddresses = policyValidator.NormalizeList(network.AllowedSenderAddresses);
+            existing.BlockedSenderAddresses = policyValidator.NormalizeList(network.BlockedSenderAddresses);
+            existing.AllowedRecipientDomains = policyValidator.NormalizeList(network.AllowedRecipientDomains);
+            existing.BlockedRecipientDomains = policyValidator.NormalizeList(network.BlockedRecipientDomains);
+            existing.MaxMessageSizeBytes = policyValidator.NormalizePositive(network.MaxMessageSizeBytes);
+            existing.MaxRecipientsPerMessage = policyValidator.NormalizePositive(network.MaxRecipientsPerMessage);
             existing.RateLimitMessagesPerHour = NormalizePositive(network.RateLimitMessagesPerHour);
             existing.IsEnabled = network.IsEnabled;
             existing.UpdatedUtc = DateTimeOffset.UtcNow;
@@ -219,39 +215,6 @@ public sealed class TrustedNetworkService(
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private static string? NormalizePolicyList(string? value)
-    {
-        return ValidationRules.NormalizeDelimitedList(value);
-    }
-
-    private static long? NormalizePositive(long? value) => value is > 0 ? value : null;
-
     private static int? NormalizePositive(int? value) => value is > 0 ? value : null;
-
-    private static void ValidateSenderPolicyList(string? value, string label)
-    {
-        ServiceValidation.RequirePolicyListLength(value, label);
-
-        foreach (var entry in ValidationRules.SplitDelimitedList(value))
-        {
-            if (!ValidationRules.IsSenderPolicyPattern(entry))
-            {
-                throw new InvalidOperationException($"{label} contains an invalid sender entry: {entry}.");
-            }
-        }
-    }
-
-    private static void ValidateRecipientDomainPolicyList(string? value, string label)
-    {
-        ServiceValidation.RequirePolicyListLength(value, label);
-
-        foreach (var entry in ValidationRules.SplitDelimitedList(value))
-        {
-            if (!ValidationRules.IsRecipientDomainPattern(entry))
-            {
-                throw new InvalidOperationException($"{label} contains an invalid domain entry: {entry}.");
-            }
-        }
-    }
 
 }

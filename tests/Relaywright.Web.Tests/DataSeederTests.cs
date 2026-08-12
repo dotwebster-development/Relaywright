@@ -122,6 +122,9 @@ public sealed class DataSeederTests
         Assert.Equal(1, await fixture.GetRelayConfigurationCountAsync());
         Assert.Equal(2, await fixture.GetTrustedNetworkCountAsync());
         Assert.Equal(1, await fixture.GetUserCountAsync());
+        Assert.Equal(
+            DatabaseSchemaInitializer.CurrentSqliteSchemaVersion,
+            await fixture.GetSchemaVersionAsync());
     }
 
     [Fact]
@@ -244,6 +247,7 @@ public sealed class DataSeederTests
                 _serviceProvider,
                 Microsoft.Extensions.Options.Options.Create(options),
                 new TestHostEnvironment(environmentName),
+                new DatabaseSchemaInitializer(NullLogger<DatabaseSchemaInitializer>.Instance),
                 NullLogger<DataSeeder>.Instance);
         }
 
@@ -581,6 +585,13 @@ public sealed class DataSeederTests
             await using var scope = _serviceProvider.CreateAsyncScope();
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             return await userManager.Users.CountAsync();
+        }
+
+        public async Task<int> GetSchemaVersionAsync()
+        {
+            await using var command = _connection.CreateCommand();
+            command.CommandText = "SELECT COALESCE(MAX(\"Version\"), 0) FROM \"SchemaVersions\";";
+            return Convert.ToInt32(await command.ExecuteScalarAsync());
         }
 
         public async Task<ISet<string>> GetColumnNamesAsync(string tableName)

@@ -14,14 +14,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Relaywright</title>
     <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
-    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/foundation.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/layout.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/pages/setup.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/surfaces.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/forms.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/data.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/controls.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/status.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/responsive.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/shared-ui.css" asp-append-version="true" />
 </head>
 <body>
     <div class="app-shell @(isAuthenticated ? "is-authenticated" : "is-public")">
         @if (isAuthenticated && navState is not null)
         {
             <div class="app-overlay" data-nav-dismiss></div>
-            <aside class="app-rail" id="app-rail">
+            <aside class="app-rail" id="app-rail" aria-label="Application navigation">
                 <div class="rail-brand">
                     <a class="rail-brand-mark" asp-page="/Index" aria-label="Relaywright home">
                         <img src="~/brand/relaywright-mark.svg" alt="" />
@@ -89,11 +98,27 @@
                         }
                     </div>
                     <div class="settings-search" data-settings-search>
-                        <input type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off" data-settings-search-input />
-                        <div class="settings-search-results" data-settings-search-results hidden>
-                            @foreach (var item in navState.SettingsSearchItems)
+                        <input type="search"
+                               placeholder="Search settings"
+                               aria-label="Search settings"
+                               role="combobox"
+                               aria-autocomplete="list"
+                               aria-controls="settings-search-results"
+                               aria-expanded="false"
+                               autocomplete="off"
+                               data-settings-search-input />
+                        <div class="settings-search-results"
+                             id="settings-search-results"
+                             role="listbox"
+                             aria-label="Matching settings"
+                             data-settings-search-results
+                             hidden>
+                            @for (var index = 0; index < navState.SettingsSearchItems.Count; index++)
                             {
+                                var item = navState.SettingsSearchItems[index];
                                 <a asp-page="@item.Page"
+                                   id="settings-search-option-@index"
+                                   role="option"
                                    data-settings-search-item
                                    data-settings-search-text="@($"{item.Label} {item.Group} {item.Keywords}")">
                                     <span>@item.Label</span>
@@ -102,6 +127,7 @@
                             }
                             <div class="settings-search-empty" data-settings-search-empty hidden>No matching settings</div>
                         </div>
+                        <span class="visually-hidden" aria-live="polite" data-settings-search-announcement></span>
                     </div>
                 </nav>
             }
@@ -122,141 +148,18 @@
             </main>
         </div>
     </div>
-    <script>
-        (() => {
-            const root = document.documentElement;
-            const toggle = document.querySelector('[data-nav-toggle]');
-            const dismiss = document.querySelector('[data-nav-dismiss]');
-            const rail = document.getElementById('app-rail');
-
-            if (!toggle || !dismiss || !rail) {
-                return;
-            }
-
-            const setOpen = (isOpen) => {
-                root.classList.toggle('nav-open', isOpen);
-                toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            };
-
-            const close = () => setOpen(false);
-
-            toggle.addEventListener('click', () => {
-                setOpen(!root.classList.contains('nav-open'));
-            });
-
-            dismiss.addEventListener('click', close);
-
-            rail.querySelectorAll('a').forEach((link) => {
-                link.addEventListener('click', () => {
-                    if (window.innerWidth <= 960) {
-                        close();
-                    }
-                });
-            });
-
-            window.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape') {
-                    close();
-                }
-            });
-
-            const desktopMedia = window.matchMedia('(min-width: 961px)');
-            const handleDesktopChange = (event) => {
-                if (event.matches) {
-                    close();
-                }
-            };
-
-            if (desktopMedia.addEventListener) {
-                desktopMedia.addEventListener('change', handleDesktopChange);
-            } else {
-                desktopMedia.addListener(handleDesktopChange);
-            }
-        })();
-
-        (() => {
-            const root = document.querySelector('[data-settings-search]');
-            if (!root) {
-                return;
-            }
-
-            const input = root.querySelector('[data-settings-search-input]');
-            const results = root.querySelector('[data-settings-search-results]');
-            const items = Array.from(root.querySelectorAll('[data-settings-search-item]'));
-            const empty = root.querySelector('[data-settings-search-empty]');
-
-            if (!input || !results || items.length === 0) {
-                return;
-            }
-
-            const normalize = (value) => value.trim().toLowerCase();
-            const visibleItems = () => items.filter((item) => !item.hidden);
-
-            const setOpen = (isOpen) => {
-                results.hidden = !isOpen;
-                input.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            };
-
-            const update = () => {
-                const query = normalize(input.value);
-                let matchCount = 0;
-
-                items.forEach((item) => {
-                    const haystack = normalize(item.dataset.settingsSearchText ?? item.textContent ?? '');
-                    const isMatch = query.length > 0 && haystack.includes(query);
-                    item.hidden = !isMatch;
-                    if (isMatch) {
-                        matchCount++;
-                    }
-                });
-
-                if (empty) {
-                    empty.hidden = query.length === 0 || matchCount > 0;
-                }
-
-                setOpen(query.length > 0);
-            };
-
-            input.addEventListener('input', update);
-            input.addEventListener('focus', update);
-            input.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape') {
-                    input.value = '';
-                    update();
-                    input.blur();
-                    return;
-                }
-
-                if (event.key === 'Enter') {
-                    const first = visibleItems()[0];
-                    if (first) {
-                        event.preventDefault();
-                        first.click();
-                    }
-                }
-            });
-
-            document.addEventListener('click', (event) => {
-                if (!root.contains(event.target)) {
-                    setOpen(false);
-                }
-            });
-        })();
-
-        (() => {
-            const statusMessages = document.querySelectorAll('[data-dismissible-status]');
-            if (statusMessages.length === 0) {
-                return;
-            }
-
-            statusMessages.forEach((message) => {
-                const dismissButton = message.querySelector('[data-status-dismiss]');
-                dismissButton?.addEventListener('click', () => {
-                    message.remove();
-                });
-            });
-        })();
-    </script>
+    <dialog class="confirmation-dialog" data-confirm-dialog aria-labelledby="confirmation-dialog-title">
+        <div class="confirmation-dialog-copy">
+            <h2 id="confirmation-dialog-title" data-confirm-dialog-title>Confirm action</h2>
+            <p data-confirm-dialog-message></p>
+        </div>
+        <div class="actions">
+            <button type="button" class="secondary-button" data-confirm-dialog-cancel>Cancel</button>
+            <button type="button" class="danger-button" data-confirm-dialog-confirm>Continue</button>
+        </div>
+    </dialog>
+    <script src="~/js/app-shell.js" asp-append-version="true" defer></script>
+    <script src="~/js/confirmation-dialog.js" asp-append-version="true" defer></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

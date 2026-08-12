@@ -187,6 +187,45 @@ public sealed class BackupServiceTests
     }
 
     [Fact]
+    public async Task WorkingDirectoryCleanupFailureDoesNotOverrideSuccessfulBackup()
+    {
+        using var appData = TempAppData.Create();
+        var factory = await CreateFileBackedDatabaseAsync(appData);
+        var fileStore = new BackupFileStore(
+            appData.Paths,
+            new CleanupFailingBackupFileSystem(),
+            NullLogger<BackupFileStore>.Instance);
+        var service = new BackupService(
+            factory,
+            new BackupCoordinator(),
+            new RecordingOperationalEventService(),
+            appData.Paths,
+            TestDatabaseConfiguration.Sqlite,
+            NullLogger<BackupService>.Instance,
+            backupFileStore: fileStore);
+
+        var run = await service.CreateBackupAsync("admin", scheduled: false, CancellationToken.None);
+
+        Assert.Equal(BackupRunStatus.Succeeded, run.Status);
+        Assert.True(run.LastValidationSucceeded);
+        Assert.NotNull(await service.GetBackupPathAsync(run.Id, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("../backup.zip")]
+    [InlineData("subdirectory/backup.zip")]
+    public void BackupFileStoreRejectsNonLeafFileNames(string fileName)
+    {
+        using var appData = TempAppData.Create();
+        var store = new BackupFileStore(
+            appData.Paths,
+            new PhysicalBackupFileSystem(),
+            NullLogger<BackupFileStore>.Instance);
+
+        Assert.Throws<InvalidOperationException>(() => store.GetPath(fileName));
+    }
+
+    [Fact]
     public async Task ExternalDatabaseModeReportsBackupsAsExternallyManaged()
     {
         using var appData = TempAppData.Create();
@@ -248,7 +287,7 @@ public sealed class BackupServiceTests
             NullLogger<BackupRestoreService>.Instance);
 
         var staged = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
-        BackupRestoreService.ApplyPendingRestore(appData.Paths);
+        BackupRestoreFileSystem.ApplyPendingRestore(appData.Paths);
 
         Assert.True(staged.Succeeded);
         Assert.False(Directory.Exists(appData.Paths.RestorePendingDirectory));
@@ -307,7 +346,7 @@ public sealed class BackupServiceTests
             NullLogger<BackupRestoreService>.Instance);
 
         var staged = await restoreService.StageRestoreAsync(formFile, null, CancellationToken.None);
-        BackupRestoreService.ApplyPendingRestore(appData.Paths);
+        BackupRestoreFileSystem.ApplyPendingRestore(appData.Paths);
 
         Assert.True(staged.Succeeded);
         await using var verifyContext = factory.CreateDbContext();
@@ -476,6 +515,23 @@ public sealed class BackupServiceTests
         Assert.Contains("interval", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ScheduleRepositoryOwnsSuccessfulRunTimestampPersistence()
+    {
+        using var appData = TempAppData.Create();
+        var factory = await CreateFileBackedDatabaseAsync(appData);
+        var repository = new BackupScheduleRepository(factory);
+        _ = await repository.GetOrCreateAsync(CancellationToken.None);
+        var completedUtc = new DateTimeOffset(2032, 4, 5, 6, 7, 8, TimeSpan.Zero);
+
+        await repository.MarkRunCompletedAsync(completedUtc, CancellationToken.None);
+
+        await using var dbContext = factory.CreateDbContext();
+        var persisted = await dbContext.BackupScheduleStates.SingleAsync();
+        Assert.Equal(completedUtc, persisted.LastRunUtc);
+        Assert.Equal(completedUtc, persisted.UpdatedUtc);
+    }
+
     private static async Task SeedCredentialStateAsync(TestDbContextFactory factory)
     {
         await using var dbContext = factory.CreateDbContext();
@@ -597,5 +653,30 @@ public sealed class BackupServiceTests
         }
 
         return factory;
+    }
+
+    private sealed class CleanupFailingBackupFileSystem : IBackupFileSystem
+    {
+        private readonly PhysicalBackupFileSystem _inner = new();
+
+        public void CreateDirectory(string path) => _inner.CreateDirectory(path);
+
+        public bool FileExists(string path) => _inner.FileExists(path);
+
+        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+
+        public void DeleteFile(string path) => _inner.DeleteFile(path);
+
+        public void DeleteDirectory(string path, bool recursive)
+        {
+            throw new IOException("Simulated working-directory cleanup failure.");
+        }
+
+        public long GetFileSize(string path) => _inner.GetFileSize(path);
+
+        public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption)
+        {
+            return _inner.EnumerateFiles(path, searchPattern, searchOption);
+        }
     }
 }

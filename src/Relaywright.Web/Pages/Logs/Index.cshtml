@@ -80,7 +80,7 @@
         </div>
     </div>
 
-    <div class="table-wrap">
+    <rw-table-shell accessible-name="Operational events">
         <table class="table">
             <thead>
                 <tr>
@@ -113,23 +113,14 @@
             }
             </tbody>
         </table>
-    </div>
+    </rw-table-shell>
 
     @if (Model.TotalCount > 0)
     {
-        <nav class="pagination" aria-label="Log pages">
-            <span>Page @Model.PageNumber of @Model.TotalPages (@Model.TotalCount total)</span>
-            <div>
-                @if (Model.HasPreviousPage)
-                {
-                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a>
-                }
-                @if (Model.HasNextPage)
-                {
-                    <a asp-page="/Logs/Index" asp-route-category="@Model.Category" asp-route-severity="@Model.Severity" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a>
-                }
-            </div>
-        </nav>
+        <rw-pagination page-number="@Model.PageNumber"
+                       total-pages="@Model.TotalPages"
+                       previous-url="@(Model.HasPreviousPage ? Url.Page("/Logs/Index", new { category = Model.Category, severity = Model.Severity, search = Model.Search, pageNumber = Model.PageNumber - 1 }) : null)"
+                       next-url="@(Model.HasNextPage ? Url.Page("/Logs/Index", new { category = Model.Category, severity = Model.Severity, search = Model.Search, pageNumber = Model.PageNumber + 1 }) : null)" />
     }
 </section>
 

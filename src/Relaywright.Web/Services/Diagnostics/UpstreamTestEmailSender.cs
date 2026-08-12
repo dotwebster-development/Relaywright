@@ -1,15 +1,13 @@
 using System.Diagnostics;
-using MailKit.Net.Smtp;
 using MimeKit;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data.Entities;
-using Relaywright.Web.Services.Delivery;
 using Relaywright.Web.Services.Events;
 
 namespace Relaywright.Web.Services.Diagnostics;
 
 public sealed class UpstreamTestEmailSender(
-    IUpstreamAuthenticationService upstreamAuthenticationService,
+    IUpstreamDiagnosticSmtpSessionFactory smtpSessionFactory,
     IDiagnosticRunRecorder diagnosticRunRecorder,
     IOperationalEventService eventService,
     ILogger<UpstreamTestEmailSender> logger) : IUpstreamTestEmailSender
@@ -76,13 +74,11 @@ public sealed class UpstreamTestEmailSender(
             };
         }
 
-        using var client = new SmtpClient();
+        using var session = smtpSessionFactory.Create(configuration.UpstreamTimeoutSeconds * 1000);
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
-            client.Timeout = configuration.UpstreamTimeoutSeconds * 1000;
-
             currentStage = await diagnosticRunRecorder.StartStageAsync(
                 run.Id,
                 ++stageSequence,
@@ -109,15 +105,11 @@ public sealed class UpstreamTestEmailSender(
                 "Connect/TLS",
                 "Connecting to upstream relay.",
                 cancellationToken);
-            await client.ConnectAsync(
-                configuration.UpstreamHost,
-                configuration.UpstreamPort,
-                configuration.UpstreamSecureSocketOptions,
-                cancellationToken);
+            await session.ConnectAsync(configuration, cancellationToken);
             await diagnosticRunRecorder.CompleteStageAsync(
                 currentStage.Id,
                 DiagnosticStageStatus.Succeeded,
-                client.IsSecure ? "Connected with TLS." : "Connected without TLS.",
+                session.IsSecure ? "Connected with TLS." : "Connected without TLS.",
                 detail: null,
                 cancellationToken);
 
@@ -126,7 +118,7 @@ public sealed class UpstreamTestEmailSender(
                 sessionId,
                 configuration.UpstreamHost,
                 configuration.UpstreamPort,
-                client.IsSecure);
+                session.IsSecure);
 
             await WriteAsync(
                 EventSeverity.Information,
@@ -151,7 +143,7 @@ public sealed class UpstreamTestEmailSender(
                     sessionId,
                     cancellationToken);
 
-                await upstreamAuthenticationService.AuthenticateAsync(client, configuration, cancellationToken);
+                await session.AuthenticateAsync(configuration, cancellationToken);
                 await diagnosticRunRecorder.CompleteStageAsync(
                     currentStage.Id,
                     DiagnosticStageStatus.Succeeded,
@@ -228,7 +220,7 @@ public sealed class UpstreamTestEmailSender(
                 "Send",
                 "Submitting diagnostic message.",
                 cancellationToken);
-            var response = await client.SendAsync(message, cancellationToken);
+            var response = await session.SendAsync(message, cancellationToken);
             await diagnosticRunRecorder.CompleteStageAsync(
                 currentStage.Id,
                 DiagnosticStageStatus.Succeeded,
@@ -255,7 +247,7 @@ public sealed class UpstreamTestEmailSender(
                 "Disconnect",
                 "Disconnecting from upstream relay.",
                 cancellationToken);
-            await client.DisconnectAsync(true, cancellationToken);
+            await session.DisconnectAsync(cancellationToken);
             await diagnosticRunRecorder.CompleteStageAsync(
                 currentStage.Id,
                 DiagnosticStageStatus.Succeeded,
@@ -273,6 +265,40 @@ public sealed class UpstreamTestEmailSender(
                 DiagnosticRunId = run.Id
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (session.IsConnected)
+            {
+                try
+                {
+                    await session.DisconnectAsync(CancellationToken.None);
+                }
+                catch (Exception disconnectException)
+                {
+                    logger.LogDebug(
+                        disconnectException,
+                        "Diagnostic test email cancellation cleanup failed. SessionId={SessionId}",
+                        sessionId);
+                }
+            }
+
+            if (currentStage is not null)
+            {
+                await diagnosticRunRecorder.CompleteStageAsync(
+                    currentStage.Id,
+                    DiagnosticStageStatus.Failed,
+                    "Diagnostic test email canceled.",
+                    detail: null,
+                    CancellationToken.None);
+            }
+
+            await diagnosticRunRecorder.CompleteRunAsync(
+                run.Id,
+                false,
+                "Diagnostic test email canceled.",
+                CancellationToken.None);
+            throw;
+        }
         catch (Exception exception)
         {
             logger.LogError(
@@ -283,11 +309,11 @@ public sealed class UpstreamTestEmailSender(
                 configuration.UpstreamHost,
                 configuration.UpstreamPort);
 
-            if (client.IsConnected)
+            if (session.IsConnected)
             {
                 try
                 {
-                    await client.DisconnectAsync(true, cancellationToken);
+                    await session.DisconnectAsync(cancellationToken);
                 }
                 catch (Exception disconnectException)
                 {

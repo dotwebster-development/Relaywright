@@ -56,7 +56,7 @@
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
         <div class="surface-status">
-            <p class="status">@Model.StatusMessage</p>
+            <rw-status-message message="@Model.StatusMessage" />
         </div>
     }
 
@@ -69,12 +69,17 @@
             <div class="toolbar-right">
                 <div class="actions compact-actions">
                     <button type="submit" asp-page-handler="BulkRetry" class="secondary-button">Retry Selected</button>
-                    <button type="submit" asp-page-handler="BulkPurge" class="secondary-button" onclick="return confirm('Purge selected queued messages and remove their spool files where allowed?');">Purge Selected</button>
+                    <button type="submit"
+                            asp-page-handler="BulkPurge"
+                            class="secondary-button"
+                            rw-confirm="Purge the selected queued messages and remove their spool files where allowed?"
+                            rw-confirm-title="Purge selected messages"
+                            rw-confirm-action="Purge Selected">Purge Selected</button>
                 </div>
             </div>
         </div>
 
-        <div class="table-wrap">
+        <rw-table-shell accessible-name="Queued messages">
             <table class="table">
                 <thead>
                     <tr>
@@ -113,24 +118,15 @@
                 }
                 </tbody>
             </table>
-        </div>
+        </rw-table-shell>
     </form>
 
     @if (Model.TotalCount > 0)
     {
-        <nav class="pagination" aria-label="Queue pages">
-            <span>Page @Model.PageNumber of @Model.TotalPages (@Model.TotalCount total)</span>
-            <div>
-                @if (Model.HasPreviousPage)
-                {
-                    <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a>
-                }
-                @if (Model.HasNextPage)
-                {
-                    <a asp-page="/Queue/Index" asp-route-status="@Model.SelectedStatus" asp-route-search="@Model.Search" asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a>
-                }
-            </div>
-        </nav>
+        <rw-pagination page-number="@Model.PageNumber"
+                       total-pages="@Model.TotalPages"
+                       previous-url="@(Model.HasPreviousPage ? Url.Page("/Queue/Index", new { status = Model.SelectedStatus, search = Model.Search, pageNumber = Model.PageNumber - 1 }) : null)"
+                       next-url="@(Model.HasNextPage ? Url.Page("/Queue/Index", new { status = Model.SelectedStatus, search = Model.Search, pageNumber = Model.PageNumber + 1 }) : null)" />
     }
 </section>
 

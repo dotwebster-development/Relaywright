@@ -187,8 +187,10 @@ public sealed class AdminHttpsCertificateServiceTests
                 new DirectoryInfo(paths.KeyRingDirectory),
                 builder => builder.SetApplicationName("Relaywright"));
             var service = new AdminHttpsCertificateService(
-                paths,
                 provider,
+                new AdminHttpsCertificateConfigurationStore(paths),
+                new AdminHttpsCertificateFileStore(paths),
+                new AdminHttpsCertificateMaterialService(),
                 NullLogger<AdminHttpsCertificateService>.Instance);
 
             return new CertificateFixture(root, paths, provider, service);

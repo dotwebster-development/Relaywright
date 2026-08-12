@@ -30,6 +30,9 @@ Good unit-test targets:
 - CIDR parsing and trusted-network matching boundaries
 - spool path safety
 - bootstrap-admin guard rules
+- startup option binding and fail-fast validation
+- queue claim thresholds and idempotent completion
+- filesystem cleanup failure preservation
 
 Use `Category=Integration` for local multi-service tests that use real SQLite, real temporary app data, and real Relaywright services. These tests still must not use live SMTP relays, Microsoft endpoints, public network calls, or machine-specific network interfaces.
 
@@ -89,6 +92,8 @@ Good service-integration targets:
 - trusted network mailbox filtering through the real trusted network service
 - relay configuration save with real Data Protection secrets
 - data seeding and schema upgrade idempotency
+- ordered legacy schema-step execution and duplicate-order rejection
+- HTTP security-header and exception-propagation middleware behavior
 
 ## What To Add
 

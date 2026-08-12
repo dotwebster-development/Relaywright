@@ -15,6 +15,7 @@ public sealed class WebCertificateModel(
     IRuntimeStatusService runtimeStatusService,
     IApplicationRestartService applicationRestartService,
     IOperationalEventService eventService,
+    CertificateFormValidator certificateFormValidator,
     ILogger<WebCertificateModel> logger) : PageModel
 {
     [BindProperty]
@@ -137,28 +138,21 @@ public sealed class WebCertificateModel(
 
     private void ValidateCertificateInput()
     {
-        switch (Input.Mode)
+        var errors = certificateFormValidator.Validate(
+            Input.Mode,
+            Input.PfxFile,
+            Input.CertificateFile,
+            Input.KeyFile);
+        foreach (var error in errors)
         {
-            case AdminHttpsCertificateMode.Pfx:
-                AddMissingFileError(Input.PfxFile, $"{nameof(Input)}.{nameof(CertificateInputModel.PfxFile)}", "Select a PFX certificate file.");
-                break;
-            case AdminHttpsCertificateMode.Pem:
-                AddMissingFileError(Input.CertificateFile, $"{nameof(Input)}.{nameof(CertificateInputModel.CertificateFile)}", "Select a certificate file.");
-                AddMissingFileError(Input.KeyFile, $"{nameof(Input)}.{nameof(CertificateInputModel.KeyFile)}", "Select a private key file.");
-                break;
-            case AdminHttpsCertificateMode.SelfSigned:
-                break;
-            default:
-                ModelState.AddModelError($"{nameof(Input)}.{nameof(CertificateInputModel.Mode)}", "Choose a certificate option.");
-                break;
-        }
-    }
-
-    private void AddMissingFileError(IFormFile? file, string key, string message)
-    {
-        if (file is not { Length: > 0 })
-        {
-            ModelState.AddModelError(key, message);
+            var propertyName = error.Field switch
+            {
+                "pfxFile" => nameof(CertificateInputModel.PfxFile),
+                "certificateFile" => nameof(CertificateInputModel.CertificateFile),
+                "keyFile" => nameof(CertificateInputModel.KeyFile),
+                _ => nameof(CertificateInputModel.Mode)
+            };
+            ModelState.AddModelError($"{nameof(Input)}.{propertyName}", error.Message);
         }
     }
 

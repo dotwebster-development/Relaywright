@@ -6,10 +6,12 @@ namespace Relaywright.Web.Services.Alerts;
 public sealed class AlertWorker(
     IAlertService alertService,
     IOperationalEventService eventService,
-    ILogger<AlertWorker> logger) : BackgroundService
+    ILogger<AlertWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
     private static readonly TimeSpan StartupGracePeriod = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan EvaluationInterval = TimeSpan.FromMinutes(5);
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -17,7 +19,7 @@ public sealed class AlertWorker(
 
         try
         {
-            await Task.Delay(StartupGracePeriod, stoppingToken);
+            await Task.Delay(StartupGracePeriod, clock, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -48,7 +50,7 @@ public sealed class AlertWorker(
                 }, stoppingToken);
             }
 
-            await Task.Delay(EvaluationInterval, stoppingToken);
+            await Task.Delay(EvaluationInterval, clock, stoppingToken);
         }
 
         logger.LogInformation("Alert worker stopped.");

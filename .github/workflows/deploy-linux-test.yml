@@ -154,3 +154,36 @@ jobs:
           fi
 
           bash scripts/linux/Deploy-RelaywrightTest.sh "${args[@]}"
+
+      - name: Setup .NET for deployed browser validation
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build deployed browser validation suite
+        run: |
+          dotnet restore tests/Relaywright.Web.BrowserTests/Relaywright.Web.BrowserTests.csproj
+          dotnet build tests/Relaywright.Web.BrowserTests/Relaywright.Web.BrowserTests.csproj --no-restore
+
+      - name: Install Chromium for deployed browser validation
+        shell: bash
+        run: |
+          if ! command -v pwsh >/dev/null 2>&1; then
+            echo "PowerShell (pwsh) is required to install Playwright Chromium on the Linux deployment runner." >&2
+            exit 1
+          fi
+
+          pwsh tests/Relaywright.Web.BrowserTests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: Validate deployed admin UI in Chromium
+        shell: bash
+        env:
+          RELAYWRIGHT_BROWSER_USER_NAME: ${{ vars.RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_USERNAME }}
+          RELAYWRIGHT_BROWSER_PASSWORD: ${{ secrets.RELAYWRIGHT_LINUX_TEST_BOOTSTRAP_PASSWORD }}
+        run: |
+          health_url="${RELAYWRIGHT_LINUX_TEST_HEALTH_URL:-https://127.0.0.1:5443/health}"
+          export RELAYWRIGHT_BROWSER_BASE_URL="${health_url%/health}"
+          export RELAYWRIGHT_BROWSER_USER_NAME="${RELAYWRIGHT_BROWSER_USER_NAME:-admin}"
+          dotnet test tests/Relaywright.Web.BrowserTests/Relaywright.Web.BrowserTests.csproj \
+            --no-build \
+            -- Playwright.BrowserName=chromium

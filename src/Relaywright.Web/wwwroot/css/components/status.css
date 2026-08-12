@@ -1,0 +1,91 @@
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+}
+
+.pagination div {
+    display: flex;
+    gap: 8px;
+}
+
+.pagination a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text);
+    font-weight: 700;
+}
+
+.pagination a:hover {
+    background: var(--bg-muted);
+    text-decoration: none;
+}
+
+.badge,
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-muted);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.status-pending,
+.status-retryscheduled,
+.severity-information {
+    border-color: var(--accent-border);
+    background: var(--info-bg);
+    color: var(--info);
+}
+
+.status-inprogress,
+.severity-warning {
+    border-color: #f2d28c;
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.status-delivered,
+.status-enabled,
+.status-running,
+.severity-ok {
+    border-color: #b7e3c4;
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.status-failed,
+.status-expired,
+.status-disabled,
+.status-faulted,
+.severity-error {
+    border-color: #fac5c0;
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.status-starting,
+.status-restarting,
+.status-paused,
+.status-unknown {
+    border-color: #f2d28c;
+    background: var(--warning-bg);
+    color: var(--warning);
+}

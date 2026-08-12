@@ -87,15 +87,11 @@ public sealed class DatabaseProviderIntegrationTests
         using var appData = TempAppData.Create();
         var factory = new TestDbContextFactory(options);
         var events = new RecordingOperationalEventService();
-        var queue = new MessageQueueService(
+        var queue = TestMessageQueueServiceFactory.Create(
             factory,
-            new RetryDelayCalculator(),
-            new MessageSpoolService(appData.Paths, NullLogger<MessageSpoolService>.Instance),
-            new ImmediateBackupCoordinator(),
             events,
             new RecordingQueueSignal(),
-            databaseConfiguration,
-            NullLogger<MessageQueueService>.Instance);
+            databaseConfiguration);
 
         await ExerciseQueueAsync(queue, factory, appData.Paths, databaseConfiguration);
         await ExercisePagingAsync(factory, databaseConfiguration);
@@ -183,17 +179,15 @@ public sealed class DatabaseProviderIntegrationTests
         }
 
         var queueModel = AttachPageContext(new QueueIndexModel(
-            factory,
+            new QueueQueryService(factory, databaseConfiguration),
             new NoopQueueService(),
-            databaseConfiguration,
             NullLogger<QueueIndexModel>.Instance));
         await queueModel.OnGetAsync("all", CancellationToken.None);
         Assert.True(queueModel.TotalCount >= 2);
         Assert.NotEmpty(queueModel.Messages);
 
         var logsModel = AttachPageContext(new LogsIndexModel(
-            factory,
-            databaseConfiguration,
+            new OperationalLogQueryService(factory, databaseConfiguration),
             NullLogger<LogsIndexModel>.Instance));
         await logsModel.OnGetAsync(CancellationToken.None);
         Assert.Contains(logsModel.Events, x => x.Message == "newer event");
@@ -253,7 +247,7 @@ public sealed class DatabaseProviderIntegrationTests
         return model;
     }
 
-    private sealed class NoopQueueService : IMessageQueueService
+    private sealed class NoopQueueService : IMessageQueueService, IQueueOperatorService
     {
         public Task EnqueueAsync(NewQueuedMessageRequest request, CancellationToken cancellationToken)
         {

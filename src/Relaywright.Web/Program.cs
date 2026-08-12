@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -25,19 +24,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService();
 builder.Host.UseSystemd();
 
-builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
-builder.Services.Configure<BootstrapAdminOptions>(builder.Configuration.GetSection(BootstrapAdminOptions.SectionName));
-builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.SectionName));
-builder.Services.Configure<UpdateCheckOptions>(builder.Configuration.GetSection(UpdateCheckOptions.SectionName));
-
-var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
+var startupOptions = builder.Services.AddRelaywrightOptions(builder.Configuration);
+var storageOptions = startupOptions.Storage;
 var appPaths = new AppPaths(builder.Environment.ContentRootPath, storageOptions);
 appPaths.EnsureCreated();
-var databaseOptions = builder.Configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
+var databaseOptions = startupOptions.Database;
 var databaseConfiguration = DatabaseConfiguration.Create(databaseOptions, appPaths);
 if (databaseConfiguration.IsSqlite)
 {
-    BackupRestoreService.ApplyPendingRestore(appPaths);
+    BackupRestoreFileSystem.ApplyPendingRestore(appPaths);
 }
 
 var startupDataProtectionProvider = DataProtectionProvider.Create(
@@ -111,54 +106,9 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Account/Setup");
 });
 
-builder.Services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
-builder.Services.AddSingleton<IAdminHttpsCertificateService, AdminHttpsCertificateService>();
-builder.Services.AddSingleton<IAdminWebListenerConfigurationService, AdminWebListenerConfigurationService>();
-builder.Services.AddSingleton<IOperationalEventService, OperationalEventService>();
-builder.Services.AddSingleton<IAdminSecurityActivityService, AdminSecurityActivityService>();
-builder.Services.AddSingleton<IRuntimeStatusService, RuntimeStatusService>();
-builder.Services.AddSingleton<IApplicationRestartService, ApplicationRestartService>();
-builder.Services.AddSingleton<IOutboundRouteProbe, OutboundRouteProbe>();
-builder.Services.AddSingleton<IDashboardMetricsService, DashboardMetricsService>();
-builder.Services.AddSingleton<IDashboardReadinessService, DashboardReadinessService>();
-builder.Services.AddSingleton<IRuntimeConfigurationNotifier, RuntimeConfigurationNotifier>();
-builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
-builder.Services.AddSingleton<IBackupCoordinator, BackupCoordinator>();
-builder.Services.AddSingleton<IBackupService, BackupService>();
-builder.Services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
-builder.Services.AddSingleton<IAlertEmailNotifier, AlertEmailNotifier>();
-builder.Services.AddSingleton<IAlertService, AlertService>();
-builder.Services.AddSingleton<IRelayConfigurationService, RelayConfigurationService>();
-builder.Services.AddSingleton<ITrustedNetworkService, TrustedNetworkService>();
-builder.Services.AddSingleton<ITrustedDevicePolicyService, TrustedDevicePolicyService>();
-builder.Services.AddSingleton<ITrustedDeviceRateLimiter, TrustedDeviceRateLimiter>();
-builder.Services.AddSingleton<IMessageSpoolService, MessageSpoolService>();
-builder.Services.AddSingleton<IMessageMetadataService, MessageMetadataService>();
-builder.Services.AddSingleton<RetryDelayCalculator>();
-builder.Services.AddSingleton<IMessageQueueService, MessageQueueService>();
-builder.Services.AddSingleton<DeliveryFailureClassifier>();
-builder.Services.AddSingleton<MicrosoftOAuthTokenProvider>();
-builder.Services.AddSingleton<IUpstreamAuthenticationService, UpstreamAuthenticationService>();
-builder.Services.AddSingleton<IUpstreamDeliveryService, UpstreamDeliveryService>();
-builder.Services.AddSingleton<IDiagnosticRunRecorder, DiagnosticRunRecorder>();
-builder.Services.AddSingleton<IUpstreamConnectivityTester, UpstreamConnectivityTester>();
-builder.Services.AddSingleton<IUpstreamTestEmailSender, UpstreamTestEmailSender>();
-builder.Services.AddSingleton<ISubmissionFlowChecker, SubmissionFlowChecker>();
-builder.Services.AddSingleton<IConfigurationSnapshotService, ConfigurationSnapshotService>();
-builder.Services.AddSingleton<IUpdateCheckService, UpdateCheckService>();
-builder.Services.AddSingleton<SmtpOptionsFactory>();
-builder.Services.AddSingleton<RelayMessageStore>();
-builder.Services.AddSingleton<TrustedNetworkMailboxFilter>();
-builder.Services.AddSingleton<DataSeeder>();
-builder.Services.AddHttpClient();
-builder.Services.AddHttpClient(UpdateCheckService.HttpClientName);
-
-builder.Services.AddHostedService<SmtpRelayHostedService>();
-builder.Services.AddHostedService<QueueDeliveryWorker>();
-builder.Services.AddHostedService<MaintenanceWorker>();
-builder.Services.AddHostedService<AlertWorker>();
-builder.Services.AddHostedService<BackupWorker>();
-builder.Services.AddHostedService<UpdateCheckWorker>();
+builder.Services
+    .AddRelaywrightApplicationServices()
+    .AddRelaywrightHostedServices();
 
 var app = builder.Build();
 
@@ -179,59 +129,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.Use(async (context, next) =>
-{
-    var headers = context.Response.Headers;
-    headers.TryAdd("X-Content-Type-Options", "nosniff");
-    headers.TryAdd("X-Frame-Options", "DENY");
-    headers.TryAdd("Referrer-Policy", "no-referrer");
-    headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-
-    await next();
-});
-
-app.Use(async (context, next) =>
-{
-    var stopwatch = Stopwatch.StartNew();
-    var path = context.Request.Path.HasValue ? context.Request.Path.Value : "/";
-    var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Relaywright.Web.Requests");
-
-    logger.LogDebug(
-        "HTTP request started. Method={Method}; Path={Path}; RemoteIp={RemoteIp}",
-        context.Request.Method,
-        path,
-        context.Connection.RemoteIpAddress?.ToString());
-
-    try
-    {
-        await next();
-
-        var level = context.Response.StatusCode >= 500
-            ? LogLevel.Error
-            : context.Response.StatusCode >= 400
-                ? LogLevel.Warning
-                : LogLevel.Information;
-
-        logger.Log(
-            level,
-            "HTTP request completed. Method={Method}; Path={Path}; StatusCode={StatusCode}; ElapsedMs={ElapsedMs}; User={UserName}",
-            context.Request.Method,
-            path,
-            context.Response.StatusCode,
-            stopwatch.ElapsedMilliseconds,
-            context.User.Identity?.IsAuthenticated == true ? context.User.Identity.Name : "anonymous");
-    }
-    catch (Exception exception)
-    {
-        logger.LogError(
-            exception,
-            "HTTP request failed. Method={Method}; Path={Path}; ElapsedMs={ElapsedMs}",
-            context.Request.Method,
-            path,
-            stopwatch.ElapsedMilliseconds);
-        throw;
-    }
-});
+app.UseRelaywrightHttpPipeline();
 
 using (var scope = app.Services.CreateScope())
 {
@@ -250,79 +148,19 @@ app.MapRazorPages();
 app.MapGet("/health", () => Results.Json(new { status = "ok" })).AllowAnonymous();
 
 app.MapGet("/health/details", async (
-    IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    AppPaths paths,
-    IRelayConfigurationService relayConfigurationService,
-    ILoggerFactory loggerFactory,
+    DetailedHealthService healthService,
     CancellationToken cancellationToken) =>
 {
-    var logger = loggerFactory.CreateLogger("Relaywright.Web.Health");
-    var checks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    var healthy = true;
-
-    try
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        healthy &= await dbContext.Database.CanConnectAsync(cancellationToken);
-        checks["database"] = healthy ? "ok" : "unavailable";
-    }
-    catch (Exception exception)
-    {
-        logger.LogWarning(exception, "Health check database probe failed.");
-        healthy = false;
-        checks["database"] = exception.GetType().Name;
-    }
-
-    try
-    {
-        Directory.CreateDirectory(paths.SpoolRootDirectory);
-        var healthDirectory = Path.Combine(paths.SpoolRootDirectory, ".health");
-        Directory.CreateDirectory(healthDirectory);
-        var probePath = Path.Combine(healthDirectory, $"{Guid.NewGuid():N}.tmp");
-        await File.WriteAllTextAsync(probePath, "ok", cancellationToken);
-        File.Delete(probePath);
-        checks["spool"] = "ok";
-    }
-    catch (Exception exception)
-    {
-        logger.LogWarning(exception, "Health check spool probe failed. SpoolRoot={SpoolRoot}", paths.SpoolRootDirectory);
-        healthy = false;
-        checks["spool"] = exception.GetType().Name;
-    }
-
-    try
-    {
-        var configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
-        checks["configuration"] = configuration.ListenerPort is >= ValidationLimits.MinimumPort and <= ValidationLimits.MaximumPort
-            ? "ok"
-            : "invalid listener port";
-        healthy &= checks["configuration"] == "ok";
-    }
-    catch (Exception exception)
-    {
-        logger.LogWarning(exception, "Health check configuration probe failed.");
-        healthy = false;
-        checks["configuration"] = exception.GetType().Name;
-    }
-
-    if (!healthy)
-    {
-        logger.LogWarning(
-            "Health check degraded. Database={Database}; Spool={Spool}; Configuration={Configuration}",
-            checks.GetValueOrDefault("database"),
-            checks.GetValueOrDefault("spool"),
-            checks.GetValueOrDefault("configuration"));
-    }
-
+    var snapshot = await healthService.CheckAsync(cancellationToken);
     return Results.Json(
         new
         {
-            status = healthy ? "ok" : "degraded",
+            status = snapshot.Healthy ? "ok" : "degraded",
             version = ApplicationVersion.DisplayVersion,
             informationalVersion = ApplicationVersion.InformationalVersion,
-            checks
+            checks = snapshot.Checks
         },
-        statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+        statusCode: snapshot.Healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 }).RequireAuthorization();
 
 app.Run();

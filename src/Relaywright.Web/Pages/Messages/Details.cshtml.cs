@@ -9,7 +9,7 @@ namespace Relaywright.Web.Pages.Messages;
 
 public sealed class DetailsModel(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    IMessageQueueService messageQueueService,
+    IQueueOperatorService messageQueueService,
     IMessageMetadataService messageMetadataService,
     ILogger<DetailsModel> logger) : PageModel
 {

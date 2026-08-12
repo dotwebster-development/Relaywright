@@ -52,8 +52,12 @@
                             <td>@snapshot.CreatedBy</td>
                             <td><span class="status-badge @(snapshot.IsRollback ? "severity-warning" : "status-enabled")">@(snapshot.IsRollback ? "Rollback" : "Snapshot")</span></td>
                             <td>
-                                <form method="post" asp-page-handler="Rollback" asp-route-id="@snapshot.Id" class="inline-form" onsubmit="return confirm('Roll back this configuration area to the selected snapshot? A safety snapshot of the current state will be created first.');">
-                                    <button type="submit" class="secondary-button">Rollback</button>
+                                <form method="post" asp-page-handler="Rollback" asp-route-id="@snapshot.Id" class="inline-form">
+                                    <button type="submit"
+                                            class="secondary-button"
+                                            rw-confirm="Roll back this configuration area to the selected snapshot? A safety snapshot of the current state will be created first."
+                                            rw-confirm-title="Roll back configuration"
+                                            rw-confirm-action="Rollback">Rollback</button>
                                 </form>
                             </td>
                         </tr>

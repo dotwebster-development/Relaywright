@@ -81,12 +81,12 @@
                 </label>
                 <div class="toggle-field">
                     <label class="switch-control">
-                        <input asp-for="ListenerInput.EnableHttp" type="checkbox" data-http-toggle />
+                        <input asp-for="ListenerInput.EnableHttp" type="checkbox" data-toggle-target="#http-port-fields" />
                         <span class="switch-control-track" aria-hidden="true"></span>
                         <span>Enable HTTP</span>
                     </label>
                 </div>
-                <label data-http-port>
+                <label id="http-port-fields">
                     <span>HTTP Port</span>
                     <input asp-for="ListenerInput.HttpPort" type="number" min="1" max="65535" />
                     <span asp-validation-for="ListenerInput.HttpPort"></span>
@@ -101,19 +101,5 @@
 </section>
 
 @section Scripts {
-    <script>
-        (() => {
-            const httpToggle = document.querySelector('[data-http-toggle]');
-            const httpPort = document.querySelector('[data-http-port]');
-
-            const syncHttp = () => {
-                if (httpPort) {
-                    httpPort.hidden = !httpToggle?.checked;
-                }
-            };
-
-            httpToggle?.addEventListener('change', syncHttp);
-            syncHttp();
-        })();
-    </script>
+    <script src="~/js/conditional-fields.js" asp-append-version="true" defer></script>
 }
