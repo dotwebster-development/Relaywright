@@ -233,6 +233,7 @@ public sealed class DatabaseProviderIntegrationTests
             .AddIdentity<ApplicationUser, IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
+        services.AddSingleton<DatabaseSchemaInitializer>();
         services.AddSingleton<DataSeeder>();
         return services.BuildServiceProvider();
     }
