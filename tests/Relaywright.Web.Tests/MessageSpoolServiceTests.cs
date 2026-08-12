@@ -47,6 +47,24 @@ public sealed class MessageSpoolServiceTests
         Assert.Throws<InvalidOperationException>(() => service.GetAbsolutePath(relativePath));
     }
 
+    [Fact]
+    public async Task CleanupFailureDoesNotMaskOriginalWriteFailure()
+    {
+        using var appData = TempAppData.Create();
+        var service = new MessageSpoolService(
+            appData.Paths,
+            NullLogger<MessageSpoolService>.Instance,
+            new WriteAndCleanupFailingFileSystem());
+
+        var exception = await Assert.ThrowsAsync<IOException>(() => service.WriteAsync(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            new ReadOnlySequence<byte>(TestData.MimeBytes()),
+            CancellationToken.None));
+
+        Assert.Equal("Simulated spool write failure.", exception.Message);
+    }
+
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream)
     {
         await using (stream)
@@ -54,6 +72,46 @@ public sealed class MessageSpoolServiceTests
             using var memory = new MemoryStream();
             await stream.CopyToAsync(memory);
             return memory.ToArray();
+        }
+    }
+
+    private sealed class WriteAndCleanupFailingFileSystem : ISpoolFileSystem
+    {
+        public void CreateDirectory(string path)
+        {
+        }
+
+        public Stream CreateWriteThrough(string path) => new FailingWriteStream();
+
+        public void FlushToDisk(Stream stream)
+        {
+        }
+
+        public void MoveFile(string sourcePath, string destinationPath)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Stream OpenRead(string path)
+        {
+            throw new NotSupportedException();
+        }
+
+        public bool FileExists(string path) => true;
+
+        public void DeleteFile(string path)
+        {
+            throw new UnauthorizedAccessException("Simulated cleanup failure.");
+        }
+    }
+
+    private sealed class FailingWriteStream : MemoryStream
+    {
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromException(new IOException("Simulated spool write failure."));
         }
     }
 }

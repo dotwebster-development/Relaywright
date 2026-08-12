@@ -1,15 +1,16 @@
-using Microsoft.EntityFrameworkCore;
-using Relaywright.Web.Data;
 using Relaywright.Web.Services.Events;
 
 namespace Relaywright.Web.Services.Backups;
 
 public sealed class BackupWorker(
-    IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IBackupService backupService,
+    BackupScheduleRepository scheduleRepository,
     IOperationalEventService eventService,
-    ILogger<BackupWorker> logger) : BackgroundService
+    ILogger<BackupWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Backup worker started.");
@@ -19,16 +20,13 @@ public sealed class BackupWorker(
             try
             {
                 var schedule = await backupService.GetScheduleAsync(stoppingToken);
-                if (schedule.IsEnabled && IsDue(schedule.LastRunUtc, schedule.IntervalHours))
+                if (schedule.IsEnabled && IsDue(schedule.LastRunUtc, schedule.IntervalHours, clock.GetUtcNow()))
                 {
                     var run = await backupService.CreateBackupAsync("system", scheduled: true, stoppingToken);
                     if (run.Status == Data.Entities.BackupRunStatus.Succeeded)
                     {
-                        await using var dbContext = await dbContextFactory.CreateDbContextAsync(stoppingToken);
-                        var persisted = await dbContext.BackupScheduleStates.SingleAsync(x => x.Id == 1, stoppingToken);
-                        persisted.LastRunUtc = DateTimeOffset.UtcNow;
-                        persisted.UpdatedUtc = DateTimeOffset.UtcNow;
-                        await dbContext.SaveChangesAsync(stoppingToken);
+                        var completedUtc = clock.GetUtcNow();
+                        await scheduleRepository.MarkRunCompletedAsync(completedUtc, stoppingToken);
                         await backupService.PruneByRetentionAsync(schedule.RetentionCount, stoppingToken);
                     }
                 }
@@ -49,14 +47,14 @@ public sealed class BackupWorker(
                 }, stoppingToken);
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+            await Task.Delay(TimeSpan.FromMinutes(15), clock, stoppingToken);
         }
 
         logger.LogInformation("Backup worker stopped.");
     }
 
-    private static bool IsDue(DateTimeOffset? lastRunUtc, int intervalHours)
+    private static bool IsDue(DateTimeOffset? lastRunUtc, int intervalHours, DateTimeOffset now)
     {
-        return lastRunUtc is null || lastRunUtc.Value.AddHours(Math.Max(1, intervalHours)) <= DateTimeOffset.UtcNow;
+        return lastRunUtc is null || lastRunUtc.Value.AddHours(Math.Max(1, intervalHours)) <= now;
     }
 }

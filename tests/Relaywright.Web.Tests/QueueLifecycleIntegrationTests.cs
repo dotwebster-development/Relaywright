@@ -20,15 +20,11 @@ public sealed class QueueLifecycleIntegrationTests
         var events = new RecordingOperationalEventService();
         var signal = new RecordingQueueSignal();
         var spool = new MessageSpoolService(appData.Paths, NullLogger<MessageSpoolService>.Instance);
-        var service = new MessageQueueService(
+        var service = TestMessageQueueServiceFactory.Create(
             database.DbContextFactory,
-            new RetryDelayCalculator(),
-            spool,
-            new ImmediateBackupCoordinator(),
             events,
             signal,
-            TestDatabaseConfiguration.Sqlite,
-            NullLogger<MessageQueueService>.Instance);
+            TestDatabaseConfiguration.Sqlite);
         var bytes = TestData.MimeBytes();
         var messageId = Guid.NewGuid();
         var acceptedUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
@@ -74,15 +70,11 @@ public sealed class QueueLifecycleIntegrationTests
     {
         await using var database = await SqliteTestStore.CreateAsync();
         using var appData = TempAppData.Create();
-        var service = new MessageQueueService(
+        var service = TestMessageQueueServiceFactory.Create(
             database.DbContextFactory,
-            new RetryDelayCalculator(),
-            new MessageSpoolService(appData.Paths, NullLogger<MessageSpoolService>.Instance),
-            new ImmediateBackupCoordinator(),
             new RecordingOperationalEventService(),
             new RecordingQueueSignal(),
-            TestDatabaseConfiguration.Sqlite,
-            NullLogger<MessageQueueService>.Instance);
+            TestDatabaseConfiguration.Sqlite);
         var messageId = Guid.NewGuid();
         var acceptedUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
 

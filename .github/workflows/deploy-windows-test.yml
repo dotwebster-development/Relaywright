@@ -145,3 +145,29 @@ jobs:
           else {
             .\scripts\windows\Deploy-RelaywrightTest.ps1 @arguments -GenerateSelfSignedCertificate
           }
+
+      - name: Setup .NET for deployed browser validation
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate deployed admin UI in Chromium
+        shell: powershell
+        env:
+          RELAYWRIGHT_BROWSER_USER_NAME: ${{ vars.RELAYWRIGHT_TEST_BOOTSTRAP_USERNAME }}
+          RELAYWRIGHT_BROWSER_PASSWORD: ${{ secrets.RELAYWRIGHT_TEST_BOOTSTRAP_PASSWORD }}
+        run: |
+          $healthUrl = if ([string]::IsNullOrWhiteSpace($env:RELAYWRIGHT_TEST_HEALTH_URL)) {
+            'https://127.0.0.1:5443/health'
+          }
+          else {
+            $env:RELAYWRIGHT_TEST_HEALTH_URL
+          }
+          $healthUri = [Uri]$healthUrl
+          $env:RELAYWRIGHT_BROWSER_BASE_URL = $healthUri.GetLeftPart([UriPartial]::Authority)
+          if ([string]::IsNullOrWhiteSpace($env:RELAYWRIGHT_BROWSER_USER_NAME)) {
+            $env:RELAYWRIGHT_BROWSER_USER_NAME = 'admin'
+          }
+
+          dotnet restore tests\Relaywright.Web.BrowserTests\Relaywright.Web.BrowserTests.csproj
+          .\scripts\Test-Browser.ps1 -BrowserChannel chromium -InstallChromium

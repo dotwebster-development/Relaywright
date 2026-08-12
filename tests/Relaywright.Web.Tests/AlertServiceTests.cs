@@ -34,15 +34,7 @@ public sealed class AlertServiceTests
         }
 
         var notifier = new RecordingAlertEmailNotifier();
-        var service = new AlertService(
-            database.DbContextFactory,
-            new StaticRuntimeStatusService(),
-            new StaticRelayConfigurationService(TestData.Snapshot()),
-            new NullAdminHttpsCertificateService(),
-            notifier,
-            new RecordingOperationalEventService(),
-            appData.Paths,
-            NullLogger<AlertService>.Instance);
+        var service = CreateService(database, appData, notifier);
 
         await service.EvaluateAsync(CancellationToken.None);
 
@@ -78,15 +70,7 @@ public sealed class AlertServiceTests
             await dbContext.SaveChangesAsync();
         }
 
-        var service = new AlertService(
-            database.DbContextFactory,
-            new StaticRuntimeStatusService(),
-            new StaticRelayConfigurationService(TestData.Snapshot()),
-            new NullAdminHttpsCertificateService(),
-            new RecordingAlertEmailNotifier(),
-            new RecordingOperationalEventService(),
-            appData.Paths,
-            NullLogger<AlertService>.Instance);
+        var service = CreateService(database, appData, new RecordingAlertEmailNotifier());
 
         await service.EvaluateAsync(CancellationToken.None);
         var recentResults = await service.GetRecentResultsAsync(1, CancellationToken.None);
@@ -120,15 +104,7 @@ public sealed class AlertServiceTests
             ruleId = rule.Id;
         }
 
-        var service = new AlertService(
-            database.DbContextFactory,
-            new StaticRuntimeStatusService(),
-            new StaticRelayConfigurationService(TestData.Snapshot()),
-            new NullAdminHttpsCertificateService(),
-            new RecordingAlertEmailNotifier(),
-            new RecordingOperationalEventService(),
-            appData.Paths,
-            NullLogger<AlertService>.Instance);
+        var service = CreateService(database, appData, new RecordingAlertEmailNotifier());
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveRuleAsync(
             new AlertRule
@@ -141,6 +117,27 @@ public sealed class AlertServiceTests
             CancellationToken.None));
 
         Assert.Contains("threshold", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static AlertService CreateService(
+        SqliteTestStore database,
+        TempAppData appData,
+        IAlertEmailNotifier emailNotifier)
+    {
+        var events = new RecordingOperationalEventService();
+        var clock = TimeProvider.System;
+        return new AlertService(
+            database.DbContextFactory,
+            new StaticRuntimeStatusService(),
+            new StaticRelayConfigurationService(TestData.Snapshot()),
+            new NullAdminHttpsCertificateService(),
+            new AlertRuleRepository(database.DbContextFactory, events, clock),
+            new AlertEvaluator(appData.Paths),
+            new AlertStateCoordinator(
+                emailNotifier,
+                events,
+                NullLogger<AlertStateCoordinator>.Instance),
+            clock);
     }
 
     private sealed class RecordingAlertEmailNotifier : IAlertEmailNotifier

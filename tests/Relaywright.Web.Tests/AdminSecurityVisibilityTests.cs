@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -456,6 +457,7 @@ public sealed class AdminSecurityVisibilityTests
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddOptions();
+            services.AddDataProtection().UseEphemeralDataProtectionProvider();
             services.AddHttpContextAccessor();
             services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite(connection));
             services
@@ -532,7 +534,7 @@ public sealed class AdminSecurityVisibilityTests
                 new Claim(ClaimTypes.Name, user.UserName!)
             ], IdentityConstants.ApplicationScheme));
 
-            var model = new ChangePasswordModel(
+            var accountService = new AdminAccountService(
                 _serviceProvider.GetRequiredService<UserManager<ApplicationUser>>(),
                 _serviceProvider.GetRequiredService<SignInManager<ApplicationUser>>(),
                 Events,
@@ -540,7 +542,8 @@ public sealed class AdminSecurityVisibilityTests
                 _serviceProvider.GetRequiredService<IOptions<IdentityOptions>>(),
                 _serviceProvider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>(),
                 _serviceProvider.GetRequiredService<IOptions<SecurityStampValidatorOptions>>(),
-                NullLogger<ChangePasswordModel>.Instance);
+                NullLogger<AdminAccountService>.Instance);
+            var model = new ChangePasswordModel(accountService);
 
             AttachPageContext(model, httpContext);
             return model;

@@ -3,12 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Identity;
-using Relaywright.Web.Options;
-using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Security;
 using Relaywright.Web.Validation;
 
@@ -16,18 +11,11 @@ namespace Relaywright.Web.Pages.Account;
 
 [AllowAnonymous]
 public sealed class SetupModel(
-    UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
-    IOperationalEventService eventService,
-    IAdminHttpsCertificateService adminHttpsCertificateService,
-    IAdminWebListenerConfigurationService adminWebListenerConfigurationService,
-    IOptions<IdentityOptions> identityOptions,
-    IOptions<BootstrapAdminOptions> bootstrapAdminOptions,
-    IHostEnvironment environment,
+    FirstRunSetupService setupService,
+    CertificateFormValidator certificateFormValidator,
     ILogger<SetupModel> logger) : PageModel
 {
-    private static readonly SemaphoreSlim InitialAdminGate = new(1, 1);
-
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
@@ -109,25 +97,35 @@ public sealed class SetupModel(
             return Page();
         }
 
-        await InitialAdminGate.WaitAsync(cancellationToken);
-        try
+        var result = await setupService.CreateInitialAdminAsync(
+            Input.UserName,
+            Input.Password,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            cancellationToken);
+        if (result.AdminAlreadyExists)
         {
-            if (await HasAnyUserAsync(cancellationToken))
+            ModelState.AddModelError(string.Empty, "Initial admin has already been created.");
+            await LoadPageStateAsync(adminExists: true, cancellationToken);
+            return Page();
+        }
+
+        if (result.User is null)
+        {
+            foreach (var error in result.Errors)
             {
-                logger.LogWarning(
-                    "First-run setup rejected because an admin already exists. RemoteIp={RemoteIp}",
-                    HttpContext.Connection.RemoteIpAddress?.ToString());
-                ModelState.AddModelError(string.Empty, "Initial admin has already been created.");
-                await LoadPageStateAsync(adminExists: true, cancellationToken);
-                return Page();
+                ModelState.AddModelError(string.Empty, error.Description);
             }
 
-            return await CreateInitialAdminAsync(cancellationToken);
+            await LoadPageStateAsync(adminExists: false, cancellationToken);
+            return Page();
         }
-        finally
-        {
-            InitialAdminGate.Release();
-        }
+
+        await signInManager.SignInAsync(result.User, isPersistent: false);
+        CreatedUserName = result.User.UserName;
+        CertificateInput.SelfSignedDnsNames = GetDefaultCertificateNames();
+        CurrentStep = SetupStep.HttpsCertificate;
+        await LoadPageStateAsync(adminExists: true, cancellationToken);
+        return Page();
     }
 
     public async Task<IActionResult> OnPostConfigureCertificateAsync(CancellationToken cancellationToken)
@@ -150,23 +148,17 @@ public sealed class SetupModel(
 
         try
         {
-            ConfiguredCertificate = CertificateInput.Mode switch
-            {
-                AdminHttpsCertificateMode.Pfx => await adminHttpsCertificateService.SavePfxAsync(
-                    RequireFile(CertificateInput.PfxFile, "Select a PFX certificate file."),
+            ConfiguredCertificate = await setupService.ConfigureCertificateAsync(
+                new FirstRunCertificateRequest(
+                    CertificateInput.Mode,
+                    CertificateInput.PfxFile,
                     CertificateInput.PfxPassword,
-                    cancellationToken),
-                AdminHttpsCertificateMode.Pem => await adminHttpsCertificateService.SavePemAsync(
-                    RequireFile(CertificateInput.CertificateFile, "Select a certificate file."),
-                    RequireFile(CertificateInput.KeyFile, "Select a private key file."),
+                    CertificateInput.CertificateFile,
+                    CertificateInput.KeyFile,
                     CertificateInput.KeyPassword,
-                    cancellationToken),
-                AdminHttpsCertificateMode.SelfSigned => await adminHttpsCertificateService.GenerateSelfSignedAsync(
                     CertificateInput.SelfSignedDnsNames,
-                    CertificateInput.SelfSignedValidYears,
-                    cancellationToken),
-                _ => throw new InvalidOperationException("Choose a certificate option.")
-            };
+                    CertificateInput.SelfSignedValidYears),
+                cancellationToken);
         }
         catch (Exception exception)
         {
@@ -193,78 +185,23 @@ public sealed class SetupModel(
             return guardResult;
         }
 
-        ConfiguredCertificate = await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
+        ConfiguredCertificate = await setupService.GetCertificateAsync(cancellationToken);
         CurrentStep = SetupStep.Complete;
-        await LoadPageStateAsync(adminExists: true, cancellationToken);
-        return Page();
-    }
-
-    private async Task<IActionResult> CreateInitialAdminAsync(CancellationToken cancellationToken)
-    {
-        var userName = Input.UserName.Trim();
-        var admin = new ApplicationUser
-        {
-            UserName = userName,
-            DisplayName = userName,
-            EmailConfirmed = true
-        };
-
-        var result = await userManager.CreateAsync(admin, Input.Password);
-        if (!result.Succeeded)
-        {
-            logger.LogWarning(
-                "First-run admin creation failed. UserName={UserName}; RemoteIp={RemoteIp}; ErrorCodes={ErrorCodes}",
-                userName,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
-                string.Join(",", result.Errors.Select(x => x.Code)));
-
-            foreach (var error in result.Errors)
-            {
-                ModelState.AddModelError(string.Empty, error.Description);
-            }
-
-            await LoadPageStateAsync(adminExists: false, cancellationToken);
-            return Page();
-        }
-
-        logger.LogWarning(
-            "First-run admin user created. UserId={UserId}; UserName={UserName}; RemoteIp={RemoteIp}",
-            admin.Id,
-            admin.UserName,
-            HttpContext.Connection.RemoteIpAddress?.ToString());
-
-        await eventService.WriteAsync(new OperationalEventRequest
-        {
-            Category = OperationalEventCategory.Security,
-            Message = "Initial admin user created through first-run setup.",
-            RemoteIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
-        }, cancellationToken);
-
-        await signInManager.SignInAsync(admin, isPersistent: false);
-        CreatedUserName = admin.UserName;
-        CertificateInput.SelfSignedDnsNames = GetDefaultCertificateNames();
-        CurrentStep = SetupStep.HttpsCertificate;
         await LoadPageStateAsync(adminExists: true, cancellationToken);
         return Page();
     }
 
     private async Task LoadPageStateAsync(bool adminExists, CancellationToken cancellationToken)
     {
-        PasswordPolicy = PasswordPolicySummary.FromOptions(identityOptions.Value);
-        var certificate = ConfiguredCertificate ?? await adminHttpsCertificateService.GetConfigurationAsync(cancellationToken);
-        var listener = await adminWebListenerConfigurationService.GetConfigurationAsync(cancellationToken);
-        HardeningChecklist = SetupHardeningChecklist.Create(
-            adminExists,
-            PasswordPolicy,
-            certificate,
-            listener,
-            bootstrapAdminOptions.Value,
-            environment);
+        var state = await setupService.GetStateAsync(adminExists, ConfiguredCertificate, cancellationToken);
+        PasswordPolicy = state.PasswordPolicy;
+        ConfiguredCertificate = state.Certificate;
+        HardeningChecklist = state.HardeningChecklist;
     }
 
     private async Task<bool> HasAnyUserAsync(CancellationToken cancellationToken)
     {
-        return await userManager.Users.AnyAsync(cancellationToken);
+        return await setupService.HasAnyUserAsync(cancellationToken);
     }
 
     private async Task<IActionResult?> EnsureAuthenticatedSetupUserAsync(CancellationToken cancellationToken)
@@ -281,46 +218,23 @@ public sealed class SetupModel(
             : RedirectToPage("/Account/Login");
     }
 
-    private static IFormFile RequireFile(IFormFile? file, string message)
-    {
-        return file is { Length: > 0 }
-            ? file
-            : throw new InvalidOperationException(message);
-    }
-
     private void ValidateCertificateInput()
     {
-        switch (CertificateInput.Mode)
+        var errors = certificateFormValidator.Validate(
+            CertificateInput.Mode,
+            CertificateInput.PfxFile,
+            CertificateInput.CertificateFile,
+            CertificateInput.KeyFile);
+        foreach (var error in errors)
         {
-            case AdminHttpsCertificateMode.Pfx:
-                AddMissingFileError(
-                    CertificateInput.PfxFile,
-                    $"{nameof(CertificateInput)}.{nameof(CertificateInputModel.PfxFile)}",
-                    "Select a PFX certificate file.");
-                break;
-            case AdminHttpsCertificateMode.Pem:
-                AddMissingFileError(
-                    CertificateInput.CertificateFile,
-                    $"{nameof(CertificateInput)}.{nameof(CertificateInputModel.CertificateFile)}",
-                    "Select a certificate file.");
-                AddMissingFileError(
-                    CertificateInput.KeyFile,
-                    $"{nameof(CertificateInput)}.{nameof(CertificateInputModel.KeyFile)}",
-                    "Select a private key file.");
-                break;
-            case AdminHttpsCertificateMode.SelfSigned:
-                break;
-            default:
-                ModelState.AddModelError($"{nameof(CertificateInput)}.{nameof(CertificateInputModel.Mode)}", "Choose a certificate option.");
-                break;
-        }
-    }
-
-    private void AddMissingFileError(IFormFile? file, string key, string message)
-    {
-        if (file is not { Length: > 0 })
-        {
-            ModelState.AddModelError(key, message);
+            var propertyName = error.Field switch
+            {
+                "pfxFile" => nameof(CertificateInputModel.PfxFile),
+                "certificateFile" => nameof(CertificateInputModel.CertificateFile),
+                "keyFile" => nameof(CertificateInputModel.KeyFile),
+                _ => nameof(CertificateInputModel.Mode)
+            };
+            ModelState.AddModelError($"{nameof(CertificateInput)}.{propertyName}", error.Message);
         }
     }
 

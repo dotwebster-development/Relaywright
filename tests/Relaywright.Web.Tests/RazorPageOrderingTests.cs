@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
@@ -259,17 +260,15 @@ public sealed class RazorPageOrderingTests
         public QueueIndexModel CreateQueueModel()
         {
             return AttachPageContext(new QueueIndexModel(
-                _dbContextFactory,
+                new QueueQueryService(_dbContextFactory, TestDatabaseConfiguration.Sqlite),
                 new TestQueueService(),
-                TestDatabaseConfiguration.Sqlite,
                 NullLogger<QueueIndexModel>.Instance));
         }
 
         public LogsIndexModel CreateLogsModel()
         {
             return AttachPageContext(new LogsIndexModel(
-                _dbContextFactory,
-                TestDatabaseConfiguration.Sqlite,
+                new OperationalLogQueryService(_dbContextFactory, TestDatabaseConfiguration.Sqlite),
                 NullLogger<LogsIndexModel>.Instance));
         }
 
@@ -282,16 +281,22 @@ public sealed class RazorPageOrderingTests
             {
                 Snapshot = readiness ?? DashboardReadinessSnapshot.Empty
             };
-
-            return AttachPageContext(new DashboardIndexModel(
+            var runtimeStatusService = new StaticRuntimeStatusService();
+            var effectiveUpdateService = updateCheckService ?? new TestUpdateCheckService();
+            var dashboardService = new DashboardService(
                 _dbContextFactory,
                 new TestRelayConfigurationService(),
-                new StaticRuntimeStatusService(),
+                runtimeStatusService,
                 new TestDashboardMetricsService(),
                 readinessService,
                 new TestAdminSecurityActivityService(suspiciousLogins),
-                updateCheckService ?? new TestUpdateCheckService(),
-                TestDatabaseConfiguration.Sqlite,
+                effectiveUpdateService,
+                TestDatabaseConfiguration.Sqlite);
+
+            return AttachPageContext(new DashboardIndexModel(
+                dashboardService,
+                runtimeStatusService,
+                effectiveUpdateService,
                 NullLogger<DashboardIndexModel>.Instance));
         }
 
@@ -385,7 +390,7 @@ public sealed class RazorPageOrderingTests
         }
     }
 
-    private sealed class TestQueueService : IMessageQueueService
+    private sealed class TestQueueService : IMessageQueueService, IQueueOperatorService
     {
         public Task EnqueueAsync(NewQueuedMessageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 

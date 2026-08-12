@@ -14,10 +14,12 @@ public sealed class QueueDeliveryWorker(
     IQueueSignal queueSignal,
     IOperationalEventService eventService,
     IRuntimeStatusService runtimeStatusService,
-    ILogger<QueueDeliveryWorker> logger) : BackgroundService
+    ILogger<QueueDeliveryWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
     private const int StateWriteRetryCount = 3;
     private static readonly TimeSpan StateWriteRetryDelay = TimeSpan.FromMilliseconds(100);
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -104,7 +106,7 @@ public sealed class QueueDeliveryWorker(
                     Detail = exception.ToString()
                 }, stoppingToken);
 
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), clock, stoppingToken);
             }
         }
 
@@ -225,7 +227,7 @@ public sealed class QueueDeliveryWorker(
                     return false;
                 }
 
-                await Task.Delay(StateWriteRetryDelay, cancellationToken);
+                await Task.Delay(StateWriteRetryDelay, clock, cancellationToken);
             }
         }
 
@@ -273,7 +275,7 @@ public sealed class QueueDeliveryWorker(
                     return false;
                 }
 
-                await Task.Delay(StateWriteRetryDelay, cancellationToken);
+                await Task.Delay(StateWriteRetryDelay, clock, cancellationToken);
             }
         }
 

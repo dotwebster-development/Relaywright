@@ -6,11 +6,13 @@ namespace Relaywright.Web.Services.Events;
 
 public sealed class OperationalEventService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    ILogger<OperationalEventService> logger) : IOperationalEventService
+    ILogger<OperationalEventService> logger,
+    TimeProvider? timeProvider = null) : IOperationalEventService
 {
     private const int MaxRemoteIpAddressLength = 128;
     private const int MaxMessageLength = 2048;
     private const int MaxDetailLength = 8192;
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     public async Task WriteAsync(OperationalEventRequest request, CancellationToken cancellationToken = default)
     {
@@ -33,7 +35,7 @@ public sealed class OperationalEventService(
 
             dbContext.OperationalEvents.Add(new OperationalEvent
             {
-                OccurredUtc = DateTimeOffset.UtcNow,
+                OccurredUtc = clock.GetUtcNow(),
                 Severity = request.Severity,
                 Category = request.Category,
                 SessionId = request.SessionId,

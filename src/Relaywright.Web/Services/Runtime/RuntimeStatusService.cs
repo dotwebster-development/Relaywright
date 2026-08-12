@@ -10,8 +10,10 @@ public sealed class RuntimeStatusService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IOperationalEventService eventService,
     IQueueSignal queueSignal,
-    ILogger<RuntimeStatusService> logger) : IRuntimeStatusService
+    ILogger<RuntimeStatusService> logger,
+    TimeProvider? timeProvider = null) : IRuntimeStatusService
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly object _gate = new();
     private RuntimeComponentState _smtpListener = new();
     private RuntimeComponentState _deliveryWorker = new();
@@ -57,7 +59,7 @@ public sealed class RuntimeStatusService(
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var state = await GetOrCreateStateAsync(dbContext, cancellationToken);
-        var now = DateTimeOffset.UtcNow;
+        var now = clock.GetUtcNow();
 
         state.IsDeliveryPaused = true;
         state.DeliveryPauseReason = Trim(reason, 512);
@@ -90,7 +92,7 @@ public sealed class RuntimeStatusService(
         state.DeliveryPauseReason = null;
         state.DeliveryPausedBy = null;
         state.DeliveryPausedUtc = null;
-        state.UpdatedUtc = DateTimeOffset.UtcNow;
+        state.UpdatedUtc = clock.GetUtcNow();
 
         await dbContext.SaveChangesAsync(cancellationToken);
         queueSignal.Pulse();
@@ -129,7 +131,7 @@ public sealed class RuntimeStatusService(
             if (removedRecords is not null)
             {
                 _lastCleanupRemovedRecords = removedRecords;
-                _lastCleanupUtc = DateTimeOffset.UtcNow;
+                _lastCleanupUtc = clock.GetUtcNow();
             }
 
             _maintenanceWorker = CreateComponentState(_maintenanceWorker, status, detail, exception);
@@ -158,13 +160,13 @@ public sealed class RuntimeStatusService(
         return state;
     }
 
-    private static RuntimeComponentState CreateComponentState(
+    private RuntimeComponentState CreateComponentState(
         RuntimeComponentState previous,
         string status,
         string? detail,
         Exception? exception)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = clock.GetUtcNow();
         return new RuntimeComponentState
         {
             Status = string.IsNullOrWhiteSpace(status) ? "Unknown" : status,

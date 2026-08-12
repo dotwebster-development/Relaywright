@@ -8,11 +8,14 @@ namespace Relaywright.Web.Services.Delivery;
 
 public sealed class MaintenanceWorker(
     IRelayConfigurationService relayConfigurationService,
-    IMessageQueueService queueService,
+    IQueueMaintenanceService queueMaintenanceService,
     IOperationalEventService eventService,
     IRuntimeStatusService runtimeStatusService,
-    ILogger<MaintenanceWorker> logger) : BackgroundService
+    ILogger<MaintenanceWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Maintenance worker started.");
@@ -24,7 +27,7 @@ public sealed class MaintenanceWorker(
                 logger.LogDebug("Maintenance cleanup tick started.");
                 runtimeStatusService.ReportMaintenanceWorkerState("Running", detail: "Maintenance cleanup tick started.");
                 var configuration = await relayConfigurationService.GetSnapshotAsync(stoppingToken);
-                var cleaned = await queueService.CleanupAsync(configuration, stoppingToken);
+                var cleaned = await queueMaintenanceService.CleanupAsync(configuration, stoppingToken);
                 runtimeStatusService.ReportMaintenanceWorkerState("Running", cleaned, "Maintenance cleanup completed.");
 
                 if (cleaned > 0)
@@ -36,7 +39,7 @@ public sealed class MaintenanceWorker(
                     logger.LogDebug("Maintenance cleanup completed with no removed records.");
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
@@ -54,7 +57,7 @@ public sealed class MaintenanceWorker(
                 }, stoppingToken);
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken);
+            await Task.Delay(TimeSpan.FromMinutes(10), clock, stoppingToken);
         }
 
         runtimeStatusService.ReportMaintenanceWorkerState("Stopped", detail: "Maintenance worker stopped.");

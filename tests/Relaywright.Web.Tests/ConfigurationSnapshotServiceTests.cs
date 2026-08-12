@@ -19,15 +19,24 @@ public sealed class ConfigurationSnapshotServiceTests
         using var appData = TempAppData.Create();
         var notifier = new RuntimeConfigurationNotifier();
         var signal = new RecordingQueueSignal();
+        var adminWebListenerConfigurationService = new AdminWebListenerConfigurationService(
+            appData.Paths,
+            NullLogger<AdminWebListenerConfigurationService>.Instance);
+        var serializer = new ConfigurationSnapshotSerializer();
         var service = new ConfigurationSnapshotService(
             database.DbContextFactory,
-            new AdminWebListenerConfigurationService(
+            new ConfigurationSnapshotPayloadFactory(
+                database.DbContextFactory,
+                adminWebListenerConfigurationService,
+                serializer),
+            new ConfigurationSnapshotRestorer(
+                database.DbContextFactory,
+                adminWebListenerConfigurationService,
                 appData.Paths,
-                NullLogger<AdminWebListenerConfigurationService>.Instance),
-            appData.Paths,
-            notifier,
-            signal,
-            new NoopApplicationRestartService(),
+                notifier,
+                signal,
+                new NoopApplicationRestartService(),
+                serializer),
             new RecordingOperationalEventService(),
             NullLogger<ConfigurationSnapshotService>.Instance);
 

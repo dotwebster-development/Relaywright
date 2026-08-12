@@ -1,11 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Configuration;
-using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
-using Relaywright.Web.Options;
-using Relaywright.Web.Services.Relay;
 using Relaywright.Web.Services.Runtime;
 using Relaywright.Web.Services.Security;
 using Relaywright.Web.Services.Updates;
@@ -13,14 +9,9 @@ using Relaywright.Web.Services.Updates;
 namespace Relaywright.Web.Pages;
 
 public sealed class IndexModel(
-    IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    IRelayConfigurationService relayConfigurationService,
+    IDashboardService dashboardService,
     IRuntimeStatusService runtimeStatusService,
-    IDashboardMetricsService dashboardMetricsService,
-    IDashboardReadinessService dashboardReadinessService,
-    IAdminSecurityActivityService adminSecurityActivityService,
     IUpdateCheckService updateCheckService,
-    DatabaseConfiguration databaseConfiguration,
     ILogger<IndexModel> logger) : PageModel
 {
     public RelayConfigurationSnapshot Configuration { get; private set; } = new();
@@ -50,64 +41,18 @@ public sealed class IndexModel(
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        Configuration = await relayConfigurationService.GetSnapshotAsync(cancellationToken);
-        RuntimeStatus = await runtimeStatusService.GetSnapshotAsync(cancellationToken);
-        Metrics = await dashboardMetricsService.GetSnapshotAsync(Configuration, cancellationToken);
-        Readiness = await dashboardReadinessService.GetSnapshotAsync(
-            Configuration,
-            Metrics.BackupReadiness,
-            cancellationToken);
-        UpdateStatus = await updateCheckService.GetStatusAsync(cancellationToken);
-        var loadedUtc = DateTimeOffset.UtcNow;
-        SuspiciousLogins = await adminSecurityActivityService.GetSuspiciousLoginSummaryAsync(loadedUtc, cancellationToken);
-
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var todayUtc = new DateTimeOffset(loadedUtc.UtcDateTime.Date, TimeSpan.Zero);
-
-        PendingCount = await dbContext.QueuedMessages
-            .CountAsync(x => x.Status == QueuedMessageStatus.Pending, cancellationToken);
-        RetryCount = await dbContext.QueuedMessages
-            .CountAsync(x =>
-                x.Status == QueuedMessageStatus.RetryScheduled
-                || x.Status == QueuedMessageStatus.InProgress,
-                cancellationToken);
-        FailedCount = await dbContext.QueuedMessages
-            .CountAsync(x =>
-                x.Status == QueuedMessageStatus.Failed
-                || x.Status == QueuedMessageStatus.Expired,
-                cancellationToken);
-        DeliveredTodayCount = databaseConfiguration.IsSqlite
-            ? await dbContext.QueuedMessages
-                .FromSqlInterpolated($"""
-                    SELECT *
-                    FROM "QueuedMessages"
-                    WHERE "Status" = {(int)QueuedMessageStatus.Delivered}
-                        AND "DeliveredUtc" IS NOT NULL
-                        AND "DeliveredUtc" >= {todayUtc}
-                    """)
-                .CountAsync(cancellationToken)
-            : await dbContext.QueuedMessages
-                .CountAsync(x =>
-                    x.Status == QueuedMessageStatus.Delivered
-                    && x.DeliveredUtc != null
-                    && x.DeliveredUtc >= todayUtc,
-                    cancellationToken);
-
-        RecentEvents = databaseConfiguration.IsSqlite
-            ? await dbContext.OperationalEvents
-                .FromSqlRaw("""
-                    SELECT *
-                    FROM "OperationalEvents"
-                    ORDER BY "OccurredUtc" DESC
-                    LIMIT 20
-                    """)
-                .AsNoTracking()
-                .ToListAsync(cancellationToken)
-            : await dbContext.OperationalEvents
-                .AsNoTracking()
-                .OrderByDescending(x => x.OccurredUtc)
-                .Take(20)
-                .ToListAsync(cancellationToken);
+        var snapshot = await dashboardService.GetSnapshotAsync(cancellationToken);
+        Configuration = snapshot.Configuration;
+        RuntimeStatus = snapshot.RuntimeStatus;
+        Metrics = snapshot.Metrics;
+        Readiness = snapshot.Readiness;
+        UpdateStatus = snapshot.UpdateStatus;
+        SuspiciousLogins = snapshot.SuspiciousLogins;
+        PendingCount = snapshot.PendingCount;
+        RetryCount = snapshot.RetryCount;
+        FailedCount = snapshot.FailedCount;
+        DeliveredTodayCount = snapshot.DeliveredTodayCount;
+        RecentEvents = snapshot.RecentEvents;
 
         logger.LogDebug(
             "Dashboard loaded. Pending={PendingCount}; Retry={RetryCount}; Failed={FailedCount}; DeliveredToday={DeliveredTodayCount}; RecentEventCount={RecentEventCount}; Readiness={ReadinessComplete}/{ReadinessTotal}; Listener={ListenerBindAddress}:{ListenerPort}; User={UserName}",

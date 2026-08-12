@@ -60,8 +60,12 @@
                 <form method="post" asp-page-handler="Retry" class="inline-form">
                     <button type="submit">Retry Now</button>
                 </form>
-                <form method="post" asp-page-handler="Purge" class="inline-form" onsubmit="return confirm('Purge this queued message and remove its spool file?');">
-                    <button type="submit" class="secondary-button">Purge</button>
+                <form method="post" asp-page-handler="Purge" class="inline-form">
+                    <button type="submit"
+                            class="secondary-button"
+                            rw-confirm="Purge this queued message and remove its spool file?"
+                            rw-confirm-title="Purge queued message"
+                            rw-confirm-action="Purge">Purge</button>
                 </form>
             </div>
         </section>

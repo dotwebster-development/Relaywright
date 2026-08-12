@@ -1,18 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
-using Relaywright.Web.Options;
+using Relaywright.Web.Services.Events;
 using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Pages.Logs;
 
 public sealed class IndexModel(
-    IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    DatabaseConfiguration databaseConfiguration,
+    OperationalLogQueryService queryService,
     ILogger<IndexModel> logger) : PageModel
 {
     private const int PageSize = 50;
@@ -44,34 +40,29 @@ public sealed class IndexModel(
 
     public IReadOnlyList<LogSection> Sections { get; } =
     [
-        new LogSection(null, "All"),
-        new LogSection(nameof(OperationalEventCategory.System), "System"),
-        new LogSection(nameof(OperationalEventCategory.Configuration), "Configuration"),
-        new LogSection(nameof(OperationalEventCategory.Security), "Security"),
-        new LogSection(nameof(OperationalEventCategory.SmtpSession), "SMTP Session"),
-        new LogSection(nameof(OperationalEventCategory.Queue), "Queue"),
-        new LogSection(nameof(OperationalEventCategory.Delivery), "Delivery"),
-        new LogSection(nameof(OperationalEventCategory.Diagnostics), "Diagnostics"),
-        new LogSection(nameof(OperationalEventCategory.Alert), "Alerts")
+        new(null, "All"),
+        new(nameof(OperationalEventCategory.System), "System"),
+        new(nameof(OperationalEventCategory.Configuration), "Configuration"),
+        new(nameof(OperationalEventCategory.Security), "Security"),
+        new(nameof(OperationalEventCategory.SmtpSession), "SMTP Session"),
+        new(nameof(OperationalEventCategory.Queue), "Queue"),
+        new(nameof(OperationalEventCategory.Delivery), "Delivery"),
+        new(nameof(OperationalEventCategory.Diagnostics), "Diagnostics"),
+        new(nameof(OperationalEventCategory.Alert), "Alerts")
     ];
 
-    public IReadOnlyList<OperationalEvent> Events { get; private set; } = Array.Empty<OperationalEvent>();
+    public IReadOnlyList<OperationalEvent> Events { get; private set; } = [];
 
-    public bool IsActiveSection(string? categoryValue)
-    {
-        return string.IsNullOrWhiteSpace(categoryValue)
+    public bool IsActiveSection(string? categoryValue) =>
+        string.IsNullOrWhiteSpace(categoryValue)
             ? Category is null
             : string.Equals(Category?.ToString(), categoryValue, StringComparison.OrdinalIgnoreCase);
-    }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         PageNumber = Math.Max(1, PageNumber);
-
         if (!ModelState.IsValid)
         {
-            TotalCount = 0;
-            Events = [];
             logger.LogWarning(
                 "Logs page rejected invalid query values. ErrorCount={ErrorCount}; User={UserName}",
                 ModelState.ErrorCount,
@@ -79,42 +70,12 @@ public sealed class IndexModel(
             return;
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var query = dbContext.OperationalEvents.AsNoTracking().AsQueryable();
-
-        if (Severity is not null)
-        {
-            query = query.Where(x => x.Severity == Severity);
-        }
-
-        if (Category is not null)
-        {
-            query = query.Where(x => x.Category == Category);
-        }
-
-        if (!string.IsNullOrWhiteSpace(Search))
-        {
-            var search = Search.Trim();
-            query = query.Where(x =>
-                x.Message.Contains(search)
-                || (x.Detail != null && x.Detail.Contains(search))
-                || (x.RemoteIpAddress != null && x.RemoteIpAddress.Contains(search)));
-        }
-
-        TotalCount = await query.CountAsync(cancellationToken);
-        if (PageNumber > TotalPages)
-        {
-            PageNumber = TotalPages;
-        }
-
-        var offset = (PageNumber - 1) * PageSize;
-        Events = databaseConfiguration.IsSqlite
-            ? await GetSqlitePagedEventsAsync(dbContext, Severity, Category, Search?.Trim(), offset, PageSize, cancellationToken)
-            : await query
-                .OrderByDescending(x => x.OccurredUtc)
-                .Skip(offset)
-                .Take(PageSize)
-                .ToListAsync(cancellationToken);
+        var result = await queryService.QueryAsync(
+            new OperationalLogQueryRequest(Severity, Category, Search, PageNumber, PageSize),
+            cancellationToken);
+        PageNumber = result.PageNumber;
+        TotalCount = result.TotalCount;
+        Events = result.Events;
 
         logger.LogDebug(
             "Logs page loaded. Severity={Severity}; Category={Category}; SearchPresent={SearchPresent}; PageNumber={PageNumber}; TotalCount={TotalCount}; ReturnedCount={ReturnedCount}; User={UserName}",
@@ -125,79 +86,5 @@ public sealed class IndexModel(
             TotalCount,
             Events.Count,
             User.Identity?.Name);
-    }
-
-    private static (string Sql, object[] Parameters) BuildPagedEventsSql(
-        EventSeverity? severity,
-        OperationalEventCategory? category,
-        string? search,
-        int offset,
-        int pageSize)
-    {
-        var filters = new List<string>();
-        var parameters = new List<object>
-        {
-            IntegerParameter("$limit", pageSize),
-            IntegerParameter("$offset", offset)
-        };
-
-        if (severity is not null)
-        {
-            filters.Add(@"oe.""Severity"" = $severity");
-            parameters.Add(IntegerParameter("$severity", (int)severity.Value));
-        }
-
-        if (category is not null)
-        {
-            filters.Add(@"oe.""Category"" = $category");
-            parameters.Add(IntegerParameter("$category", (int)category.Value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            filters.Add("""
-                (instr(oe."Message", $search) > 0
-                    OR (oe."Detail" IS NOT NULL AND instr(oe."Detail", $search) > 0)
-                    OR (oe."RemoteIpAddress" IS NOT NULL AND instr(oe."RemoteIpAddress", $search) > 0))
-                """);
-            parameters.Add(new SqliteParameter("$search", search));
-        }
-
-        var whereSql = filters.Count == 0
-            ? string.Empty
-            : $"{Environment.NewLine}WHERE {string.Join($"{Environment.NewLine}    AND ", filters)}";
-
-        var sql = $"""
-            SELECT oe.*
-            FROM "OperationalEvents" AS oe{whereSql}
-            ORDER BY oe."OccurredUtc" DESC
-            LIMIT $limit OFFSET $offset
-            """;
-
-        return (sql, parameters.ToArray());
-    }
-
-    private static SqliteParameter IntegerParameter(string name, int value)
-    {
-        return new SqliteParameter(name, SqliteType.Integer)
-        {
-            Value = value
-        };
-    }
-
-    private static async Task<IReadOnlyList<OperationalEvent>> GetSqlitePagedEventsAsync(
-        ApplicationDbContext dbContext,
-        EventSeverity? severity,
-        OperationalEventCategory? category,
-        string? search,
-        int offset,
-        int pageSize,
-        CancellationToken cancellationToken)
-    {
-        var (sql, parameters) = BuildPagedEventsSql(severity, category, search, offset, pageSize);
-        return await dbContext.OperationalEvents
-            .FromSqlRaw(sql, parameters)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
     }
 }

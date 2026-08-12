@@ -109,10 +109,13 @@ public sealed class SubmissionFlowCheckerTests
             new TrustedNetworkService(
                 database.DbContextFactory,
                 events,
+                new SubmissionPolicyValidator(),
                 NullLogger<TrustedNetworkService>.Instance),
             new TrustedDevicePolicyService(
                 database.DbContextFactory,
                 events,
+                new SubmissionPolicyEvaluator(),
+                new SubmissionPolicyValidator(),
                 NullLogger<TrustedDevicePolicyService>.Instance),
             new TrustedDeviceRateLimiter(),
             new DiagnosticRunRecorder(

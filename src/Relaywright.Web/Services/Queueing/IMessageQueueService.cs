@@ -16,14 +16,4 @@ public interface IMessageQueueService
         DeliveryResult result,
         RelayConfigurationSnapshot configuration,
         CancellationToken cancellationToken);
-
-    Task<QueueActionResult> RetryNowAsync(Guid messageId, CancellationToken cancellationToken);
-
-    Task<QueueBulkActionResult> RetryNowAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken);
-
-    Task<QueueActionResult> PurgeAsync(Guid messageId, CancellationToken cancellationToken);
-
-    Task<QueueBulkActionResult> PurgeAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken cancellationToken);
-
-    Task<int> CleanupAsync(RelayConfigurationSnapshot configuration, CancellationToken cancellationToken);
 }

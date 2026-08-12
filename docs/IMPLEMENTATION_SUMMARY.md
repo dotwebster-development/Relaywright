@@ -49,6 +49,6 @@ The local app was also started in Development mode on `http://127.0.0.1:5010` an
 
 ## Notes
 
-- EF Core SQLite still does not translate all `DateTimeOffset` comparisons. Queue worker and maintenance logic use status-filtered database queries followed by in-memory timestamp comparisons to stay correct.
-- The app still uses `EnsureCreated` plus manual schema upgrades. Index additions were implemented in the existing upgrader, but a full EF migrations conversion remains a larger deployment decision.
+- EF Core SQLite still does not translate all `DateTimeOffset` comparisons. Queue claiming uses provider-specific, conditional SQL for atomic eligibility and stale-claim recovery; small administrative history queries may still materialize before ordering where SQLite translation requires it.
+- The app still uses `EnsureCreated` plus manual schema upgrades. SQLite initialization is versioned and ordered, and legacy convergence is split into named `ILegacySqliteSchemaStep` units; a full EF migrations conversion remains a larger deployment decision.
 - Runtime `App_Data` remains local state and is intentionally not source-controlled.

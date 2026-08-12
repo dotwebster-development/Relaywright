@@ -13,6 +13,7 @@ Use this page as the starting point for repository documentation. The GitHub Wik
 - [Contributing](../CONTRIBUTING.md) - development and pull-request expectations.
 - [Architecture](ARCHITECTURE.md) - runtime flow, service boundaries, storage, queueing, delivery, diagnostics, and security model.
 - [Development guidelines](DEVELOPMENT_GUIDELINES.md) - engineering rules for changing Relaywright safely.
+- [Responsibility-driven refactoring plan](RESPONSIBILITY_REFACTORING_PLAN.md) - active phased plan for improving feature ownership, discoverability, and testability without arbitrary file-size rules.
 - [Branch workflow](BRANCH_WORKFLOW.md) - protected-branch and PR workflow.
 - [Testing](TESTING.md) - local and integration test guidance.
 

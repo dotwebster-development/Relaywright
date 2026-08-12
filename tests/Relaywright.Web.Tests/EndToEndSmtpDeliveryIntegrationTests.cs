@@ -31,15 +31,11 @@ public sealed class EndToEndSmtpDeliveryIntegrationTests
         var events = new RecordingOperationalEventService();
         var signal = new RecordingQueueSignal();
         var spool = new MessageSpoolService(appData.Paths, NullLogger<MessageSpoolService>.Instance);
-        var queue = new MessageQueueService(
+        var queue = TestMessageQueueServiceFactory.Create(
             database.DbContextFactory,
-            new RetryDelayCalculator(),
-            spool,
-            new ImmediateBackupCoordinator(),
             events,
             signal,
-            TestDatabaseConfiguration.Sqlite,
-            NullLogger<MessageQueueService>.Instance);
+            TestDatabaseConfiguration.Sqlite);
         var configuration = new RelayConfigurationSnapshot
         {
             ListenerBindAddress = "127.0.0.1",

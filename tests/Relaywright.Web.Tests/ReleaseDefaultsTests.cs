@@ -202,7 +202,7 @@ public sealed class ReleaseDefaultsTests
     public void DashboardRendersTheRecordedReadinessChecklist()
     {
         var dashboard = ReadRepositoryFile("src", "Relaywright.Web", "Pages", "Index.cshtml");
-        var styles = ReadRepositoryFile("src", "Relaywright.Web", "wwwroot", "css", "site.css");
+        var styles = ReadRepositoryFile("src", "Relaywright.Web", "wwwroot", "css", "components", "surfaces.css");
         var firstRunGuide = ReadRepositoryFile("docs", "wiki-drafts", "First-Run-Setup.md");
 
         Assert.Contains("Production checklist", dashboard, StringComparison.Ordinal);

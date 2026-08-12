@@ -5,8 +5,11 @@ namespace Relaywright.Web.Services.Queueing;
 
 public sealed class MessageSpoolService(
     AppPaths appPaths,
-    ILogger<MessageSpoolService> logger) : IMessageSpoolService
+    ILogger<MessageSpoolService> logger,
+    ISpoolFileSystem? spoolFileSystem = null) : IMessageSpoolService
 {
+    private readonly ISpoolFileSystem fileSystem = spoolFileSystem ?? new PhysicalSpoolFileSystem();
+
     public async Task<string> WriteAsync(Guid messageId, DateTimeOffset acceptedUtc, ReadOnlySequence<byte> buffer, CancellationToken cancellationToken)
     {
         var relativePath = appPaths.CreateSpoolRelativePath(messageId, acceptedUtc);
@@ -23,18 +26,12 @@ public sealed class MessageSpoolService(
         var directory = Path.GetDirectoryName(absolutePath);
         if (!string.IsNullOrWhiteSpace(directory))
         {
-            Directory.CreateDirectory(directory);
+            fileSystem.CreateDirectory(directory);
         }
 
         try
         {
-            await using (var stream = new FileStream(
-                tempPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                81920,
-                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            await using (var stream = fileSystem.CreateWriteThrough(tempPath))
             {
                 foreach (var segment in buffer)
                 {
@@ -42,10 +39,10 @@ public sealed class MessageSpoolService(
                 }
 
                 await stream.FlushAsync(cancellationToken);
-                stream.Flush(flushToDisk: true);
+                fileSystem.FlushToDisk(stream);
             }
 
-            File.Move(tempPath, absolutePath, overwrite: false);
+            fileSystem.MoveFile(tempPath, absolutePath);
 
             logger.LogInformation(
                 "Spool file committed. MessageId={MessageId}; RelativePath={RelativePath}; Bytes={Bytes}",
@@ -55,14 +52,26 @@ public sealed class MessageSpoolService(
         }
         catch (Exception exception)
         {
-            if (File.Exists(tempPath))
+            try
             {
-                File.Delete(tempPath);
-                logger.LogWarning(
-                    exception,
-                    "Removed temporary spool file after write failure. MessageId={MessageId}; TempPath={TempPath}",
+                if (fileSystem.FileExists(tempPath))
+                {
+                    fileSystem.DeleteFile(tempPath);
+                    logger.LogWarning(
+                        exception,
+                        "Removed temporary spool file after write failure. MessageId={MessageId}; TempPath={TempPath}",
+                        messageId,
+                        tempPath);
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                logger.LogError(
+                    cleanupException,
+                    "Failed to remove temporary spool file after write failure. MessageId={MessageId}; TempPath={TempPath}; OriginalExceptionType={OriginalExceptionType}",
                     messageId,
-                    tempPath);
+                    tempPath,
+                    exception.GetType().Name);
             }
 
             throw;
@@ -75,13 +84,7 @@ public sealed class MessageSpoolService(
     {
         logger.LogDebug("Opening spool file for read. RelativePath={RelativePath}", relativePath);
 
-        return new FileStream(
-            appPaths.GetSpoolAbsolutePath(relativePath),
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            81920,
-            FileOptions.Asynchronous);
+        return fileSystem.OpenRead(appPaths.GetSpoolAbsolutePath(relativePath));
     }
 
     public string GetAbsolutePath(string relativePath)
@@ -91,7 +94,7 @@ public sealed class MessageSpoolService(
 
     public bool Exists(string relativePath)
     {
-        var exists = File.Exists(appPaths.GetSpoolAbsolutePath(relativePath));
+        var exists = fileSystem.FileExists(appPaths.GetSpoolAbsolutePath(relativePath));
         logger.LogDebug("Checked spool file existence. RelativePath={RelativePath}; Exists={Exists}", relativePath, exists);
         return exists;
     }
@@ -101,9 +104,9 @@ public sealed class MessageSpoolService(
         cancellationToken.ThrowIfCancellationRequested();
 
         var path = appPaths.GetSpoolAbsolutePath(relativePath);
-        if (File.Exists(path))
+        if (fileSystem.FileExists(path))
         {
-            File.Delete(path);
+            fileSystem.DeleteFile(path);
             logger.LogInformation("Deleted spool file. RelativePath={RelativePath}", relativePath);
         }
         else

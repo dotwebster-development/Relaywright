@@ -6,8 +6,11 @@ namespace Relaywright.Web.Services.Updates;
 public sealed class UpdateCheckWorker(
     IUpdateCheckService updateCheckService,
     IOptions<UpdateCheckOptions> options,
-    ILogger<UpdateCheckWorker> logger) : BackgroundService
+    ILogger<UpdateCheckWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Value.Enabled)
@@ -21,10 +24,17 @@ public sealed class UpdateCheckWorker(
             var startupDelay = options.Value.GetStartupDelay();
             if (startupDelay > TimeSpan.Zero)
             {
-                await Task.Delay(startupDelay, stoppingToken);
+                await Task.Delay(startupDelay, clock, stoppingToken);
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
 
-            while (!stoppingToken.IsCancellationRequested)
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
             {
                 var status = await updateCheckService.RefreshAsync(stoppingToken);
                 logger.LogInformation(
@@ -33,16 +43,24 @@ public sealed class UpdateCheckWorker(
                     status.CurrentVersion,
                     status.LatestVersion,
                     status.Repository);
-
-                await Task.Delay(options.Value.GetInterval(), stoppingToken);
             }
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Relaywright update check worker stopped after an unexpected failure.");
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Relaywright update check failed; the worker will retry after the configured interval.");
+            }
+
+            try
+            {
+                await Task.Delay(options.Value.GetInterval(), clock, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 }

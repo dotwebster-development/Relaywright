@@ -367,6 +367,7 @@ public sealed class TrustedNetworkIntegrationTests
         return new TrustedNetworkService(
             database.DbContextFactory,
             events,
+            new SubmissionPolicyValidator(),
             NullLogger<TrustedNetworkService>.Instance);
     }
 
@@ -377,6 +378,8 @@ public sealed class TrustedNetworkIntegrationTests
         return new TrustedDevicePolicyService(
             database.DbContextFactory,
             events,
+            new SubmissionPolicyEvaluator(),
+            new SubmissionPolicyValidator(),
             NullLogger<TrustedDevicePolicyService>.Instance);
     }
 }

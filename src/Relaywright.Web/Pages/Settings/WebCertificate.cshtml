@@ -163,21 +163,5 @@
 </section>
 
 @section Scripts {
-    <script>
-        (() => {
-            const modeInputs = Array.from(document.querySelectorAll('[data-certificate-mode]'));
-            const panels = Array.from(document.querySelectorAll('[data-certificate-panel]'));
-
-            const syncPanels = () => {
-                const selected = modeInputs.find((input) => input.checked)?.dataset.certificateMode ?? 'selfsigned';
-
-                panels.forEach((panel) => {
-                    panel.hidden = panel.dataset.certificatePanel !== selected;
-                });
-            };
-
-            modeInputs.forEach((input) => input.addEventListener('change', syncPanels));
-            syncPanels();
-        })();
-    </script>
+    <script src="~/js/certificate-mode.js" asp-append-version="true" defer></script>
 }

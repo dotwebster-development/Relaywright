@@ -1,6 +1,3 @@
-using System.IO.Compression;
-using System.Text.Json;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
@@ -17,24 +14,26 @@ public sealed class BackupService(
     IOperationalEventService eventService,
     AppPaths appPaths,
     DatabaseConfiguration databaseConfiguration,
-    ILogger<BackupService> logger) : IBackupService
+    ILogger<BackupService> logger,
+    BackupArchiveService? backupArchiveService = null,
+    BackupFileStore? backupFileStore = null,
+    BackupRunRepository? backupRunRepository = null,
+    BackupScheduleRepository? backupScheduleRepository = null,
+    TimeProvider? timeProvider = null) : IBackupService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
+    private readonly BackupArchiveService archiveService = backupArchiveService ?? new BackupArchiveService(appPaths);
+    private readonly BackupFileStore fileStore = backupFileStore ?? new BackupFileStore(
+        appPaths,
+        new PhysicalBackupFileSystem(),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<BackupFileStore>.Instance);
+    private readonly BackupRunRepository runRepository = backupRunRepository ?? new BackupRunRepository(dbContextFactory);
+    private readonly BackupScheduleRepository scheduleRepository =
+        backupScheduleRepository ?? new BackupScheduleRepository(dbContextFactory);
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     public async Task<IReadOnlyList<BackupRun>> GetRunsAsync(CancellationToken cancellationToken)
     {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var runs = await dbContext.BackupRuns
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        return runs
-            .OrderByDescending(x => x.StartedUtc)
-            .Take(100)
-            .ToList();
+        return await runRepository.GetRecentAsync(100, cancellationToken);
     }
 
     public async Task<BackupScheduleState> GetScheduleAsync(CancellationToken cancellationToken)
@@ -47,17 +46,7 @@ public sealed class BackupService(
             };
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var schedule = await dbContext.BackupScheduleStates.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
-        if (schedule is not null)
-        {
-            return schedule;
-        }
-
-        schedule = new BackupScheduleState();
-        dbContext.BackupScheduleStates.Add(schedule);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return schedule;
+        return await scheduleRepository.GetOrCreateAsync(cancellationToken);
     }
 
     public async Task SaveScheduleAsync(BackupScheduleState schedule, CancellationToken cancellationToken)
@@ -75,26 +64,14 @@ public sealed class BackupService(
             return;
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var existing = await dbContext.BackupScheduleStates.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
-        if (existing is null)
-        {
-            existing = new BackupScheduleState();
-            dbContext.BackupScheduleStates.Add(existing);
-        }
-
-        existing.IsEnabled = schedule.IsEnabled;
-        existing.IntervalHours = schedule.IntervalHours;
-        existing.RetentionCount = schedule.RetentionCount;
-        existing.UpdatedUtc = DateTimeOffset.UtcNow;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+        schedule.UpdatedUtc = clock.GetUtcNow();
+        await scheduleRepository.SaveAsync(schedule, cancellationToken);
 
         await eventService.WriteAsync(new OperationalEventRequest
         {
             Category = OperationalEventCategory.System,
-            Message = existing.IsEnabled
-                ? $"Scheduled backups enabled every {existing.IntervalHours} hour(s)."
+            Message = schedule.IsEnabled
+                ? $"Scheduled backups enabled every {schedule.IntervalHours} hour(s)."
                 : "Scheduled backups disabled."
         }, cancellationToken);
     }
@@ -112,7 +89,7 @@ public sealed class BackupService(
         var run = new BackupRun
         {
             Id = Guid.NewGuid(),
-            StartedUtc = DateTimeOffset.UtcNow,
+            StartedUtc = clock.GetUtcNow(),
             Status = BackupRunStatus.Running,
             IsEncrypted = encrypt,
             CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? null : createdBy.Trim()
@@ -121,7 +98,7 @@ public sealed class BackupService(
         if (databaseConfiguration.IsExternalServer)
         {
             run.Status = BackupRunStatus.Failed;
-            run.CompletedUtc = DateTimeOffset.UtcNow;
+            run.CompletedUtc = clock.GetUtcNow();
             run.Message = $"Built-in backup is only available for SQLite. Back up the {databaseConfiguration.Provider} database with database platform tooling.";
             await SaveRunAsync(run, cancellationToken);
 
@@ -136,52 +113,31 @@ public sealed class BackupService(
             return run;
         }
 
-        Directory.CreateDirectory(appPaths.BackupDirectory);
+        fileStore.EnsureCreated();
         await SaveRunAsync(run, cancellationToken);
 
-        var tempDirectory = Path.Combine(appPaths.BackupDirectory, $".tmp-{run.Id:N}");
-        var snapshotPath = Path.Combine(tempDirectory, "relay.db");
-        var zipPath = Path.Combine(tempDirectory, "bundle.zip");
-        var fileName = $"relaywright-backup-{run.StartedUtc:yyyyMMdd-HHmmss}-{run.Id:N}.{(encrypt ? "rwbak" : "zip")}";
-        var backupPath = Path.Combine(appPaths.BackupDirectory, fileName);
+        var tempDirectory = fileStore.GetWorkingDirectory("tmp", run.Id);
+        var fileName = fileStore.CreateBackupFileName(run, encrypt);
+        var backupPath = fileStore.GetPath(fileName);
 
         try
         {
-            Directory.CreateDirectory(tempDirectory);
+            fileStore.CreateWorkingDirectory(tempDirectory);
             await using var backupLock = await backupCoordinator.AcquireSpoolDeletionLockAsync(cancellationToken);
 
-            await CreateDatabaseSnapshotAsync(snapshotPath, cancellationToken);
-            await BackupCredentialSanitizer.SanitizeAsync(snapshotPath, cancellationToken);
-            var spoolPaths = await ReadSpoolPathsFromSnapshotAsync(snapshotPath, cancellationToken);
-            var manifest = new BackupManifest
-            {
-                BackupId = run.Id,
-                CreatedUtc = run.StartedUtc,
-                Application = "Relaywright",
-                DatabaseFile = "relay.db",
-                SpoolFileCount = spoolPaths.Count,
-                SpoolFiles = spoolPaths.ToList()
-            };
-
-            await CreateZipAsync(zipPath, snapshotPath, manifest, cancellationToken);
-            if (encrypt)
-            {
-                await BackupEncryption.EncryptFileAsync(
-                    zipPath,
-                    backupPath,
-                    encryptionPassword!,
-                    cancellationToken);
-            }
-            else
-            {
-                File.Move(zipPath, backupPath, overwrite: true);
-            }
+            var spoolFileCount = await archiveService.CreateAsync(
+                run.Id,
+                run.StartedUtc,
+                tempDirectory,
+                backupPath,
+                encryptionPassword,
+                cancellationToken);
 
             run.Status = BackupRunStatus.Succeeded;
-            run.CompletedUtc = DateTimeOffset.UtcNow;
+            run.CompletedUtc = clock.GetUtcNow();
             run.FileName = fileName;
             run.IsEncrypted = encrypt;
-            run.FileSizeBytes = new FileInfo(backupPath).Length;
+            run.FileSizeBytes = fileStore.GetFileSize(backupPath);
             run.Message = scheduled
                 ? "Scheduled backup completed."
                 : encrypt
@@ -194,7 +150,7 @@ public sealed class BackupService(
                 run.Id,
                 run.FileName,
                 run.FileSizeBytes,
-                spoolPaths.Count);
+                spoolFileCount);
 
             await eventService.WriteAsync(new OperationalEventRequest
             {
@@ -204,7 +160,7 @@ public sealed class BackupService(
             }, cancellationToken);
 
             var validation = await ValidateAsync(run.Id, cancellationToken, encryptionPassword);
-            run.LastValidatedUtc = DateTimeOffset.UtcNow;
+            run.LastValidatedUtc = clock.GetUtcNow();
             run.LastValidationSucceeded = validation.Succeeded;
             run.LastValidationMessage = validation.Message;
 
@@ -213,7 +169,7 @@ public sealed class BackupService(
         catch (Exception exception)
         {
             run.Status = BackupRunStatus.Failed;
-            run.CompletedUtc = DateTimeOffset.UtcNow;
+            run.CompletedUtc = clock.GetUtcNow();
             run.Message = exception.Message;
             await UpdateRunAsync(run, cancellationToken);
 
@@ -231,7 +187,7 @@ public sealed class BackupService(
         }
         finally
         {
-            DeleteDirectoryIfExists(tempDirectory);
+            fileStore.DeleteWorkingDirectoryBestEffort(tempDirectory, run.Id, "create");
         }
     }
 
@@ -242,103 +198,69 @@ public sealed class BackupService(
     {
         ValidatePassword(encryptionPassword, "Backup validation password");
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var run = await dbContext.BackupRuns.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var run = await runRepository.FindAsync(id, cancellationToken);
         if (run is null)
         {
             return new BackupOperationResult { Succeeded = false, Message = "Backup run not found." };
         }
 
-        var path = GetBackupPath(run);
-        var tempDirectory = Path.Combine(appPaths.BackupDirectory, $".validate-{run.Id:N}");
+        var path = fileStore.GetPath(run);
+        var tempDirectory = fileStore.GetWorkingDirectory("validate", run.Id);
 
         try
         {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            if (string.IsNullOrWhiteSpace(path) || !fileStore.Exists(path))
             {
                 throw new InvalidOperationException("Backup file was not found.");
             }
 
-            Directory.CreateDirectory(tempDirectory);
-            var readableArchivePath = await PrepareReadableArchiveAsync(
-                path,
-                tempDirectory,
-                encryptionPassword,
-                cancellationToken);
-            using var archive = ZipFile.OpenRead(readableArchivePath);
-            var manifestEntry = archive.GetEntry("manifest.json")
-                ?? throw new InvalidOperationException("Backup manifest is missing.");
-            var databaseEntry = archive.GetEntry("relay.db")
-                ?? throw new InvalidOperationException("Database snapshot is missing.");
+            fileStore.CreateWorkingDirectory(tempDirectory);
+            await archiveService.ValidateAsync(path, tempDirectory, encryptionPassword, cancellationToken);
 
-            BackupManifest manifest;
-            await using (var manifestStream = manifestEntry.Open())
-            {
-                manifest = await JsonSerializer.DeserializeAsync<BackupManifest>(manifestStream, JsonOptions, cancellationToken)
-                    ?? throw new InvalidOperationException("Backup manifest could not be read.");
-            }
-
-            var extractedDatabase = Path.Combine(tempDirectory, "relay.db");
-            databaseEntry.ExtractToFile(extractedDatabase, overwrite: true);
-            await ValidateDatabaseAsync(extractedDatabase, cancellationToken);
-
-            var missingSpoolEntry = manifest.SpoolFiles
-                .Select(ToZipSpoolEntry)
-                .FirstOrDefault(entryName => archive.GetEntry(entryName) is null);
-            if (missingSpoolEntry is not null)
-            {
-                throw new InvalidOperationException($"Spool entry is missing from backup: {missingSpoolEntry}");
-            }
-
-            run.LastValidatedUtc = DateTimeOffset.UtcNow;
+            run.LastValidatedUtc = clock.GetUtcNow();
             run.LastValidationSucceeded = true;
             run.LastValidationMessage = "Backup validation succeeded.";
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await runRepository.UpdateAsync(run, cancellationToken);
 
             return new BackupOperationResult { Succeeded = true, Message = run.LastValidationMessage };
         }
         catch (Exception exception)
         {
-            run.LastValidatedUtc = DateTimeOffset.UtcNow;
+            run.LastValidatedUtc = clock.GetUtcNow();
             run.LastValidationSucceeded = false;
             run.LastValidationMessage = exception.Message;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await runRepository.UpdateAsync(run, cancellationToken);
 
             return new BackupOperationResult { Succeeded = false, Message = exception.Message };
         }
         finally
         {
-            DeleteDirectoryIfExists(tempDirectory);
+            fileStore.DeleteWorkingDirectoryBestEffort(tempDirectory, run.Id, "validate");
         }
     }
 
     public async Task<BackupOperationResult> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var run = await dbContext.BackupRuns.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var run = await runRepository.FindAsync(id, cancellationToken);
         if (run is null)
         {
             return new BackupOperationResult { Succeeded = false, Message = "Backup run not found." };
         }
 
-        var path = GetBackupPath(run);
-        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
-        {
-            File.Delete(path);
-        }
+        var path = fileStore.GetPath(run);
+        fileStore.DeleteFileIfExists(path);
 
         run.Status = BackupRunStatus.Deleted;
         run.Message = "Backup file deleted.";
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await runRepository.UpdateAsync(run, cancellationToken);
 
         return new BackupOperationResult { Succeeded = true, Message = "Backup deleted." };
     }
 
     public async Task<string?> GetBackupPathAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var run = await dbContext.BackupRuns.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        return run is null ? null : GetBackupPath(run);
+        var run = await runRepository.FindAsync(id, cancellationToken);
+        return run is null ? null : fileStore.GetPath(run);
     }
 
     public async Task<BackupReadiness> GetReadinessAsync(CancellationToken cancellationToken)
@@ -348,28 +270,18 @@ public sealed class BackupService(
             return new BackupReadiness
             {
                 IsReady = true,
-                BackupStorageBytes = DirectorySize(appPaths.BackupDirectory),
+                BackupStorageBytes = fileStore.GetStorageBytes(),
                 Message = $"{databaseConfiguration.Provider} database backup is managed outside Relaywright."
             };
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var schedule = await dbContext.BackupScheduleStates
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken)
-            ?? new BackupScheduleState();
-        var runs = await dbContext.BackupRuns
-            .AsNoTracking()
-            .Where(x => x.Status == BackupRunStatus.Succeeded && x.LastValidationSucceeded == true)
-            .ToListAsync(cancellationToken);
-        var latest = runs
-            .OrderByDescending(x => x.LastValidatedUtc ?? x.CompletedUtc ?? x.StartedUtc)
-            .FirstOrDefault();
+        var now = clock.GetUtcNow();
+        var schedule = await scheduleRepository.GetOrCreateAsync(cancellationToken);
+        var latest = await runRepository.FindLatestValidatedAsync(cancellationToken);
         var staleAfterHours = schedule.IsEnabled
             ? Math.Max(24, schedule.IntervalHours * 2)
             : 168;
-        var backupStorageBytes = DirectorySize(appPaths.BackupDirectory);
+        var backupStorageBytes = fileStore.GetStorageBytes();
 
         if (latest is null)
         {
@@ -407,189 +319,28 @@ public sealed class BackupService(
             return;
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var retention = Math.Clamp(retentionCount, 1, 100);
-        var succeededRuns = await dbContext.BackupRuns
-            .Where(x => x.Status == BackupRunStatus.Succeeded)
-            .ToListAsync(cancellationToken);
-        var runs = succeededRuns
-            .OrderByDescending(x => x.StartedUtc)
-            .Skip(retention)
-            .ToList();
+        var runs = await runRepository.GetRetentionCandidatesAsync(retentionCount, cancellationToken);
 
         foreach (var run in runs)
         {
-            var path = GetBackupPath(run);
-            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            var path = fileStore.GetPath(run);
+            fileStore.DeleteFileIfExists(path);
 
             run.Status = BackupRunStatus.Deleted;
             run.Message = "Backup pruned by retention policy.";
         }
 
-        if (runs.Count > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-    }
-
-    private static async Task<string> PrepareReadableArchiveAsync(
-        string path,
-        string tempDirectory,
-        string? encryptionPassword,
-        CancellationToken cancellationToken)
-    {
-        if (!BackupEncryption.LooksEncrypted(path))
-        {
-            return path;
-        }
-
-        var decryptedPath = Path.Combine(tempDirectory, "bundle.zip");
-        await BackupEncryption.DecryptFileAsync(path, decryptedPath, encryptionPassword ?? string.Empty, cancellationToken);
-        return decryptedPath;
-    }
-
-    private async Task CreateDatabaseSnapshotAsync(string snapshotPath, CancellationToken cancellationToken)
-    {
-        await using var source = new SqliteConnection($"Data Source={appPaths.DatabasePath};Pooling=False");
-        await using var destination = new SqliteConnection($"Data Source={snapshotPath};Pooling=False");
-        await source.OpenAsync(cancellationToken);
-        await destination.OpenAsync(cancellationToken);
-        source.BackupDatabase(destination);
-    }
-
-    private static async Task<IReadOnlyList<string>> ReadSpoolPathsFromSnapshotAsync(
-        string snapshotPath,
-        CancellationToken cancellationToken)
-    {
-        var paths = new List<string>();
-        await using var connection = new SqliteConnection($"Data Source={snapshotPath};Mode=ReadOnly;Pooling=False");
-        await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT \"SpoolFileRelativePath\" FROM \"QueuedMessages\" WHERE \"SpoolFileRelativePath\" IS NOT NULL;";
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            if (!reader.IsDBNull(0))
-            {
-                paths.Add(reader.GetString(0));
-            }
-        }
-
-        return paths
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private async Task CreateZipAsync(
-        string backupPath,
-        string snapshotPath,
-        BackupManifest manifest,
-        CancellationToken cancellationToken)
-    {
-        using var archive = ZipFile.Open(backupPath, ZipArchiveMode.Create);
-        archive.CreateEntryFromFile(snapshotPath, "relay.db", CompressionLevel.Optimal);
-
-        foreach (var spoolPath in manifest.SpoolFiles)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var absolutePath = appPaths.GetSpoolAbsolutePath(spoolPath);
-            if (!File.Exists(absolutePath))
-            {
-                manifest.MissingSpoolFiles.Add(spoolPath);
-                continue;
-            }
-
-            archive.CreateEntryFromFile(absolutePath, ToZipSpoolEntry(spoolPath), CompressionLevel.Optimal);
-        }
-
-        AddDirectoryEntries(archive, appPaths.CertificateDirectory, "certs");
-        AddFileIfExists(archive, appPaths.AdminWebListenerConfigurationPath, "admin-web-listener.json");
-
-        var manifestEntry = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);
-        await using var manifestStream = manifestEntry.Open();
-        await JsonSerializer.SerializeAsync(manifestStream, manifest, JsonOptions, cancellationToken);
-    }
-
-    private static async Task ValidateDatabaseAsync(string databasePath, CancellationToken cancellationToken)
-    {
-        await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False");
-        await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM \"QueuedMessages\";";
-        _ = await command.ExecuteScalarAsync(cancellationToken);
+        await runRepository.UpdateRangeAsync(runs, cancellationToken);
     }
 
     private async Task SaveRunAsync(BackupRun run, CancellationToken cancellationToken)
     {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        dbContext.BackupRuns.Add(run);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await runRepository.AddAsync(run, cancellationToken);
     }
 
     private async Task UpdateRunAsync(BackupRun run, CancellationToken cancellationToken)
     {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        dbContext.BackupRuns.Update(run);
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private string? GetBackupPath(BackupRun run)
-    {
-        return string.IsNullOrWhiteSpace(run.FileName)
-            ? null
-            : Path.Combine(appPaths.BackupDirectory, Path.GetFileName(run.FileName));
-    }
-
-    private static long DirectorySize(string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            return 0;
-        }
-
-        return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Sum(file => new FileInfo(file).Length);
-    }
-
-    private static string ToZipSpoolEntry(string relativePath)
-    {
-        return $"spool/{relativePath.Replace('\\', '/')}";
-    }
-
-    private static void AddDirectoryEntries(ZipArchive archive, string directory, string prefix)
-    {
-        if (!Directory.Exists(directory))
-        {
-            return;
-        }
-
-        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
-        {
-            var relative = Path.GetRelativePath(directory, file).Replace('\\', '/');
-            archive.CreateEntryFromFile(file, $"{prefix}/{relative}", CompressionLevel.Optimal);
-        }
-    }
-
-    private static void AddFileIfExists(ZipArchive archive, string path, string entryName)
-    {
-        if (File.Exists(path))
-        {
-            archive.CreateEntryFromFile(path, entryName, CompressionLevel.Optimal);
-        }
-    }
-
-    private static void DeleteDirectoryIfExists(string directory)
-    {
-        if (Directory.Exists(directory))
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        await runRepository.UpdateAsync(run, cancellationToken);
     }
 
     private static void ValidateSchedule(BackupScheduleState schedule)
@@ -623,20 +374,4 @@ public sealed class BackupService(
         }
     }
 
-    private sealed class BackupManifest
-    {
-        public Guid BackupId { get; set; }
-
-        public string Application { get; set; } = string.Empty;
-
-        public DateTimeOffset CreatedUtc { get; set; }
-
-        public string DatabaseFile { get; set; } = string.Empty;
-
-        public int SpoolFileCount { get; set; }
-
-        public List<string> SpoolFiles { get; set; } = [];
-
-        public List<string> MissingSpoolFiles { get; } = [];
-    }
 }

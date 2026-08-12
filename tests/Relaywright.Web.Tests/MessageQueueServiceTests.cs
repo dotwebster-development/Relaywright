@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relaywright.Web.Configuration;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
+using Relaywright.Web.Options;
 using Relaywright.Web.Services.Events;
 using Relaywright.Web.Services.Queueing;
 using Relaywright.Web.Tests.Support;
@@ -64,12 +65,123 @@ public sealed class MessageQueueServiceTests
     }
 
     [Fact]
+    public async Task ConfiguredStaleClaimThresholdControlsRecovery()
+    {
+        var now = new DateTimeOffset(2032, 4, 5, 6, 7, 8, TimeSpan.Zero);
+        var timeProvider = new FixedTimeProvider(now);
+        await using var fixture = await QueueFixture.CreateAsync(
+            timeProvider,
+            new QueueProcessingOptions { StaleClaimMinutes = 30 });
+        var message = await fixture.AddMessageAsync(
+            QueuedMessageStatus.InProgress,
+            attemptCount: 1,
+            lastAttemptStartedUtc: now.AddMinutes(-20),
+            expiresUtc: now.AddHours(1));
+
+        Assert.Null(await fixture.Service.TryClaimNextAsync(CancellationToken.None));
+
+        timeProvider.SetUtcNow(now.AddMinutes(11));
+        var claimed = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(message.Id, claimed!.MessageId);
+        Assert.Equal(2, claimed.AttemptNumber);
+    }
+
+    [Fact]
+    public async Task QueueTimestampsUseInjectedTimeProvider()
+    {
+        var now = new DateTimeOffset(2032, 4, 5, 6, 7, 8, TimeSpan.Zero);
+        var timeProvider = new FixedTimeProvider(now);
+        await using var fixture = await QueueFixture.CreateAsync(timeProvider);
+        await fixture.AddMessageAsync(
+            QueuedMessageStatus.Pending,
+            acceptedUtc: now.AddMinutes(-1),
+            nextAttemptAtUtc: now.AddMinutes(-1),
+            expiresUtc: now.AddHours(1));
+
+        var workItem = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+        Assert.NotNull(workItem);
+
+        await fixture.Service.MarkFailedAsync(
+            workItem!,
+            new DeliveryResult
+            {
+                FailureCategory = DeliveryFailureCategory.Transient,
+                ErrorDetail = "temporary failure"
+            },
+            new RelayConfigurationSnapshot
+            {
+                MaxRetryCount = 3,
+                InitialRetryDelaySeconds = 60,
+                MaxRetryDelaySeconds = 300
+            },
+            CancellationToken.None);
+
+        var saved = await fixture.FindAsync(workItem!.MessageId);
+        Assert.NotNull(saved);
+        Assert.Equal(now, saved!.LastAttemptStartedUtc);
+        Assert.Equal(now, saved.LastAttemptCompletedUtc);
+        Assert.Equal(now.AddMinutes(1), saved.NextAttemptAtUtc);
+    }
+
+    [Fact]
+    public async Task ConcurrentStatusMutationIsRejected()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        var message = await fixture.AddMessageAsync(QueuedMessageStatus.Failed);
+        await using var firstContext = fixture.CreateDbContext();
+        await using var secondContext = fixture.CreateDbContext();
+        var firstCopy = await firstContext.QueuedMessages.SingleAsync(x => x.Id == message.Id);
+        var secondCopy = await secondContext.QueuedMessages.SingleAsync(x => x.Id == message.Id);
+
+        firstCopy.Status = QueuedMessageStatus.RetryScheduled;
+        firstCopy.NextAttemptAtUtc = DateTimeOffset.UtcNow;
+        await firstContext.SaveChangesAsync();
+
+        secondCopy.Status = QueuedMessageStatus.RetryScheduled;
+        secondCopy.NextAttemptAtUtc = DateTimeOffset.UtcNow.AddMinutes(1);
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => secondContext.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task RepeatingDeliveredCompletionForSameAttemptIsIdempotent()
+    {
+        var now = new DateTimeOffset(2032, 4, 5, 6, 7, 8, TimeSpan.Zero);
+        await using var fixture = await QueueFixture.CreateAsync(new FixedTimeProvider(now));
+        await fixture.AddMessageAsync(
+            QueuedMessageStatus.Pending,
+            acceptedUtc: now.AddMinutes(-1),
+            nextAttemptAtUtc: now.AddMinutes(-1),
+            expiresUtc: now.AddHours(1));
+        var workItem = await fixture.Service.TryClaimNextAsync(CancellationToken.None);
+        Assert.NotNull(workItem);
+        var result = new DeliveryResult
+        {
+            Succeeded = true,
+            ResponseCode = "250",
+            ResponseText = "queued"
+        };
+
+        await fixture.Service.MarkDeliveredAsync(workItem!, result, CancellationToken.None);
+        await fixture.Service.MarkDeliveredAsync(workItem!, result, CancellationToken.None);
+
+        var saved = await fixture.FindAsync(workItem!.MessageId);
+        Assert.NotNull(saved);
+        Assert.Equal(QueuedMessageStatus.Delivered, saved!.Status);
+        Assert.Single(saved.DeliveryAttempts);
+        Assert.True(saved.DeliveryAttempts.Single().Succeeded);
+        Assert.Equal(now, saved.DeliveredUtc);
+    }
+
+    [Fact]
     public async Task RetryNowRejectsDeliveredMessage()
     {
         await using var fixture = await QueueFixture.CreateAsync();
         var message = await fixture.AddMessageAsync(QueuedMessageStatus.Delivered);
 
-        var result = await fixture.Service.RetryNowAsync(message.Id, CancellationToken.None);
+        var result = await fixture.OperatorService.RetryNowAsync(message.Id, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("Delivered messages cannot be retried.", result.Message);
@@ -82,7 +194,7 @@ public sealed class MessageQueueServiceTests
         await using var fixture = await QueueFixture.CreateAsync();
         var message = await fixture.AddMessageAsync(QueuedMessageStatus.InProgress);
 
-        var result = await fixture.Service.PurgeAsync(message.Id, CancellationToken.None);
+        var result = await fixture.OperatorService.PurgeAsync(message.Id, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("Message is currently being delivered and cannot be purged.", result.Message);
@@ -96,7 +208,7 @@ public sealed class MessageQueueServiceTests
         await using var fixture = await QueueFixture.CreateAsync();
         var message = await fixture.AddMessageAsync(QueuedMessageStatus.Failed);
 
-        var result = await fixture.Service.PurgeAsync(message.Id, CancellationToken.None);
+        var result = await fixture.OperatorService.PurgeAsync(message.Id, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("Queued message purged.", result.Message);
@@ -112,7 +224,7 @@ public sealed class MessageQueueServiceTests
         var delivered = await fixture.AddMessageAsync(QueuedMessageStatus.Delivered);
         var missing = Guid.NewGuid();
 
-        var result = await fixture.Service.RetryNowAsync([failed.Id, delivered.Id, missing], CancellationToken.None);
+        var result = await fixture.OperatorService.RetryNowAsync([failed.Id, delivered.Id, missing], CancellationToken.None);
 
         Assert.Equal(3, result.Requested);
         Assert.Equal(1, result.Succeeded);
@@ -129,7 +241,7 @@ public sealed class MessageQueueServiceTests
         var failed = await fixture.AddMessageAsync(QueuedMessageStatus.Failed);
         fixture.SpoolService.ThrowOnDelete = true;
 
-        var result = await fixture.Service.PurgeAsync([failed.Id], CancellationToken.None);
+        var result = await fixture.OperatorService.PurgeAsync([failed.Id], CancellationToken.None);
 
         Assert.Equal(1, result.Requested);
         Assert.Equal(0, result.Succeeded);
@@ -162,7 +274,7 @@ public sealed class MessageQueueServiceTests
         await fixture.AddOperationalEventAsync(now.AddHours(-2));
         await fixture.AddOperationalEventAsync(now);
 
-        var deleted = await fixture.Service.CleanupAsync(new RelayConfigurationSnapshot
+        var deleted = await fixture.MaintenanceService.CleanupAsync(new RelayConfigurationSnapshot
         {
             DeliveredRetentionHours = 1,
             FailedRetentionHours = 1,
@@ -186,27 +298,50 @@ public sealed class MessageQueueServiceTests
         private readonly SqliteConnection _connection;
         private readonly TestDbContextFactory _dbContextFactory;
 
-        private QueueFixture(SqliteConnection connection, TestDbContextFactory dbContextFactory)
+        private QueueFixture(
+            SqliteConnection connection,
+            TestDbContextFactory dbContextFactory,
+            TimeProvider timeProvider,
+            QueueProcessingOptions? queueOptions)
         {
             _connection = connection;
             _dbContextFactory = dbContextFactory;
             SpoolService = new TestSpoolService();
-            Service = new MessageQueueService(
+            Service = TestMessageQueueServiceFactory.Create(
                 dbContextFactory,
-                new RetryDelayCalculator(),
+                new TestOperationalEventService(),
+                new TestQueueSignal(),
+                TestDatabaseConfiguration.Sqlite,
+                timeProvider,
+                queueOptions);
+            OperatorService = new QueueOperatorService(
+                dbContextFactory,
                 SpoolService,
                 new ImmediateBackupCoordinator(),
                 new TestOperationalEventService(),
                 new TestQueueSignal(),
+                NullLogger<QueueOperatorService>.Instance,
+                timeProvider);
+            MaintenanceService = new QueueMaintenanceService(
+                dbContextFactory,
+                SpoolService,
+                new ImmediateBackupCoordinator(),
                 TestDatabaseConfiguration.Sqlite,
-                NullLogger<MessageQueueService>.Instance);
+                NullLogger<QueueMaintenanceService>.Instance,
+                timeProvider);
         }
 
         public MessageQueueService Service { get; }
 
+        public QueueOperatorService OperatorService { get; }
+
+        public QueueMaintenanceService MaintenanceService { get; }
+
         public TestSpoolService SpoolService { get; }
 
-        public static async Task<QueueFixture> CreateAsync()
+        public static async Task<QueueFixture> CreateAsync(
+            TimeProvider? timeProvider = null,
+            QueueProcessingOptions? queueOptions = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -219,7 +354,11 @@ public sealed class MessageQueueServiceTests
             await using var dbContext = factory.CreateDbContext();
             await dbContext.Database.EnsureCreatedAsync();
 
-            return new QueueFixture(connection, factory);
+            return new QueueFixture(
+                connection,
+                factory,
+                timeProvider ?? TimeProvider.System,
+                queueOptions);
         }
 
         public async Task<QueuedMessage> AddMessageAsync(
@@ -278,7 +417,14 @@ public sealed class MessageQueueServiceTests
         public async Task<QueuedMessage?> FindAsync(Guid id)
         {
             await using var dbContext = _dbContextFactory.CreateDbContext();
-            return await dbContext.QueuedMessages.SingleOrDefaultAsync(x => x.Id == id);
+            return await dbContext.QueuedMessages
+                .Include(x => x.DeliveryAttempts)
+                .SingleOrDefaultAsync(x => x.Id == id);
+        }
+
+        public ApplicationDbContext CreateDbContext()
+        {
+            return _dbContextFactory.CreateDbContext();
         }
 
         public async Task<QueuedMessageStatus?> GetStatusAsync(Guid id)

@@ -2,13 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Relaywright.Web.Data;
 using Relaywright.Web.Data.Entities;
 using Relaywright.Web.Services.Events;
-using Relaywright.Web.Validation;
 
 namespace Relaywright.Web.Services.Security;
 
 public sealed class TrustedDevicePolicyService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IOperationalEventService eventService,
+    SubmissionPolicyEvaluator policyEvaluator,
+    SubmissionPolicyValidator policyValidator,
     ILogger<TrustedDevicePolicyService> logger) : ITrustedDevicePolicyService
 {
     public async Task<SubmissionPolicy> GetPolicyAsync(CancellationToken cancellationToken)
@@ -20,7 +21,7 @@ public sealed class TrustedDevicePolicyService(
 
     public async Task SavePolicyAsync(SubmissionPolicy policy, CancellationToken cancellationToken)
     {
-        ValidatePolicy(policy);
+        policyValidator.Validate(policy);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await dbContext.SubmissionPolicies.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
@@ -31,12 +32,12 @@ public sealed class TrustedDevicePolicyService(
         }
 
         existing.IsEnabled = policy.IsEnabled;
-        existing.AllowedSenderAddresses = NormalizeList(policy.AllowedSenderAddresses);
-        existing.BlockedSenderAddresses = NormalizeList(policy.BlockedSenderAddresses);
-        existing.AllowedRecipientDomains = NormalizeList(policy.AllowedRecipientDomains);
-        existing.BlockedRecipientDomains = NormalizeList(policy.BlockedRecipientDomains);
-        existing.MaxMessageSizeBytes = NormalizePositive(policy.MaxMessageSizeBytes);
-        existing.MaxRecipientsPerMessage = NormalizePositive(policy.MaxRecipientsPerMessage);
+        existing.AllowedSenderAddresses = policyValidator.NormalizeList(policy.AllowedSenderAddresses);
+        existing.BlockedSenderAddresses = policyValidator.NormalizeList(policy.BlockedSenderAddresses);
+        existing.AllowedRecipientDomains = policyValidator.NormalizeList(policy.AllowedRecipientDomains);
+        existing.BlockedRecipientDomains = policyValidator.NormalizeList(policy.BlockedRecipientDomains);
+        existing.MaxMessageSizeBytes = policyValidator.NormalizePositive(policy.MaxMessageSizeBytes);
+        existing.MaxRecipientsPerMessage = policyValidator.NormalizePositive(policy.MaxRecipientsPerMessage);
         existing.UpdatedUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -60,47 +61,7 @@ public sealed class TrustedDevicePolicyService(
         string envelopeFrom,
         long declaredSizeBytes)
     {
-        var address = NormalizeAddress(envelopeFrom);
-
-        var profileSizeLimit = profile.MaxMessageSizeBytes;
-        var globalSizeLimit = policy.IsEnabled ? policy.MaxMessageSizeBytes : null;
-        var effectiveSizeLimit = MinPositive(profileSizeLimit, globalSizeLimit);
-        if (effectiveSizeLimit is not null && declaredSizeBytes > effectiveSizeLimit.Value)
-        {
-            return SubmissionPolicyDecision.Deny($"Message size exceeds the allowed limit of {effectiveSizeLimit.Value} bytes.");
-        }
-
-        var senderDecision = CheckSenderList(address, profile.BlockedSenderAddresses, allowList: false);
-        if (!senderDecision.Allowed)
-        {
-            return senderDecision;
-        }
-
-        if (policy.IsEnabled)
-        {
-            senderDecision = CheckSenderList(address, policy.BlockedSenderAddresses, allowList: false);
-            if (!senderDecision.Allowed)
-            {
-                return senderDecision;
-            }
-        }
-
-        senderDecision = CheckSenderList(address, profile.AllowedSenderAddresses, allowList: true);
-        if (!senderDecision.Allowed)
-        {
-            return senderDecision;
-        }
-
-        if (policy.IsEnabled)
-        {
-            senderDecision = CheckSenderList(address, policy.AllowedSenderAddresses, allowList: true);
-            if (!senderDecision.Allowed)
-            {
-                return senderDecision;
-            }
-        }
-
-        return SubmissionPolicyDecision.Allow();
+        return policyEvaluator.CanAcceptFrom(profile, policy, envelopeFrom, declaredSizeBytes);
     }
 
     public SubmissionPolicyDecision CanDeliverTo(
@@ -109,222 +70,6 @@ public sealed class TrustedDevicePolicyService(
         string recipient,
         int recipientNumber)
     {
-        var address = NormalizeAddress(recipient);
-        var domain = GetDomain(address);
-        if (string.IsNullOrWhiteSpace(domain))
-        {
-            return SubmissionPolicyDecision.Deny("Recipient address does not include a domain.");
-        }
-
-        var profileRecipientLimit = profile.MaxRecipientsPerMessage;
-        var globalRecipientLimit = policy.IsEnabled ? policy.MaxRecipientsPerMessage : null;
-        var effectiveRecipientLimit = MinPositive(profileRecipientLimit, globalRecipientLimit);
-        if (effectiveRecipientLimit is not null && recipientNumber > effectiveRecipientLimit.Value)
-        {
-            return SubmissionPolicyDecision.Deny($"Message exceeds the allowed recipient limit of {effectiveRecipientLimit.Value}.");
-        }
-
-        var domainDecision = CheckDomainList(domain, profile.BlockedRecipientDomains, allowList: false);
-        if (!domainDecision.Allowed)
-        {
-            return domainDecision;
-        }
-
-        if (policy.IsEnabled)
-        {
-            domainDecision = CheckDomainList(domain, policy.BlockedRecipientDomains, allowList: false);
-            if (!domainDecision.Allowed)
-            {
-                return domainDecision;
-            }
-        }
-
-        domainDecision = CheckDomainList(domain, profile.AllowedRecipientDomains, allowList: true);
-        if (!domainDecision.Allowed)
-        {
-            return domainDecision;
-        }
-
-        if (policy.IsEnabled)
-        {
-            domainDecision = CheckDomainList(domain, policy.AllowedRecipientDomains, allowList: true);
-            if (!domainDecision.Allowed)
-            {
-                return domainDecision;
-            }
-        }
-
-        return SubmissionPolicyDecision.Allow();
+        return policyEvaluator.CanDeliverTo(profile, policy, recipient, recipientNumber);
     }
-
-    private static SubmissionPolicyDecision CheckSenderList(string address, string? list, bool allowList)
-    {
-        var entries = ParseList(list);
-        if (entries.Count == 0)
-        {
-            return SubmissionPolicyDecision.Allow();
-        }
-
-        var matched = entries.Any(entry => MatchesAddress(entry, address));
-        if (allowList && !matched)
-        {
-            return SubmissionPolicyDecision.Deny("Sender is not allowed by submission policy.");
-        }
-
-        if (!allowList && matched)
-        {
-            return SubmissionPolicyDecision.Deny("Sender is blocked by submission policy.");
-        }
-
-        return SubmissionPolicyDecision.Allow();
-    }
-
-    private static SubmissionPolicyDecision CheckDomainList(string domain, string? list, bool allowList)
-    {
-        var entries = ParseList(list);
-        if (entries.Count == 0)
-        {
-            return SubmissionPolicyDecision.Allow();
-        }
-
-        var matched = entries.Any(entry => MatchesDomain(entry, domain));
-        if (allowList && !matched)
-        {
-            return SubmissionPolicyDecision.Deny("Recipient domain is not allowed by submission policy.");
-        }
-
-        if (!allowList && matched)
-        {
-            return SubmissionPolicyDecision.Deny("Recipient domain is blocked by submission policy.");
-        }
-
-        return SubmissionPolicyDecision.Allow();
-    }
-
-    private static bool MatchesAddress(string pattern, string address)
-    {
-        if (pattern.StartsWith("@", StringComparison.Ordinal))
-        {
-            return address.EndsWith(pattern, StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (pattern.StartsWith("*@", StringComparison.Ordinal))
-        {
-            return address.EndsWith(pattern[1..], StringComparison.OrdinalIgnoreCase);
-        }
-
-        return string.Equals(pattern, address, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool MatchesDomain(string pattern, string domain)
-    {
-        var normalizedPattern = pattern.Trim().TrimStart('@').ToLowerInvariant();
-        if (normalizedPattern.StartsWith("*.", StringComparison.Ordinal))
-        {
-            var suffix = normalizedPattern[1..];
-            return domain.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return string.Equals(normalizedPattern, domain, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static IReadOnlyList<string> ParseList(string? value)
-    {
-        return ValidationRules.SplitDelimitedList(value)
-            .Select(x => x.ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static string NormalizeAddress(string value)
-    {
-        var trimmed = value.Trim();
-        var start = trimmed.IndexOf('<');
-        var end = trimmed.IndexOf('>');
-        if (start >= 0 && end > start)
-        {
-            trimmed = trimmed[(start + 1)..end];
-        }
-
-        return trimmed.Trim().Trim('"').ToLowerInvariant();
-    }
-
-    private static string? GetDomain(string address)
-    {
-        var at = address.LastIndexOf('@');
-        return at < 0 || at == address.Length - 1 ? null : address[(at + 1)..];
-    }
-
-    private static string? NormalizeList(string? value)
-    {
-        return ValidationRules.NormalizeDelimitedList(value);
-    }
-
-    private static long? NormalizePositive(long? value) => value is > 0 ? value : null;
-
-    private static int? NormalizePositive(int? value) => value is > 0 ? value : null;
-
-    private static long? MinPositive(long? left, long? right)
-    {
-        return (left, right) switch
-        {
-            ({ } l, { } r) => Math.Min(l, r),
-            ({ } l, null) => l,
-            (null, { } r) => r,
-            _ => null
-        };
-    }
-
-    private static int? MinPositive(int? left, int? right)
-    {
-        return (left, right) switch
-        {
-            ({ } l, { } r) => Math.Min(l, r),
-            ({ } l, null) => l,
-            (null, { } r) => r,
-            _ => null
-        };
-    }
-
-    private static void ValidatePolicy(SubmissionPolicy policy)
-    {
-        if (policy.Id != 1)
-        {
-            throw new InvalidOperationException("Submission policy ID must be 1.");
-        }
-
-        ValidateSenderPolicyList(policy.AllowedSenderAddresses, "Allowed sender addresses");
-        ValidateSenderPolicyList(policy.BlockedSenderAddresses, "Blocked sender addresses");
-        ValidateRecipientDomainPolicyList(policy.AllowedRecipientDomains, "Allowed recipient domains");
-        ValidateRecipientDomainPolicyList(policy.BlockedRecipientDomains, "Blocked recipient domains");
-        ServiceValidation.RequirePositive(policy.MaxMessageSizeBytes, "Maximum message size");
-        ServiceValidation.RequirePositive(policy.MaxRecipientsPerMessage, "Maximum recipients per message");
-    }
-
-    private static void ValidateSenderPolicyList(string? value, string label)
-    {
-        ServiceValidation.RequirePolicyListLength(value, label);
-
-        foreach (var entry in ValidationRules.SplitDelimitedList(value))
-        {
-            if (!ValidationRules.IsSenderPolicyPattern(entry))
-            {
-                throw new InvalidOperationException($"{label} contains an invalid sender entry: {entry}.");
-            }
-        }
-    }
-
-    private static void ValidateRecipientDomainPolicyList(string? value, string label)
-    {
-        ServiceValidation.RequirePolicyListLength(value, label);
-
-        foreach (var entry in ValidationRules.SplitDelimitedList(value))
-        {
-            if (!ValidationRules.IsRecipientDomainPattern(entry))
-            {
-                throw new InvalidOperationException($"{label} contains an invalid domain entry: {entry}.");
-            }
-        }
-    }
-
 }

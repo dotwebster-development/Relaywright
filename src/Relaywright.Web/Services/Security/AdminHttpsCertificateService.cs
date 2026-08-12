@@ -1,7 +1,4 @@
-using System.Net;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Relaywright.Web.Infrastructure;
 using Relaywright.Web.Validation;
@@ -9,16 +6,13 @@ using Relaywright.Web.Validation;
 namespace Relaywright.Web.Services.Security;
 
 public sealed class AdminHttpsCertificateService(
-    AppPaths paths,
     IDataProtectionProvider dataProtectionProvider,
+    AdminHttpsCertificateConfigurationStore configurationStore,
+    AdminHttpsCertificateFileStore fileStore,
+    AdminHttpsCertificateMaterialService materialService,
     ILogger<AdminHttpsCertificateService> logger) : IAdminHttpsCertificateService
 {
     public const string ProtectorPurpose = "Relaywright.Web.AdminHttpsCertificate";
-
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
 
     private readonly IDataProtector _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
 
@@ -26,28 +20,20 @@ public sealed class AdminHttpsCertificateService(
         AppPaths paths,
         IDataProtectionProvider dataProtectionProvider)
     {
-        if (!File.Exists(paths.AdminHttpsCertificateConfigurationPath))
+        var configuration = new AdminHttpsCertificateConfigurationStore(paths).Load();
+        if (configuration is null)
         {
             return null;
         }
-
-        var configurationJson = File.ReadAllText(paths.AdminHttpsCertificateConfigurationPath);
-        var configuration = JsonSerializer.Deserialize<AdminHttpsCertificateConfiguration>(configurationJson, JsonOptions)
-            ?? throw new InvalidOperationException("Admin HTTPS certificate configuration could not be read.");
 
         var protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
-        return LoadCertificate(configuration, UnprotectPassword(configuration, protector));
+        var password = UnprotectPassword(configuration, protector);
+        return new AdminHttpsCertificateMaterialService().Load(configuration, password);
     }
 
-    public async Task<AdminHttpsCertificateConfiguration?> GetConfigurationAsync(CancellationToken cancellationToken)
+    public Task<AdminHttpsCertificateConfiguration?> GetConfigurationAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(paths.AdminHttpsCertificateConfigurationPath))
-        {
-            return null;
-        }
-
-        await using var stream = File.OpenRead(paths.AdminHttpsCertificateConfigurationPath);
-        return await JsonSerializer.DeserializeAsync<AdminHttpsCertificateConfiguration>(stream, JsonOptions, cancellationToken);
+        return configurationStore.LoadAsync(cancellationToken);
     }
 
     public async Task<AdminHttpsCertificateConfiguration> SavePfxAsync(
@@ -55,42 +41,32 @@ public sealed class AdminHttpsCertificateService(
         string? password,
         CancellationToken cancellationToken)
     {
-        if (certificateFile.Length <= 0)
-        {
-            throw new InvalidOperationException("Select a PFX certificate file.");
-        }
-
+        ValidateUpload(certificateFile, "Select a PFX certificate file.");
         ValidateFileExtension(certificateFile.FileName, "PFX certificate file", [".pfx", ".p12"]);
         ValidatePassword(password, "PFX password");
 
-        var targetPath = Path.Combine(paths.CertificateDirectory, "admin-web.pfx");
-        var tempPath = CreateTemporaryPath(".pfx");
-
+        var targetPath = fileStore.GetCertificatePath("admin-web.pfx");
+        var tempPath = fileStore.CreateTemporaryPath(".pfx");
         try
         {
-            await CopyUploadAsync(certificateFile, tempPath, cancellationToken);
-            using var certificate = LoadPfx(tempPath, password);
-            EnsureHasPrivateKey(certificate);
+            await fileStore.CopyUploadAsync(certificateFile, tempPath, cancellationToken);
+            using var certificate = materialService.LoadPfx(tempPath, password);
+            fileStore.MoveIntoPlace(tempPath, targetPath);
 
-            File.Move(tempPath, targetPath, overwrite: true);
-
-            var configuration = new AdminHttpsCertificateConfiguration
-            {
-                Mode = AdminHttpsCertificateMode.Pfx,
-                CertificatePath = targetPath,
-                ProtectedPassword = ProtectPassword(password),
-                DnsNames = GetCertificateDnsNames(certificate),
-                NotAfterUtc = new DateTimeOffset(certificate.NotAfter.ToUniversalTime()),
-                UpdatedUtc = DateTimeOffset.UtcNow
-            };
-
-            await SaveConfigurationAsync(configuration, cancellationToken);
+            var configuration = CreateConfiguration(
+                AdminHttpsCertificateMode.Pfx,
+                targetPath,
+                null,
+                password,
+                materialService.GetDnsNames(certificate),
+                new DateTimeOffset(certificate.NotAfter.ToUniversalTime()));
+            await configurationStore.SaveAsync(configuration, cancellationToken);
             logger.LogInformation("Admin HTTPS PFX certificate configured. CertificatePath={CertificatePath}", targetPath);
             return configuration;
         }
         finally
         {
-            DeleteIfExists(tempPath);
+            fileStore.DeleteIfExists(tempPath);
         }
     }
 
@@ -100,55 +76,42 @@ public sealed class AdminHttpsCertificateService(
         string? keyPassword,
         CancellationToken cancellationToken)
     {
-        if (certificateFile.Length <= 0)
-        {
-            throw new InvalidOperationException("Select a certificate file.");
-        }
-
-        if (keyFile.Length <= 0)
-        {
-            throw new InvalidOperationException("Select a private key file.");
-        }
-
+        ValidateUpload(certificateFile, "Select a certificate file.");
+        ValidateUpload(keyFile, "Select a private key file.");
         ValidateFileExtension(certificateFile.FileName, "Certificate file", [".crt", ".cer", ".pem"]);
         ValidateFileExtension(keyFile.FileName, "Private key file", [".key", ".pem"]);
         ValidatePassword(keyPassword, "Private key password");
 
-        var certificatePath = Path.Combine(paths.CertificateDirectory, "admin-web.crt");
-        var keyPath = Path.Combine(paths.CertificateDirectory, "admin-web.key");
-        var tempCertificatePath = CreateTemporaryPath(".crt");
-        var tempKeyPath = CreateTemporaryPath(".key");
-
+        var certificatePath = fileStore.GetCertificatePath("admin-web.crt");
+        var keyPath = fileStore.GetCertificatePath("admin-web.key");
+        var tempCertificatePath = fileStore.CreateTemporaryPath(".crt");
+        var tempKeyPath = fileStore.CreateTemporaryPath(".key");
         try
         {
-            await CopyUploadAsync(certificateFile, tempCertificatePath, cancellationToken);
-            await CopyUploadAsync(keyFile, tempKeyPath, cancellationToken);
+            await fileStore.CopyUploadAsync(certificateFile, tempCertificatePath, cancellationToken);
+            await fileStore.CopyUploadAsync(keyFile, tempKeyPath, cancellationToken);
+            using var certificate = materialService.LoadPem(tempCertificatePath, tempKeyPath, keyPassword);
+            fileStore.MoveIntoPlace(tempCertificatePath, certificatePath);
+            fileStore.MoveIntoPlace(tempKeyPath, keyPath);
 
-            using var certificate = LoadPem(tempCertificatePath, tempKeyPath, keyPassword);
-            EnsureHasPrivateKey(certificate);
-
-            File.Move(tempCertificatePath, certificatePath, overwrite: true);
-            File.Move(tempKeyPath, keyPath, overwrite: true);
-
-            var configuration = new AdminHttpsCertificateConfiguration
-            {
-                Mode = AdminHttpsCertificateMode.Pem,
-                CertificatePath = certificatePath,
-                KeyPath = keyPath,
-                ProtectedPassword = ProtectPassword(keyPassword),
-                DnsNames = GetCertificateDnsNames(certificate),
-                NotAfterUtc = new DateTimeOffset(certificate.NotAfter.ToUniversalTime()),
-                UpdatedUtc = DateTimeOffset.UtcNow
-            };
-
-            await SaveConfigurationAsync(configuration, cancellationToken);
-            logger.LogInformation("Admin HTTPS PEM certificate configured. CertificatePath={CertificatePath}; KeyPath={KeyPath}", certificatePath, keyPath);
+            var configuration = CreateConfiguration(
+                AdminHttpsCertificateMode.Pem,
+                certificatePath,
+                keyPath,
+                keyPassword,
+                materialService.GetDnsNames(certificate),
+                new DateTimeOffset(certificate.NotAfter.ToUniversalTime()));
+            await configurationStore.SaveAsync(configuration, cancellationToken);
+            logger.LogInformation(
+                "Admin HTTPS PEM certificate configured. CertificatePath={CertificatePath}; KeyPath={KeyPath}",
+                certificatePath,
+                keyPath);
             return configuration;
         }
         finally
         {
-            DeleteIfExists(tempCertificatePath);
-            DeleteIfExists(tempKeyPath);
+            fileStore.DeleteIfExists(tempCertificatePath);
+            fileStore.DeleteIfExists(tempKeyPath);
         }
     }
 
@@ -176,107 +139,61 @@ public sealed class AdminHttpsCertificateService(
             }
         }
 
-        var password = CreateRandomPassword();
-        var targetPath = Path.Combine(paths.CertificateDirectory, "admin-web-selfsigned.pfx");
-        var tempPath = CreateTemporaryPath(".pfx");
-
-        using var rsa = RSA.Create(3072);
-        var request = new CertificateRequest(
-            $"CN={names[0]}",
-            rsa,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1);
-
-        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
-        request.CertificateExtensions.Add(new X509KeyUsageExtension(
-            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
-            false));
-        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
-            new OidCollection { new("1.3.6.1.5.5.7.3.1") },
-            false));
-
-        var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
-        foreach (var name in names)
+        var generated = materialService.GenerateSelfSigned(names, validYears);
+        var targetPath = fileStore.GetCertificatePath("admin-web-selfsigned.pfx");
+        var tempPath = fileStore.CreateTemporaryPath(".pfx");
+        try
         {
-            if (IPAddress.TryParse(name, out var ipAddress))
-            {
-                subjectAlternativeNames.AddIpAddress(ipAddress);
-            }
-            else
-            {
-                subjectAlternativeNames.AddDnsName(name);
-            }
+            await fileStore.WriteAsync(tempPath, generated.PfxBytes, cancellationToken);
+            fileStore.MoveIntoPlace(tempPath, targetPath);
+        }
+        finally
+        {
+            fileStore.DeleteIfExists(tempPath);
         }
 
-        request.CertificateExtensions.Add(subjectAlternativeNames.Build());
-
-        var notBefore = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var notAfter = notBefore.AddYears(validYears);
-        using var certificate = request.CreateSelfSigned(notBefore, notAfter);
-        await File.WriteAllBytesAsync(tempPath, certificate.Export(X509ContentType.Pfx, password), cancellationToken);
-        File.Move(tempPath, targetPath, overwrite: true);
-
-        var configuration = new AdminHttpsCertificateConfiguration
-        {
-            Mode = AdminHttpsCertificateMode.SelfSigned,
-            CertificatePath = targetPath,
-            ProtectedPassword = ProtectPassword(password),
-            DnsNames = names.ToArray(),
-            NotAfterUtc = notAfter,
-            UpdatedUtc = DateTimeOffset.UtcNow
-        };
-
-        await SaveConfigurationAsync(configuration, cancellationToken);
+        var configuration = CreateConfiguration(
+            AdminHttpsCertificateMode.SelfSigned,
+            targetPath,
+            null,
+            generated.Password,
+            generated.DnsNames,
+            generated.NotAfterUtc);
+        await configurationStore.SaveAsync(configuration, cancellationToken);
         logger.LogInformation(
             "Admin HTTPS self-signed certificate generated. CertificatePath={CertificatePath}; DnsNames={DnsNames}; NotAfterUtc={NotAfterUtc}",
             targetPath,
             string.Join(",", names),
-            notAfter);
+            generated.NotAfterUtc);
         return configuration;
     }
 
-    private static X509Certificate2 LoadCertificate(AdminHttpsCertificateConfiguration configuration, string? password)
+    private AdminHttpsCertificateConfiguration CreateConfiguration(
+        AdminHttpsCertificateMode mode,
+        string certificatePath,
+        string? keyPath,
+        string? password,
+        string[] dnsNames,
+        DateTimeOffset notAfterUtc)
     {
-        return configuration.Mode switch
+        return new AdminHttpsCertificateConfiguration
         {
-            AdminHttpsCertificateMode.Pfx or AdminHttpsCertificateMode.SelfSigned => LoadPfx(configuration.CertificatePath, password),
-            AdminHttpsCertificateMode.Pem => LoadPem(
-                configuration.CertificatePath,
-                configuration.KeyPath ?? throw new InvalidOperationException("Admin HTTPS certificate key path is required."),
-                password),
-            _ => throw new InvalidOperationException($"Unsupported admin HTTPS certificate mode '{configuration.Mode}'.")
+            Mode = mode,
+            CertificatePath = certificatePath,
+            KeyPath = keyPath,
+            ProtectedPassword = ProtectPassword(password),
+            DnsNames = dnsNames,
+            NotAfterUtc = notAfterUtc,
+            UpdatedUtc = DateTimeOffset.UtcNow
         };
     }
 
-    private static X509Certificate2 LoadPfx(string certificatePath, string? password)
+    private static void ValidateUpload(IFormFile file, string message)
     {
-        return X509CertificateLoader.LoadPkcs12FromFile(
-            certificatePath,
-            password,
-            X509KeyStorageFlags.MachineKeySet,
-            Pkcs12LoaderLimits.Defaults);
-    }
-
-    private static X509Certificate2 LoadPem(string certificatePath, string keyPath, string? password)
-    {
-        return string.IsNullOrWhiteSpace(password)
-            ? X509Certificate2.CreateFromPemFile(certificatePath, keyPath)
-            : X509Certificate2.CreateFromEncryptedPemFile(certificatePath, password, keyPath);
-    }
-
-    private static void EnsureHasPrivateKey(X509Certificate2 certificate)
-    {
-        if (!certificate.HasPrivateKey)
+        if (file.Length <= 0)
         {
-            throw new InvalidOperationException("The HTTPS certificate must include a private key.");
+            throw new InvalidOperationException(message);
         }
-    }
-
-    private static string[] GetCertificateDnsNames(X509Certificate2 certificate)
-    {
-        return certificate.GetNameInfo(X509NameType.DnsName, false) is { Length: > 0 } dnsName
-            ? [dnsName]
-            : [];
     }
 
     private static List<string> ParseNames(string dnsNames)
@@ -313,12 +230,6 @@ public sealed class AdminHttpsCertificateService(
         }
     }
 
-    private static string CreateRandomPassword()
-    {
-        var bytes = RandomNumberGenerator.GetBytes(32);
-        return Convert.ToBase64String(bytes);
-    }
-
     private static string? UnprotectPassword(
         AdminHttpsCertificateConfiguration configuration,
         IDataProtector protector)
@@ -333,40 +244,5 @@ public sealed class AdminHttpsCertificateService(
         return string.IsNullOrWhiteSpace(password)
             ? string.Empty
             : _protector.Protect(password);
-    }
-
-    private async Task SaveConfigurationAsync(
-        AdminHttpsCertificateConfiguration configuration,
-        CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(paths.DataDirectory);
-        var tempPath = CreateTemporaryPath(".json");
-        await using (var stream = File.Create(tempPath))
-        {
-            await JsonSerializer.SerializeAsync(stream, configuration, JsonOptions, cancellationToken);
-        }
-
-        File.Move(tempPath, paths.AdminHttpsCertificateConfigurationPath, overwrite: true);
-    }
-
-    private async Task CopyUploadAsync(IFormFile file, string destinationPath, CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(paths.CertificateDirectory);
-        await using var destination = File.Create(destinationPath);
-        await file.CopyToAsync(destination, cancellationToken);
-    }
-
-    private string CreateTemporaryPath(string extension)
-    {
-        Directory.CreateDirectory(paths.CertificateDirectory);
-        return Path.Combine(paths.CertificateDirectory, $"{Guid.NewGuid():N}{extension}");
-    }
-
-    private static void DeleteIfExists(string path)
-    {
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
     }
 }
